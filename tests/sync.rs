@@ -194,6 +194,41 @@ fn sync_codex_agents_md_at_root_exists() {
 }
 
 #[test]
+fn sync_codex_rule_references_point_at_the_project_rules_directory() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["codex"]);
+    let home = tempfile::tempdir().unwrap();
+    project
+        .agentsync()
+        .env("HOME", home.path())
+        .args(["sync", "--only", "codex"])
+        .assert()
+        .success();
+    assert!(
+        project
+            .read("AGENTS.md")
+            .contains("Find all rules in `.ai/src/rules/`.")
+    );
+}
+
+#[test]
+fn sync_codex_rule_references_point_at_the_home_rules_directory_when_the_project_is_home() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["codex"]);
+    project
+        .agentsync()
+        .env("HOME", project.path())
+        .args(["sync", "--only", "codex"])
+        .assert()
+        .success();
+    assert!(
+        project
+            .read("AGENTS.md")
+            .contains("Find all rules in `~/.ai/src/rules/`.")
+    );
+}
+
+#[test]
 fn sync_codex_skills_directory_exists() {
     assert!(synced_project().join(".agents/skills").is_dir());
 }

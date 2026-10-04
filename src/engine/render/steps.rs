@@ -107,7 +107,12 @@ fn inline_rules_into_agents(
         block.extend(title);
         block.push(b'\n');
     }
-    block.extend_from_slice("\nFind all rules in `.ai/src/rules/`.\n".as_bytes());
+    let rules_dir = if s.paths.root_is_home() {
+        "~/.ai/src/rules/"
+    } else {
+        ".ai/src/rules/"
+    };
+    block.extend_from_slice(format!("\nFind all rules in `{rules_dir}`.\n").as_bytes());
     s.ws.append(dest_agents, &block).map_err(|e| io(s, e))?;
     s.record_write(dest_agents);
     s.log.step(&format!(
