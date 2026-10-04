@@ -106,7 +106,7 @@ argument-hint: "<optional-arg>"
 
 Key features:
 
-- `$ARGUMENTS` — replaced with text after the command name.
+- A dollar sign followed by `ARGUMENTS` — replaced with text after the command name.
 - An exclamation mark directly before an inline-code command — runs the command and embeds its output into the prompt.
 - Keep commands focused — one workflow per command.
 - Avoid `: ` (colon-space) inside an unquoted `description:` (see Gotchas).

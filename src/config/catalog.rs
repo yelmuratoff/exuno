@@ -190,6 +190,33 @@ mod tests {
         );
     }
 
+    // Claude Code runs an exclamation mark before an inline-code command and
+    // substitutes $ARGUMENTS in a SKILL.md body before the model reads it.
+    #[test]
+    fn no_skill_template_carries_load_time_claude_code_syntax() {
+        let offenders: Vec<String> = engine_files()
+            .into_iter()
+            .filter(|(path, _)| path.ends_with("/SKILL.md"))
+            .flat_map(|(path, bytes)| {
+                let text = String::from_utf8_lossy(bytes).into_owned();
+                text.lines()
+                    .enumerate()
+                    .filter(|(_, line)| {
+                        let runs_shell = line.match_indices("!`").any(|(at, _)| {
+                            line[..at]
+                                .chars()
+                                .next_back()
+                                .is_none_or(char::is_whitespace)
+                        });
+                        runs_shell || line.contains("$ARGUMENTS")
+                    })
+                    .map(|(index, _)| format!("{path}:{}", index + 1))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(offenders.is_empty(), "{offenders:?}");
+    }
+
     #[test]
     fn the_template_sources_are_the_set_dedupe_loads() {
         assert_eq!(
