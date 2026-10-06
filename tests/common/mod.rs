@@ -110,14 +110,16 @@ impl Project {
 /// The variables `tests/test_helper.bash` unsets, and the config paths it
 /// points at a file that does not exist.
 pub fn scrub(command: &mut Command) {
-    for var in [
-        "AGENTSYNC_ALLOW_POST_SYNC",
-        "AGENTSYNC_SKIP_POST_SYNC",
-        "AGENTSYNC_SKIP_HOOKS",
-        "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
-        "AGENTSYNC_HOME",
+    for suffix in [
+        "ALLOW_POST_SYNC",
+        "SKIP_POST_SYNC",
+        "SKIP_HOOKS",
+        "EXTERNAL_SOURCE_ROOTS",
+        "HOME",
     ] {
-        command.env_remove(var);
+        for prefix in ["EXUNO_", "AGENTSYNC_"] {
+            command.env_remove(format!("{prefix}{suffix}"));
+        }
     }
     command
         .env("GIT_CONFIG_GLOBAL", absent_git_config())

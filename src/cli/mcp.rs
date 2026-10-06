@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use super::{mcp_merge, put};
 use crate::Error;
-use crate::config::{mcp_catalog, payload, tool::Tool, yaml_subset};
+use crate::config::{mcp_catalog, names, payload, tool::Tool, yaml_subset};
 use crate::engine::staging;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
@@ -396,8 +396,9 @@ impl McpUse<'_> {
                     e,
                 )
             })?;
-        let limit = std::env::var("AGENTSYNC_BACKUP_LIMIT").ok();
-        let age = std::env::var("AGENTSYNC_BACKUP_MAX_AGE_DAYS").ok();
+        let lookup = |name: &str| std::env::var(name).ok();
+        let limit = names::env("BACKUP_LIMIT", &lookup);
+        let age = names::env("BACKUP_MAX_AGE_DAYS", &lookup);
         let retention = backup::configure(
             config
                 .as_ref()

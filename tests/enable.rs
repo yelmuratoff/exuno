@@ -272,6 +272,22 @@ fn enable_and_disable_write_the_config_agentsync_config_path_names() {
 }
 
 #[test]
+fn enable_writes_the_config_exuno_config_path_names_over_the_legacy_one() {
+    let project = Project::seeded(&[]);
+    project.write("new.yaml", "tools:\n  enabled: []\n");
+    project.write("old.yaml", "tools:\n  enabled: []\n");
+    project
+        .agentsync()
+        .env("EXUNO_CONFIG_PATH", "new.yaml")
+        .env("AGENTSYNC_CONFIG_PATH", "old.yaml")
+        .args(["enable", "cursor", "--no-scaffold"])
+        .assert()
+        .success();
+    assert!(project.read("new.yaml").contains("cursor"));
+    assert_eq!(project.read("old.yaml"), "tools:\n  enabled: []\n");
+}
+
+#[test]
 fn disable_without_a_config_creates_none() {
     let project = Project::empty();
     project.write(".ai/src/AGENTS.md", "# Agent\n");

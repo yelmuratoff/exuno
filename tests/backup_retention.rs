@@ -380,6 +380,20 @@ fn retention_uses_the_explicit_config_instead_of_a_conflicting_local_policy() {
 }
 
 #[test]
+fn retention_reads_exuno_backup_limit_before_the_legacy_name() {
+    let project = Project::empty();
+    init_project(&project);
+    project
+        .agentsync()
+        .env("EXUNO_BACKUP_LIMIT", "typo")
+        .env("AGENTSYNC_BACKUP_LIMIT", "1")
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Backup limit must be"));
+}
+
+#[test]
 fn retention_invalid_numeric_bounds_reject_sync_before_changes() {
     let project = Project::empty();
     init_project(&project);
