@@ -196,6 +196,30 @@ fn setup_hooks_local_mode_rewrites_an_outdated_block_in_place() {
 }
 
 #[test]
+fn setup_hooks_rewrites_an_exuno_block_in_place() {
+    let project = Project::empty();
+    init_mode(&project, "local");
+    project.write(
+        ".git/hooks/post-checkout",
+        "#!/bin/sh\necho before\n\n# >>> EXUNO AUTO SYNC START >>>\nold\n# <<< EXUNO AUTO SYNC END <<<\necho after\n",
+    );
+    project
+        .agentsync()
+        .arg("setup-hooks")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Updated AgentSync hook in post-checkout.\n",
+        ));
+    let hook = project.read(".git/hooks/post-checkout");
+    assert!(!hook.contains("\nold\n"), "{hook}");
+    assert!(!hook.contains("EXUNO AUTO SYNC"), "{hook}");
+    assert_eq!(hook.matches("AUTO SYNC START").count(), 1, "{hook}");
+    assert!(hook.starts_with("#!/bin/sh\necho before\n\n# >>> AGENTSYNC"));
+    assert!(hook.ends_with("# <<< AGENTSYNC AUTO SYNC END <<<\necho after\n"));
+}
+
+#[test]
 fn setup_hooks_local_mode_installs_no_pre_commit_hook_by_default() {
     let project = Project::empty();
     init_mode(&project, "local");

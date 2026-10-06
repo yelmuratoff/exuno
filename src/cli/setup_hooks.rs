@@ -12,8 +12,8 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::{Error, config::names, config::project_config};
 
-const BLOCK_START: &str = "# >>> AGENTSYNC AUTO SYNC START >>>";
-const BLOCK_END: &str = "# <<< AGENTSYNC AUTO SYNC END <<<";
+const BLOCK_START: &str = names::HOOK_BLOCKS[1].0;
+const BLOCK_END: &str = names::HOOK_BLOCKS[1].1;
 
 pub const HELP: Help = Help {
     command: "setup-hooks",
@@ -171,14 +171,17 @@ fn install_hook(
     }
     let existing = std::fs::read(&hook).map_err(|e| Error::io(&hook, e))?;
     let block = format!("{BLOCK_START}\n{body}\n{BLOCK_END}");
-    match find(&existing, BLOCK_START.as_bytes(), 0) {
+    let present = names::HOOK_BLOCKS
+        .iter()
+        .find_map(|(start, end)| find(&existing, start.as_bytes(), 0).map(|at| (at, *end)));
+    match present {
         None => {
             let mut appended = existing;
             appended.extend_from_slice(format!("\n{block}\n").as_bytes());
             std::fs::write(&hook, appended).map_err(|e| Error::io(&hook, e))?;
         }
-        Some(start) => {
-            let end = find(&existing, BLOCK_END.as_bytes(), start).map(|i| i + BLOCK_END.len());
+        Some((start, end_marker)) => {
+            let end = find(&existing, end_marker.as_bytes(), start).map(|i| i + end_marker.len());
             match end {
                 Some(end) if existing[start..end] != *block.as_bytes() => {
                     let mut rewritten = existing[..start].to_vec();
