@@ -1,6 +1,8 @@
 //! The spellings the engine answers to while `agentsync` becomes `exuno`:
 //! each list puts the new name first and keeps the old one readable until 1.0.
 
+use std::path::Path;
+
 use crate::config::yaml_subset;
 
 const ENV_PREFIXES: [&str; 2] = ["EXUNO_", "AGENTSYNC_"];
@@ -33,6 +35,16 @@ pub fn env(suffix: &str, lookup: &dyn Fn(&str) -> Option<String>) -> Option<Stri
     ENV_PREFIXES
         .iter()
         .find_map(|prefix| lookup(&format!("{prefix}{suffix}")))
+}
+
+/// The name `version` answers under: `agentsync` for a binary run under that
+/// name, since an installed `agentsync update` accepts only an `agentsync v`
+/// answer from the binary it downloads; `exuno` otherwise.
+pub fn invoked_as(program: &Path) -> &'static str {
+    match program.file_stem().and_then(|stem| stem.to_str()) {
+        Some("agentsync") => "agentsync",
+        _ => "exuno",
+    }
 }
 
 /// The pinned engine version without its quotes, from the first
@@ -78,6 +90,18 @@ mod tests {
     #[test]
     fn env_is_none_when_neither_is_set() {
         assert_eq!(env("X", &lookup(&[])), None);
+    }
+
+    #[test]
+    fn invoked_as_keeps_the_legacy_name_only_for_an_agentsync_binary() {
+        assert_eq!(
+            invoked_as(Path::new("/home/u/.agentsync/bin/agentsync")),
+            "agentsync"
+        );
+        assert_eq!(invoked_as(Path::new("C:/bin/agentsync.exe")), "agentsync");
+        assert_eq!(invoked_as(Path::new("/usr/local/bin/exuno")), "exuno");
+        assert_eq!(invoked_as(Path::new("./.agentsync.new")), "exuno");
+        assert_eq!(invoked_as(Path::new("")), "exuno");
     }
 
     #[test]

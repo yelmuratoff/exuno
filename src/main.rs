@@ -637,7 +637,9 @@ fn print_usage() -> Result<u8, Error> {
 
 fn print_version() -> Result<u8, Error> {
     let mut out = std::io::stdout().lock();
-    writeln!(out, "agentsync v{}", engine_version())
+    let program = std::env::args_os().next().unwrap_or_default();
+    let name = names::invoked_as(Path::new(&program));
+    writeln!(out, "{name} v{}", engine_version())
         .map(|()| 0)
         .map_err(|e| Error::io("<stdout>", e))
 }

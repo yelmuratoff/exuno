@@ -19,6 +19,22 @@ fn version_prints_the_engine_version() {
 }
 
 #[test]
+fn version_names_the_binary_it_was_run_as() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["agentsync", "exuno"] {
+        let copy = dir
+            .path()
+            .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        std::fs::copy(env!("CARGO_BIN_EXE_agentsync"), &copy).unwrap();
+        Command::new(&copy)
+            .arg("version")
+            .assert()
+            .success()
+            .stdout(format!("{name} v{}\n", engine_version()));
+    }
+}
+
+#[test]
 fn version_flags_match_the_bash_cli() {
     for flag in ["--version", "-v"] {
         agentsync()

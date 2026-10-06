@@ -208,7 +208,9 @@ fn cache_file(exe: &Path) -> Option<PathBuf> {
 /// `agentsync v<version>` as `version` prints it.
 fn version_of(answer: &str) -> Option<String> {
     let line = answer.split('\n').next()?;
-    let version = line.strip_prefix("agentsync v")?;
+    let version = line
+        .strip_prefix("exuno v")
+        .or_else(|| line.strip_prefix("agentsync v"))?;
     (!version.is_empty()).then(|| version.to_string())
 }
 
@@ -804,6 +806,8 @@ mod tests {
             Some("0.36.0".to_string())
         );
         assert_eq!(version_of("agentsync v"), None);
+        assert_eq!(version_of("exuno v1.2.3\n").as_deref(), Some("1.2.3"));
+        assert_eq!(version_of("exuno v"), None);
         assert_eq!(version_of("nope"), None);
     }
 
