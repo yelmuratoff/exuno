@@ -319,7 +319,7 @@ impl Doctor<'_> {
         let style = self.style;
         let shown = self.config_shown.clone();
         self.ok(&format!("Project config: {}", style.dim(&shown)))?;
-        let pinned = yaml_subset::value(config, "agentsync_version").replace('"', "");
+        let pinned = crate::config::names::pinned_version(config);
         if !pinned.is_empty() && !self.version.is_empty() && pinned != self.version {
             self.warn(&format!(
                 "CLI version {} differs from pinned {} — run {} to align",

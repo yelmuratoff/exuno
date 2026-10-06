@@ -221,7 +221,7 @@ fn version_pin_mismatch(
     if !committed && mode != version::Mode::Strict {
         return None;
     }
-    let pinned = yaml_subset::value(config, "agentsync_version").replace('"', "");
+    let pinned = crate::config::names::pinned_version(config);
     let engine = engine_version();
     if pinned.is_empty() || pinned == engine {
         return None;

@@ -8,9 +8,9 @@ use std::io::Write;
 use super::put;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
-use crate::{Error, engine::staging};
+use crate::{Error, config::names, engine::staging};
 
-const KEY: &str = "agentsync_version:";
+const KEY: &str = "agentsync_version";
 
 pub const HELP: Help = Help {
     command: "upgrade-config",
@@ -28,12 +28,16 @@ pub const HELP: Help = Help {
 
 /// The `awk` insertion or the `sed` rewrite, as `cmd_upgrade_config` picks it.
 pub fn upgrade_text(text: &str, version: &str) -> (String, bool) {
-    let pin = format!("agentsync_version: \"{version}\"");
-    if text.split('\n').any(|line| line.starts_with(KEY)) {
+    let pins = |key: &str, line: &str| line.starts_with(&format!("{key}:"));
+    let present = names::VERSION_KEYS
+        .into_iter()
+        .find(|key| text.split('\n').any(|line| pins(key, line)));
+    if let Some(key) = present {
+        let pin = format!("{key}: \"{version}\"");
         let rewritten: Vec<String> = text
             .split('\n')
             .map(|line| {
-                if line.starts_with(KEY) {
+                if pins(key, line) {
                     pin.clone()
                 } else {
                     line.to_string()
@@ -42,6 +46,7 @@ pub fn upgrade_text(text: &str, version: &str) -> (String, bool) {
             .collect();
         return (rewritten.join("\n"), false);
     }
+    let pin = format!("{KEY}: \"{version}\"");
     let mut lines: Vec<&str> = text.split('\n').collect();
     if lines.last() == Some(&"") {
         lines.pop();
@@ -151,6 +156,24 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&config).unwrap(),
             "agentsync_version: \"0.1.0\"\n"
+        );
+    }
+
+    #[test]
+    fn an_exuno_pin_is_rewritten_in_place_and_the_legacy_key_left_alone() {
+        assert_eq!(
+            upgrade_text("exuno_version: \"0.1\"\n", "9.9.9"),
+            ("exuno_version: \"9.9.9\"\n".to_string(), false)
+        );
+        assert_eq!(
+            upgrade_text(
+                "agentsync_version: \"0.1\"\nexuno_version: \"0.2\"\n",
+                "9.9.9"
+            ),
+            (
+                "agentsync_version: \"0.1\"\nexuno_version: \"9.9.9\"\n".to_string(),
+                false
+            )
         );
     }
 

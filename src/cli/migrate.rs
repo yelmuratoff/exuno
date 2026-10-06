@@ -12,10 +12,7 @@ use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::project::Project;
-use crate::{
-    Error, config::catalog, config::format_rev, config::names, config::yaml_edit,
-    config::yaml_subset,
-};
+use crate::{Error, config::catalog, config::format_rev, config::names, config::yaml_edit};
 
 pub const HELP: Help = Help {
     command: "migrate",
@@ -189,7 +186,7 @@ fn project_version(root: &str) -> String {
         .map(|rel| format!("{root}/{rel}"))
         .find(|path| Path::new(path).is_file())
         .and_then(|path| std::fs::read(path).ok())
-        .map(|bytes| yaml_subset::value(&String::from_utf8_lossy(&bytes), "agentsync_version"))
+        .map(|bytes| names::pinned_version(&String::from_utf8_lossy(&bytes)))
         .unwrap_or_default();
     if pinned.is_empty() {
         "not detected".to_string()
@@ -924,6 +921,17 @@ mod tests {
             .collect();
         rels.sort();
         rels
+    }
+
+    #[test]
+    fn the_prompt_reads_an_exuno_version_pin() {
+        let (_dir, root) = project(&[(".ai/exuno.yaml", "exuno_version: \"0.8.0\"\n")]);
+        let copied = call(&root, &[], false, false, Some(0));
+        assert!(
+            copied
+                .out
+                .contains("- Project-pinned AgentSync version: 0.8.0\n")
+        );
     }
 
     #[test]

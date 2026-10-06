@@ -85,6 +85,43 @@ fn version_pin_committed_mode_refuses_to_sync_with_a_different_engine() {
 }
 
 #[test]
+fn version_pin_reads_an_exuno_version_key() {
+    let project = Project::empty();
+    init_committed(&project);
+    let config = project
+        .read(".ai/agent_sync.yaml")
+        .lines()
+        .map(|line| {
+            if line.starts_with("agentsync_version:") {
+                "exuno_version: \"0.1.0\"".to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    project.write(".ai/agent_sync.yaml", &config);
+    project
+        .agentsync()
+        .arg("sync")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+    project
+        .agentsync()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+    project
+        .agentsync()
+        .arg("doctor")
+        .assert()
+        .stdout(predicate::str::contains("differs from pinned v0.1.0"));
+}
+
+#[test]
 fn version_pin_committed_mode_check_fails_with_the_same_explanation() {
     let project = Project::empty();
     init_committed(&project);

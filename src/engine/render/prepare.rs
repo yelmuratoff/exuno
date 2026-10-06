@@ -336,7 +336,7 @@ pub fn check_version_pin(s: &mut Session, run: &Run) -> Step {
     let Some(config) = &run.config else {
         return Ok(());
     };
-    let pinned = yaml_subset::value(config, "agentsync_version").replace('"', "");
+    let pinned = crate::config::names::pinned_version(config);
     let engine = engine_version();
     if pinned.is_empty() || pinned == engine {
         return Ok(());
