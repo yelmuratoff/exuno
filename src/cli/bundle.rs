@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use super::{files_below, put};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
-use crate::{Error, config::yaml_subset};
+use crate::{Error, config::names, config::yaml_subset};
 
 /// `_BUNDLE_DIR_TARGETS`, in the order `init` creates them.
 const DIR_TARGETS: [&str; 8] = [
@@ -20,6 +20,22 @@ const DIR_TARGETS: [&str; 8] = [
 ];
 const CONFIG: &str = ".ai/agent_sync.yaml";
 const CONFIG_LEGACY: &str = "agent_sync.yaml";
+
+/// The first config `dir` resolves, relative to `dir`.
+fn present_config(dir: &Path) -> Option<&'static str> {
+    names::CONFIG_CANDIDATES
+        .into_iter()
+        .find(|rel| dir.join(rel).is_file())
+}
+
+/// The `.ai/` config `dir` already has, else [`CONFIG`].
+fn ai_config(dir: &Path) -> &'static str {
+    names::CONFIG_CANDIDATES
+        .into_iter()
+        .filter(|rel| rel.starts_with(".ai/"))
+        .find(|rel| dir.join(rel).is_file())
+        .unwrap_or(CONFIG)
+}
 
 /// What `import` takes from the process.
 pub struct Env<'a> {
@@ -43,10 +59,10 @@ struct Sources {
 }
 
 fn resolve_sources(root: &str) -> Sources {
-    let mut config = format!("{root}/{CONFIG}");
-    if !Path::new(&config).is_file() {
-        config = format!("{root}/{CONFIG_LEGACY}");
-    }
+    let config = format!(
+        "{root}/{}",
+        present_config(Path::new(root)).unwrap_or(CONFIG_LEGACY)
+    );
     let base = if Path::new(root).join(".ai/src").is_dir() {
         ".ai/src"
     } else if Path::new(root).join(".ai").is_dir() {
@@ -170,11 +186,13 @@ fn export_items(root: &str, sources: &Sources, style: &Style) -> Vec<(String, St
             items.push((path.clone(), format!("{name}/ ({count} files)")));
         }
     }
-    if Path::new(root).join(CONFIG).is_file() {
-        items.push((CONFIG.to_string(), "agent_sync.yaml".to_string()));
-    } else if Path::new(root).join(CONFIG_LEGACY).is_file() {
-        let label = format!("agent_sync.yaml {}", style.dim("(legacy)"));
-        items.push((CONFIG_LEGACY.to_string(), label));
+    match present_config(Path::new(root)) {
+        Some(CONFIG_LEGACY) => {
+            let label = format!("{CONFIG_LEGACY} {}", style.dim("(legacy)"));
+            items.push((CONFIG_LEGACY.to_string(), label));
+        }
+        Some(rel) => items.push((rel.to_string(), crate::paths::leaf(rel))),
+        None => {}
     }
     items
 }
@@ -760,7 +778,10 @@ impl Importer<'_, '_> {
                 std::fs::copy(&from, &to).map_err(|e| Error::io(&from, e))?;
             }
         }
-        if !tmp.join(CONFIG).is_file() && src_dir.join(CONFIG_LEGACY).is_file() {
+        if ai_config(tmp) == CONFIG
+            && !tmp.join(CONFIG).is_file()
+            && src_dir.join(CONFIG_LEGACY).is_file()
+        {
             std::fs::create_dir_all(tmp.join(".ai")).map_err(|e| Error::io(tmp, e))?;
             std::fs::copy(src_dir.join(CONFIG_LEGACY), tmp.join(CONFIG))
                 .map_err(|e| Error::io(src_dir.join(CONFIG_LEGACY), e))?;
@@ -817,10 +838,7 @@ const SOURCE_KEYS: [(&str, &str); 6] = [
 /// and without a `source:` those removals empty; `None` when nothing is left.
 fn imported_config_text(project: &Path, dest_base_rel: &str) -> Option<String> {
     use crate::config::{yaml_edit::remove_key_text, yaml_subset};
-    let path = [CONFIG, CONFIG_LEGACY]
-        .iter()
-        .map(|rel| project.join(rel))
-        .find(|path| path.is_file())?;
+    let path = project.join(present_config(project)?);
     let mut text = String::from_utf8_lossy(&std::fs::read(&path).ok()?).into_owned();
     for (key, target) in SOURCE_KEYS {
         let key_path = format!("source.{key}");
@@ -877,7 +895,7 @@ fn plan_import(root: &str, src_root: PathBuf, only: &str) -> ImportPlan {
             diff.dir(src_path, &dest_path, target);
         }
     }
-    let config_dest = Path::new(root).join(CONFIG);
+    let config_dest = Path::new(root).join(ai_config(Path::new(root)));
     let config_action = match &imported_config {
         Some(_) if !config_dest.is_file() => "new",
         Some(text) if std::fs::read(&config_dest).ok().as_deref() != Some(text.as_bytes()) => {
@@ -918,14 +936,19 @@ fn plan_text(style: &Style, plan: &ImportPlan, dry_run: bool) -> String {
             Change::Dir(name) => text.push_str(&format!("    {} {name}\n", style.cyan("↳"))),
         }
     }
+    let config_name = plan
+        .config_dest
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default();
     match plan.config_action {
         "new" => text.push_str(&format!(
-            "    {} agent_sync.yaml {}\n",
+            "    {} {config_name} {}\n",
             style.green("+"),
             style.dim("(new)")
         )),
         "update" => text.push_str(&format!(
-            "    {} agent_sync.yaml {}\n",
+            "    {} {config_name} {}\n",
             style.yellow("~"),
             style.dim("(update)")
         )),

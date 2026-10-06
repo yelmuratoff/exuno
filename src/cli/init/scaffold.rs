@@ -10,7 +10,7 @@ use crate::config::template_manifest::TemplateManifest;
 use crate::paths::DiskText;
 use crate::project::Project;
 use crate::transaction::interrupt::Interrupt;
-use crate::{Error, config::catalog, config::format_rev, engine::staging};
+use crate::{Error, config::catalog, config::format_rev, config::names, engine::staging};
 
 /// `AGENTSYNC_REPO` of `lib/helpers/update.sh`, which the CI template's install
 /// URL names.
@@ -153,8 +153,9 @@ fn write_payloads(tools: &[String], src: &str) -> Result<Vec<String>, Error> {
 /// `agent_sync.yaml`, unless the project already has one in `.ai/` or its root.
 fn write_project_config(s: &Scaffold, version: &str) -> Result<(), Error> {
     let config_file = format!("{}/agent_sync.yaml", s.ai_dir);
-    if Path::new(&config_file).is_file()
-        || Path::new(&format!("{}/agent_sync.yaml", s.target)).is_file()
+    if names::CONFIG_CANDIDATES
+        .iter()
+        .any(|rel| Path::new(&format!("{}/{rel}", s.target)).is_file())
     {
         return Ok(());
     }

@@ -284,6 +284,43 @@ fn import_only_previews_a_config_only_change() {
 }
 
 #[test]
+fn export_carries_an_ai_exuno_yaml() {
+    let project = Project::seeded(&[]);
+    std::fs::rename(
+        project.join(".ai/agent_sync.yaml"),
+        project.join(".ai/exuno.yaml"),
+    )
+    .unwrap();
+    project
+        .agentsync()
+        .arg("export")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("exuno.yaml"));
+    let listing = tar_list(&project.join("agentsync-bundle.tar.gz"));
+    assert!(listing.lines().any(|l| l == ".ai/exuno.yaml"));
+}
+
+#[test]
+fn import_reads_an_exuno_yaml_into_the_existing_exuno_yaml() {
+    let project = Project::seeded(&[]);
+    std::fs::rename(
+        project.join(".ai/agent_sync.yaml"),
+        project.join(".ai/exuno.yaml"),
+    )
+    .unwrap();
+    project.write("other/.ai/src/rules/core.md", "# Replaced core\n");
+    project.write("other/.ai/exuno.yaml", "outputs: committed\n");
+    project
+        .agentsync()
+        .args(["import", "other", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/exuno.yaml"), "outputs: committed\n");
+    assert!(!project.exists(".ai/agent_sync.yaml"));
+}
+
+#[test]
 fn import_from_a_directory_updates_changed_files() {
     let project = Project::seeded(&[]);
     project.write("other/.ai/src/rules/core.md", "# Replaced core\n");

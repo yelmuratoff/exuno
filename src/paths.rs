@@ -285,7 +285,10 @@ pub fn find_workspace_ai_dirs(root: &str) -> Vec<String> {
     walk(root, &mut found);
     found.retain(|ai| {
         Path::new(&format!("{ai}/src")).is_dir()
-            || Path::new(&format!("{ai}/agent_sync.yaml")).is_file()
+            || crate::config::names::CONFIG_CANDIDATES
+                .iter()
+                .filter_map(|rel| rel.strip_prefix(".ai/"))
+                .any(|name| Path::new(&format!("{ai}/{name}")).is_file())
     });
     found.sort_by(|a, b| {
         let depth = |p: &str| p.split('/').count();
@@ -704,6 +707,15 @@ mod tests {
                 format!("{root}/.ai"),
             ]
         );
+    }
+
+    #[test]
+    fn a_workspace_ai_holding_only_exuno_yaml_is_a_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().disk_text();
+        std::fs::create_dir_all(dir.path().join("c/.ai")).unwrap();
+        std::fs::write(dir.path().join("c/.ai/exuno.yaml"), "").unwrap();
+        assert_eq!(find_workspace_ai_dirs(&root), [format!("{root}/c/.ai")]);
     }
 
     #[test]

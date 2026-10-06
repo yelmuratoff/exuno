@@ -232,6 +232,15 @@ fn init_skips_if_ai_src_already_exists() {
 }
 
 #[test]
+fn init_keeps_an_existing_exuno_yaml_and_writes_no_legacy_config() {
+    let project = Project::empty();
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: []\n");
+    project.agentsync().arg("init").assert().success();
+    assert_eq!(project.read(".ai/exuno.yaml"), "tools:\n  enabled: []\n");
+    assert!(!project.exists(".ai/agent_sync.yaml"));
+}
+
+#[test]
 fn init_output_mentions_enable_command() {
     let project = Project::empty();
     project

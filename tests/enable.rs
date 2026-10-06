@@ -301,3 +301,20 @@ fn disable_without_a_config_creates_none() {
     assert_eq!(project.read(".ai/src/tools/kimi.yaml"), "enabled: false\n");
     assert!(!project.exists(".ai/agent_sync.yaml"));
 }
+
+#[test]
+fn enable_edits_an_existing_exuno_yaml_and_creates_no_legacy_config() {
+    let project = Project::seeded(&[]);
+    std::fs::rename(
+        project.join(".ai/agent_sync.yaml"),
+        project.join(".ai/exuno.yaml"),
+    )
+    .unwrap();
+    project
+        .agentsync()
+        .args(["enable", "cursor", "--no-scaffold"])
+        .assert()
+        .success();
+    assert!(project.read(".ai/exuno.yaml").contains("cursor"));
+    assert!(!project.exists(".ai/agent_sync.yaml"));
+}

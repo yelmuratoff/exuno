@@ -12,7 +12,10 @@ use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::project::Project;
-use crate::{Error, config::catalog, config::format_rev, config::yaml_edit, config::yaml_subset};
+use crate::{
+    Error, config::catalog, config::format_rev, config::names, config::yaml_edit,
+    config::yaml_subset,
+};
 
 pub const HELP: Help = Help {
     command: "migrate",
@@ -181,15 +184,13 @@ fn prompt(
 
 /// `_migrate_project_version`.
 fn project_version(root: &str) -> String {
-    let pinned = [
-        format!("{root}/.ai/agent_sync.yaml"),
-        format!("{root}/agent_sync.yaml"),
-    ]
-    .into_iter()
-    .find(|path| Path::new(path).is_file())
-    .and_then(|path| std::fs::read(path).ok())
-    .map(|bytes| yaml_subset::value(&String::from_utf8_lossy(&bytes), "agentsync_version"))
-    .unwrap_or_default();
+    let pinned = names::CONFIG_CANDIDATES
+        .iter()
+        .map(|rel| format!("{root}/{rel}"))
+        .find(|path| Path::new(path).is_file())
+        .and_then(|path| std::fs::read(path).ok())
+        .map(|bytes| yaml_subset::value(&String::from_utf8_lossy(&bytes), "agentsync_version"))
+        .unwrap_or_default();
     if pinned.is_empty() {
         "not detected".to_string()
     } else {

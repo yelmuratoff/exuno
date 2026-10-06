@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 use super::put;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
-use crate::{Error, config::project_config};
+use crate::{Error, config::names, config::project_config};
 
 const BLOCK_START: &str = "# >>> AGENTSYNC AUTO SYNC START >>>";
 const BLOCK_END: &str = "# <<< AGENTSYNC AUTO SYNC END <<<";
@@ -148,7 +148,7 @@ fn find(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
 /// `OUTPUTS_MODE` from the first config present: `outputs`, else `committed`
 /// when `gitignore.update` is `false`, else `local`.
 fn outputs_mode(root: &str) -> &'static str {
-    for rel in [".ai/agent_sync.yaml", "agent_sync.yaml"] {
+    for rel in names::CONFIG_CANDIDATES {
         let path = Path::new(root).join(rel);
         let Ok(bytes) = std::fs::read(&path) else {
             continue;
@@ -405,6 +405,8 @@ mod tests {
         assert_eq!(outputs_mode(&root), "committed");
         std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "outputs: other\n").unwrap();
         assert_eq!(outputs_mode(&root), "local");
+        std::fs::write(dir.path().join(".ai/exuno.yaml"), "outputs: committed\n").unwrap();
+        assert_eq!(outputs_mode(&root), "committed");
     }
 
     #[test]

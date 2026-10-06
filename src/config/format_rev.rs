@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::config::yaml_subset;
+use crate::config::{names, yaml_subset};
 
 const ENGINE_FORMAT_FILE: &str = include_str!("../../FORMAT");
 
@@ -36,7 +36,7 @@ pub fn pending_notes(from: u32, to: u32) -> Vec<String> {
 
 /// `format_config_path`: `.ai/agent_sync.yaml`, else `agent_sync.yaml`, when a file.
 pub fn config_path(project_dir: &Path) -> Option<PathBuf> {
-    [".ai/agent_sync.yaml", "agent_sync.yaml"]
+    names::CONFIG_CANDIDATES
         .iter()
         .map(|rel| project_dir.join(rel))
         .find(|path| path.is_file())
@@ -73,6 +73,11 @@ mod tests {
         assert_eq!(
             config_path(dir.path()),
             Some(dir.path().join(".ai/agent_sync.yaml"))
+        );
+        std::fs::write(dir.path().join(".ai/exuno.yaml"), "").unwrap();
+        assert_eq!(
+            config_path(dir.path()),
+            Some(dir.path().join(".ai/exuno.yaml"))
         );
     }
 

@@ -930,3 +930,12 @@ fn sync_refuses_two_skills_sharing_a_name_and_changes_nothing() {
         ));
     assert_eq!(project.sha256(".claude/skills/bloc/SKILL.md"), before);
 }
+
+#[test]
+fn sync_reads_the_tools_an_ai_exuno_yaml_enables() {
+    let project = Project::seeded(&[]);
+    std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [zed]\n");
+    project.agentsync().arg("sync").assert().success();
+    assert!(project.exists(".rules"));
+}
