@@ -12,7 +12,7 @@ installers = ["shell", "powershell"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
 # Path that installers should place binaries in
-install-path = "~/.agentsync/bin"
+install-path = "~/.exuno/bin"
 # Where to host releases
 hosting = "github"
 # Whether to install an updater program
@@ -21,3 +21,5 @@ install-updater = false
 checksum = "sha256"
 github-attestations = true
 dispatch-releases = true
+# Until 1.0, installed agentsync binaries update from agentsync-<target> archives
+post-announce-jobs = ["./legacy-assets"]

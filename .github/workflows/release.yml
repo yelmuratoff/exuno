@@ -306,3 +306,12 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+
+  custom-legacy-assets:
+    needs:
+      - plan
+      - announce
+    uses: ./.github/workflows/legacy-assets.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit

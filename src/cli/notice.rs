@@ -9,7 +9,7 @@ use crate::config::format_rev;
 use crate::output::style::Style;
 
 /// The GitHub repository releases come from.
-pub const REPO: &str = "yelmuratoff/agent_sync";
+pub const REPO: &str = "yelmuratoff/exuno";
 
 /// The cache file below the install root, one tag per line.
 pub const CACHE_FILE: &str = ".update_cache";
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(parse_tag_name("{\"tag_name\":\"\"}"), None);
         assert_eq!(
             latest_release_url(),
-            "https://api.github.com/repos/yelmuratoff/agent_sync/releases/latest"
+            "https://api.github.com/repos/yelmuratoff/exuno/releases/latest"
         );
     }
 }

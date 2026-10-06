@@ -87,11 +87,7 @@ const fn archive_extension() -> &'static str {
 }
 
 const fn binary_name() -> &'static str {
-    if cfg!(windows) {
-        "agentsync.exe"
-    } else {
-        "agentsync"
-    }
+    if cfg!(windows) { "exuno.exe" } else { "exuno" }
 }
 
 /// The shipped catalog as `(slug, yaml)` in byte order.
@@ -214,7 +210,7 @@ fn version_of(answer: &str) -> Option<String> {
     (!version.is_empty()).then(|| version.to_string())
 }
 
-/// The unpacked binary: `agentsync[.exe]` at the top or below the archive's
+/// The unpacked binary: `exuno[.exe]` at the top or below the archive's
 /// one directory, as cargo-dist lays it out.
 fn unpacked_binary(dir: &Path) -> Option<PathBuf> {
     let flat = dir.join(binary_name());
@@ -579,7 +575,7 @@ impl Download<'_, '_> {
         pinned: bool,
         target: &str,
     ) -> Result<Result<Fetched, u8>, Error> {
-        let archive_name = format!("agentsync-{target}.{}", archive_extension());
+        let archive_name = format!("exuno-{target}.{}", archive_extension());
         let base = format!("https://github.com/{REPO}/releases/download/{tag}");
         let archive_url = format!("{base}/{archive_name}");
         let archive = match self.archive(tag, pinned, &archive_url, &archive_name)? {
@@ -870,9 +866,9 @@ mod tests {
             std::fs::write(dir.path().join("install/bin/agentsync"), "old binary").unwrap();
             std::fs::write(dir.path().join("install/.update_cache"), "9.9.9\n").unwrap();
             std::fs::create_dir_all(dir.path().join("project/.ai/src/tools")).unwrap();
-            let release_dir = dir.path().join("release/agentsync-fixture");
+            let release_dir = dir.path().join("release/exuno-fixture");
             std::fs::create_dir_all(&release_dir).unwrap();
-            std::fs::write(release_dir.join("agentsync"), "new binary").unwrap();
+            std::fs::write(release_dir.join("exuno"), "new binary").unwrap();
             std::fs::write(
                 release_dir.join("CHANGELOG.md"),
                 format!("# Changelog\n\n## {version}\n\n### Fixed\n\n- **Something** with `code`.\n\n## 0.1.0\n\n- Ancient.\n"),
@@ -900,11 +896,11 @@ mod tests {
             let target = target().unwrap();
             let base = format!("https://github.com/{REPO}/releases/download/{tag}");
             let archive = b"an archive".to_vec();
-            let sum = format!("{}  agentsync-{target}.tar.xz\n", sha256_hex(&archive));
+            let sum = format!("{}  exuno-{target}.tar.xz\n", sha256_hex(&archive));
             self.served
-                .insert(format!("{base}/agentsync-{target}.tar.xz"), archive);
+                .insert(format!("{base}/exuno-{target}.tar.xz"), archive);
             self.served.insert(
-                format!("{base}/agentsync-{target}.tar.xz.sha256"),
+                format!("{base}/exuno-{target}.tar.xz.sha256"),
                 sum.into_bytes(),
             );
         }
@@ -927,9 +923,9 @@ mod tests {
             };
             let release_dir = self.release_dir.clone();
             let mut extract = |_archive: &Path, into: &Path| -> bool {
-                let top = into.join("agentsync-fixture");
+                let top = into.join("exuno-fixture");
                 std::fs::create_dir_all(&top).unwrap();
-                for name in ["agentsync", "CHANGELOG.md"] {
+                for name in ["exuno", "CHANGELOG.md"] {
                     std::fs::copy(release_dir.join(name), top.join(name)).unwrap();
                 }
                 true
@@ -937,7 +933,7 @@ mod tests {
             let (version, catalog) = (self.version.clone(), self.catalog.clone());
             let mut ask = |_binary: &Path, arg: &str| -> Option<String> {
                 match arg {
-                    "version" => Some(format!("agentsync v{version}\n")),
+                    "version" => Some(format!("exuno v{version}\n")),
                     CATALOG_COMMAND => Some(catalog.clone()),
                     _ => None,
                 }
@@ -1060,7 +1056,7 @@ mod tests {
         assert!(out.ends_with("  Pinning to v999.0.0...\n"));
         assert_eq!(
             err,
-            "  Error: No AgentSync release is tagged 999.0.0.\n  List releases at https://github.com/yelmuratoff/agent_sync/releases\n"
+            "  Error: No AgentSync release is tagged 999.0.0.\n  List releases at https://github.com/yelmuratoff/exuno/releases\n"
         );
         fixture.served.insert(
             format!("https://api.github.com/repos/{REPO}/git/ref/tags/0.1.0"),
@@ -1070,20 +1066,20 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            "  Error: AgentSync 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh | bash\n"
+            "  Error: AgentSync 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n"
         );
         fixture.publish("9.9.9");
         let target = target().unwrap();
         fixture.served.insert(
             format!(
-                "https://github.com/{REPO}/releases/download/9.9.9/agentsync-{target}.tar.xz.sha256"
+                "https://github.com/{REPO}/releases/download/9.9.9/exuno-{target}.tar.xz.sha256"
             ),
             b"0000  nope\n".to_vec(),
         );
         let (status, _, err) = fixture.run(&["9.9.9"]);
         assert_eq!(status, 1);
         assert!(err.starts_with(&format!(
-            "  Error: checksum mismatch for agentsync-{target}.tar.xz.\n  expected 0000, got "
+            "  Error: checksum mismatch for exuno-{target}.tar.xz.\n  expected 0000, got "
         )));
         assert_eq!(
             std::fs::read_to_string(fixture.exe()).unwrap(),
@@ -1122,7 +1118,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            "  Error: Failed to fetch updates from GitHub.\n    HTTP 404 for https://api.github.com/repos/yelmuratoff/agent_sync/releases/latest\n  Check your network connection and that the remote is reachable.\n"
+            "  Error: Failed to fetch updates from GitHub.\n    HTTP 404 for https://api.github.com/repos/yelmuratoff/exuno/releases/latest\n  Check your network connection and that the remote is reachable.\n"
         );
         fixture.offline = true;
         let (status, _, err) = fixture.run(&["9.9.9"]);
