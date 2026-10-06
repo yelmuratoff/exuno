@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod edit_paths;
 pub mod format_rev;
 pub mod mcp_catalog;
+pub mod names;
 pub mod payload;
 pub mod profiles;
 pub mod project_config;
