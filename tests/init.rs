@@ -37,7 +37,7 @@ fn skill_files(dir: &Path, found: &mut usize) {
 #[test]
 fn init_creates_ai_src_content_directories() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     assert!(project.exists(".ai/src/AGENTS.md"));
     assert!(project.join(".ai/src/rules").is_dir());
@@ -57,7 +57,7 @@ fn init_creates_ai_src_content_directories() {
 fn init_tools_claude_scaffolds_only_claude_payloads() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude"])
         .assert()
         .success();
@@ -76,7 +76,7 @@ fn init_tools_claude_scaffolds_only_claude_payloads() {
 fn init_tools_claude_payloads_land_in_the_layout_sync_treats_as_canonical() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude"])
         .assert()
         .success()
@@ -85,7 +85,7 @@ fn init_tools_claude_payloads_land_in_the_layout_sync_treats_as_canonical() {
         ));
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -95,10 +95,10 @@ fn init_tools_claude_payloads_land_in_the_layout_sync_treats_as_canonical() {
 #[test]
 fn init_refuses_to_run_from_inside_ai() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     project
-        .agentsync()
+        .exuno()
         .current_dir(project.join(".ai"))
         .arg("init")
         .assert()
@@ -111,10 +111,10 @@ fn init_refuses_to_run_from_inside_ai() {
 #[test]
 fn sync_refuses_to_run_from_inside_ai() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     project
-        .agentsync()
+        .exuno()
         .current_dir(project.join(".ai"))
         .arg("sync")
         .assert()
@@ -126,7 +126,7 @@ fn sync_refuses_to_run_from_inside_ai() {
 fn init_content_agents_rules_skips_skills_commands_agents() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--content", "agents,rules"])
         .assert()
         .success();
@@ -143,7 +143,7 @@ fn init_no_detect_ignores_existing_tool_markers() {
     let project = Project::empty();
     std::fs::create_dir_all(project.join(".claude")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-detect"])
         .assert()
         .success();
@@ -157,7 +157,7 @@ fn init_tools_union_with_auto_detect() {
     let project = Project::empty();
     std::fs::create_dir_all(project.join(".cursor")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude"])
         .assert()
         .success();
@@ -171,7 +171,7 @@ fn init_tools_union_with_auto_detect() {
 fn init_rejects_unknown_content_token() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--content", "bogus"])
         .assert()
         .failure()
@@ -181,14 +181,14 @@ fn init_rejects_unknown_content_token() {
 #[test]
 fn init_creates_starter_rules() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert!(md_files(&project.join(".ai/src/rules")) >= 1);
 }
 
 #[test]
 fn init_creates_agent_sync_yaml_with_tools_enabled_list() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     assert!(project.exists(".ai/agent_sync.yaml"));
     let config = project.read(".ai/agent_sync.yaml");
@@ -199,7 +199,7 @@ fn init_creates_agent_sync_yaml_with_tools_enabled_list() {
 #[test]
 fn init_creates_skills() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     let mut count = 0;
     skill_files(&project.join(".ai/src/skills"), &mut count);
     assert!(count >= 1);
@@ -208,23 +208,23 @@ fn init_creates_skills() {
 #[test]
 fn init_creates_commands() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert!(md_files(&project.join(".ai/src/commands")) >= 1);
 }
 
 #[test]
 fn init_creates_agents() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert!(md_files(&project.join(".ai/src/agents")) >= 1);
 }
 
 #[test]
 fn init_skips_if_ai_src_already_exists() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     project
-        .agentsync()
+        .exuno()
         .arg("init")
         .assert()
         .success()
@@ -235,7 +235,7 @@ fn init_skips_if_ai_src_already_exists() {
 fn init_keeps_an_existing_exuno_yaml_and_writes_no_legacy_config() {
     let project = Project::empty();
     project.write(".ai/exuno.yaml", "tools:\n  enabled: []\n");
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert_eq!(project.read(".ai/exuno.yaml"), "tools:\n  enabled: []\n");
     assert!(!project.exists(".ai/agent_sync.yaml"));
 }
@@ -244,7 +244,7 @@ fn init_keeps_an_existing_exuno_yaml_and_writes_no_legacy_config() {
 fn init_output_mentions_enable_command() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .arg("init")
         .assert()
         .success()
@@ -255,7 +255,7 @@ fn init_output_mentions_enable_command() {
 fn init_next_steps_lists_mcp_and_customize_hints() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-detect"])
         .assert()
         .success()
@@ -267,11 +267,7 @@ fn init_next_steps_lists_mcp_and_customize_hints() {
 fn init_to_custom_directory() {
     let project = Project::empty();
     std::fs::create_dir_all(project.join("subdir")).unwrap();
-    project
-        .agentsync()
-        .args(["init", "subdir"])
-        .assert()
-        .success();
+    project.exuno().args(["init", "subdir"]).assert().success();
     assert!(project.exists("subdir/.ai/src/AGENTS.md"));
 }
 
@@ -293,7 +289,7 @@ fn init_the_wizard_draws_its_tool_list_on_a_terminal() {
     // Move down once in the tool list (an arrow must not read as Escape), Enter
     // through both lists, keep committed outputs, decline at Proceed.
     let keys = "\x1b[B\n\ny\nn\n";
-    let bin = env!("CARGO_BIN_EXE_agentsync");
+    let bin = env!("CARGO_BIN_EXE_exuno");
     let gnu = StdCommand::new("script")
         .arg("--version")
         .output()
@@ -332,7 +328,7 @@ fn init_the_wizard_draws_its_tool_list_on_a_terminal() {
 fn init_names_a_missing_target_directory_and_fails() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "missing-dir"])
         .assert()
         .code(1)
@@ -344,14 +340,14 @@ fn init_names_a_missing_target_directory_and_fails() {
 #[test]
 fn init_does_not_copy_system_engine_into_project() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert!(!project.exists(".ai/system"));
 }
 
 #[test]
 fn init_agents_md_is_valid_markdown() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     let text = project.read(".ai/src/AGENTS.md");
     assert!(text.starts_with('#'));
 }
@@ -359,7 +355,7 @@ fn init_agents_md_is_valid_markdown() {
 #[test]
 fn init_with_empty_project_enables_no_tools_by_default() {
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert!(project.read(".ai/agent_sync.yaml").contains("enabled: []"));
 }
 
@@ -368,7 +364,7 @@ fn init_auto_detects_existing_tool_markers() {
     let project = Project::empty();
     std::fs::create_dir_all(project.join(".claude")).unwrap();
     std::fs::create_dir_all(project.join(".cursor")).unwrap();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     let config = project.read(".ai/agent_sync.yaml");
     assert!(config.lines().any(|l| l == "    - claude"));
@@ -379,7 +375,7 @@ fn init_auto_detects_existing_tool_markers() {
 fn init_writes_only_the_defaults_sync_reads() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-detect", "--no-sync"])
         .assert()
         .success();
@@ -394,7 +390,7 @@ fn init_writes_only_the_defaults_sync_reads() {
 fn init_detects_cline_from_a_single_file_clinerules_and_keeps_it() {
     let project = Project::empty();
     project.write(".clinerules", "# hand-written Cline rules\n");
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     assert!(
         project
@@ -415,7 +411,7 @@ fn init_backs_up_existing_destinations_for_enabled_tools() {
 
     // --no-sync so .latest is init's own snapshot, not the first sync's.
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--no-sync"])
         .assert()
         .success();
@@ -446,7 +442,7 @@ fn init_restores_pre_init_state_after_a_partial_scaffold_failure() {
     project.write(".ai/agent_sync.yaml/sentinel", "keep\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-detect"])
         .assert()
         .failure()
@@ -462,7 +458,7 @@ fn init_records_no_template_hash_for_an_adopted_agents_md() {
     let project = Project::empty();
     project.write("CLAUDE.md", "# Hand-written\n");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--no-sync"])
         .assert()
         .success();
@@ -483,7 +479,7 @@ fn init_auto_detects_kimi_code_and_opencode_markers() {
     let project = Project::empty();
     std::fs::create_dir_all(project.join(".kimi-code")).unwrap();
     std::fs::create_dir_all(project.join(".opencode")).unwrap();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     let config = project.read(".ai/agent_sync.yaml");
     assert!(config.lines().any(|l| l == "    - kimi"));
@@ -494,7 +490,7 @@ fn init_auto_detects_kimi_code_and_opencode_markers() {
 fn init_does_not_treat_generic_agents_md_as_a_codex_marker() {
     let project = Project::empty();
     project.write("AGENTS.md", "# Shared agent instructions\n");
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
 
     assert!(
         !project
@@ -510,7 +506,7 @@ fn init_does_not_treat_generic_agents_md_as_a_codex_marker() {
 fn init_dry_run_shows_plan_without_writing() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--dry-run", "--tools", "claude,cursor"])
         .assert()
         .success()
@@ -527,7 +523,7 @@ fn init_dry_run_shows_plan_without_writing() {
 fn init_dry_run_content_filters_in_plan() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--dry-run", "--content", "agents,rules"])
         .assert()
         .success()
@@ -540,7 +536,7 @@ fn init_yes_in_non_tty_behaves_like_defaults() {
     // --yes is a no-op here (no prompts run in non-TTY), but must not error.
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--yes", "--no-detect"])
         .assert()
         .success();
@@ -552,7 +548,7 @@ fn init_yes_in_non_tty_behaves_like_defaults() {
 fn init_non_tty_without_flags_runs_silently_with_defaults() {
     // No flags, no TTY → fall through to defaults; must NOT hang on prompts.
     let project = Project::empty();
-    project.agentsync().arg("init").assert().success();
+    project.exuno().arg("init").assert().success();
     assert!(project.exists(".ai/agent_sync.yaml"));
 }
 
@@ -560,7 +556,7 @@ fn init_non_tty_without_flags_runs_silently_with_defaults() {
 fn init_help_documents_yes_and_dry_run() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--help"])
         .assert()
         .success()
@@ -573,7 +569,7 @@ fn init_help_documents_yes_and_dry_run() {
 fn init_no_templates_creates_empty_layout_without_starter_files() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-templates", "--no-detect"])
         .assert()
         .success();
@@ -597,7 +593,7 @@ fn init_no_templates_creates_empty_layout_without_starter_files() {
 fn init_no_templates_content_agents_rules_narrows_empty_dirs() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args([
             "init",
             "--no-templates",
@@ -621,7 +617,7 @@ fn init_no_templates_content_agents_rules_narrows_empty_dirs() {
 fn init_dry_run_no_templates_notes_no_starter_templates_in_plan() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--dry-run", "--no-templates", "--no-detect"])
         .assert()
         .success()
@@ -637,7 +633,7 @@ fn init_leaves_no_temp_artifacts_behind() {
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
     project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", &sandbox)
         .args(["init", "--no-detect"])
         .assert()

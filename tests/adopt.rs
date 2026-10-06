@@ -12,7 +12,7 @@ use predicates::prelude::*;
 fn synced_project(tools: &[&str]) -> Project {
     let project = Project::seeded(&[]);
     project.enable_tools(tools);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
 }
 
@@ -52,7 +52,7 @@ fn adopt_rule_file_claude_no_header_round_trips_into_source() {
     project.append(".claude/rules/core.md", "## Manual addition\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/rules/core.md"])
         .assert()
         .success();
@@ -68,13 +68,13 @@ fn adopt_subsequent_sync_is_drift_free_after_rule_adoption() {
     let project = synced_project(&["claude"]);
     project.append(".claude/rules/core.md", "## Adopted\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/rules/core.md"])
         .assert()
         .success();
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -88,7 +88,7 @@ fn adopt_agents_md_round_trips_into_ai_src_agents_md() {
     project.append("CLAUDE.md", "## Custom appendix\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "CLAUDE.md"])
         .assert()
         .success();
@@ -106,7 +106,7 @@ fn adopt_refuses_minimax_agents_with_generated_rule_references() {
     project.append("AGENTS.md", "\nManual edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "AGENTS.md"])
         .assert()
         .failure()
@@ -121,7 +121,7 @@ fn adopt_refuses_shared_agents_when_minimax_is_enabled_with_codex() {
     project.append("AGENTS.md", "\nManual edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "AGENTS.md"])
         .assert()
         .failure()
@@ -137,11 +137,11 @@ fn adopt_allows_agents_owned_by_cursor_when_minimax_agents_are_disabled() {
         ".ai/src/tools/minimax.yaml",
         "targets:\n  agents:\n    enabled: false\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append("AGENTS.md", "\nManual edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "AGENTS.md"])
         .assert()
         .success();
@@ -155,7 +155,7 @@ fn adopt_settings_scaffolds_canonical_override_path() {
     assert!(!project.exists(".ai/src/tools/claude/settings.json"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/settings.json"])
         .assert()
         .success();
@@ -175,11 +175,11 @@ fn adopt_refuses_composed_opencode_settings() {
         ".ai/src/mcp.json",
         "{\"mcpServers\":{\"x\":{\"command\":\"x\"}}}\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append("opencode.json", "\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "opencode.json"])
         .assert()
         .failure()
@@ -194,7 +194,7 @@ fn adopt_opencode_hooks_remain_one_to_one() {
     project.append(".opencode/plugins/agentsync.ts", "\n// user hook\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".opencode/plugins/agentsync.ts"])
         .assert()
         .success();
@@ -212,7 +212,7 @@ fn adopt_skill_file_round_trips() {
     project.append(&skill_file, "## Skill addition\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", &skill_file])
         .assert()
         .success();
@@ -227,11 +227,11 @@ fn adopt_returns_an_edit_to_the_skill_category_it_came_from() {
         "---\nname: bloc\ndescription: Bloc\n---\n",
     );
     project.write(".ai/src/skills/flutter/bloc/references/r.md", "r\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append(".claude/skills/bloc/references/r.md", "edited\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/skills/bloc/references/r.md"])
         .assert()
         .success();
@@ -240,7 +240,7 @@ fn adopt_returns_an_edit_to_the_skill_category_it_came_from() {
         "r\nedited\n"
     );
     assert!(!project.exists(".ai/src/skills/bloc"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 // ── Refusals ─────────────────────────────────────────────────────────────────
@@ -251,7 +251,7 @@ fn adopt_refuses_cursor_rule_header_injection() {
     project.append(".cursor/rules/core.mdc", "extra\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".cursor/rules/core.mdc"])
         .assert()
         .failure()
@@ -264,7 +264,7 @@ fn adopt_refuses_a_merged_rules_file() {
     project.append(".rules", "extra\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".rules"])
         .assert()
         .failure()
@@ -280,7 +280,7 @@ fn adopt_refuses_codex_toml_subagent() {
     project.append(&toml_file, "# edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", &toml_file])
         .assert()
         .failure()
@@ -294,7 +294,7 @@ fn adopt_refuses_converted_opencode_subagent() {
     project.append(&agent_file, "# edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", &agent_file])
         .assert()
         .failure()
@@ -307,7 +307,7 @@ fn adopt_refuses_unknown_destination() {
     project.write("README.md", "hello\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "README.md"])
         .assert()
         .failure();
@@ -318,7 +318,7 @@ fn adopt_refuses_path_outside_repo() {
     let project = synced_project(&["claude"]);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "/etc/hosts"])
         .assert()
         .failure()
@@ -333,7 +333,7 @@ fn adopt_works_before_the_first_sync_when_nothing_is_tracked_yet() {
     project.write("CLAUDE.md", "# Pre-existing\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "CLAUDE.md"])
         .assert()
         .success();
@@ -348,7 +348,7 @@ fn adopt_refuses_untracked_file_not_in_manifest() {
     project.write(".claude/rules/extraneous.md", "rogue\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/rules/extraneous.md"])
         .assert()
         .failure()
@@ -364,7 +364,7 @@ fn adopt_dry_run_does_not_write_source() {
     project.append(".claude/rules/core.md", "## Edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--dry-run", ".claude/rules/core.md"])
         .assert()
         .success();
@@ -378,7 +378,7 @@ fn adopt_dry_run_does_not_update_manifest() {
     project.append(".claude/rules/core.md", "## Edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--dry-run", ".claude/rules/core.md"])
         .assert()
         .success();
@@ -391,7 +391,7 @@ fn adopt_refuses_non_interactive_without_yes() {
     project.append(".claude/rules/core.md", "## Edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", ".claude/rules/core.md"])
         .assert()
         .failure()
@@ -405,7 +405,7 @@ fn adopt_no_op_when_dest_already_matches_source() {
     let project = synced_project(&["claude"]);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/rules/core.md"])
         .assert()
         .success()
@@ -421,7 +421,7 @@ fn adopt_all_promotes_every_drifted_1_to_1_output() {
     project.append("CLAUDE.md", "## Agents edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success();
@@ -436,7 +436,7 @@ fn adopt_all_names_a_source_two_outputs_share_once() {
     project.append(".cursor/skills/agentsync/SKILL.md", "## Same edit\n");
 
     let output = project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success()
@@ -458,7 +458,7 @@ fn adopt_all_no_op_when_nothing_drifted() {
     let project = synced_project(&["claude"]);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success()
@@ -472,7 +472,7 @@ fn adopt_all_adopts_adoptable_output_but_skips_refused_target() {
     project.append(".cursor/rules/core.mdc", "extra\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success()
@@ -489,7 +489,7 @@ fn adopt_all_skips_same_source_conflicts_without_writing() {
     project.append("GEMINI.md", "## Gemini only\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success()
@@ -504,7 +504,7 @@ fn adopt_all_dry_run_writes_nothing() {
     project.append(".claude/rules/core.md", "## Edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--dry-run"])
         .assert()
         .success();
@@ -516,7 +516,7 @@ fn adopt_all_rejects_a_dest_file_argument() {
     let project = synced_project(&["claude"]);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "CLAUDE.md"])
         .assert()
         .code(2)
@@ -529,7 +529,7 @@ fn adopt_all_refuses_non_interactive_without_yes() {
     project.append(".claude/rules/core.md", "## Edit\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all"])
         .assert()
         .failure()
@@ -541,13 +541,13 @@ fn adopt_all_subsequent_sync_is_drift_free() {
     let project = synced_project(&["claude"]);
     project.append(".claude/rules/core.md", "## Adopted\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success();
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -563,11 +563,11 @@ fn adopt_writes_an_edited_rule_into_the_source_rules_directory_sync_reads() {
         ".ai/agent_sync.yaml",
         "tools:\n  enabled:\n    - claude\nsource:\n  rules: \"docs/rules\"\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append(".claude/rules/team.md", "## Edited\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".claude/rules/team.md"])
         .assert()
         .success();
@@ -580,11 +580,11 @@ fn adopt_a_cline_workflow_goes_to_commands() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["cline"]);
     project.write(".ai/src/commands/go.md", "---\ndescription: Go\n---\nGo.\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append(".cline/workflows/go.md", "Edited.\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".cline/workflows/go.md"])
         .assert()
         .success()
@@ -599,7 +599,7 @@ fn adopt_the_plans_diff_names_source_and_destination_by_project_path() {
     project.append(".claude/rules/core.md", "## Manual addition\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--dry-run", ".claude/rules/core.md"])
         .assert()
         .success()
@@ -628,7 +628,7 @@ fn keyed_codex_project() -> Project {
         ".ai/src/mcp.json",
         r#"{"mcpServers":{"dart":{"command":"dart"}}}"#,
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append(CODEX_CONFIG, "\n[projects.p]\ntrust_level = \"trusted\"\n");
     project
 }
@@ -643,7 +643,7 @@ fn adopt_moves_changed_owned_keys_into_codex_settings() {
     project.write(CODEX_CONFIG, &edited);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .success()
@@ -652,16 +652,16 @@ fn adopt_moves_changed_owned_keys_into_codex_settings() {
         project.read(CODEX_SETTINGS),
         "# mine\nmodel = \"ui-pick\"\n"
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read(CODEX_CONFIG).contains("[projects.p]"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
 fn adopt_ignores_keys_the_codex_app_owns() {
     let project = keyed_codex_project();
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .success()
@@ -678,7 +678,7 @@ fn adopt_refuses_an_owned_mcp_server() {
     project.write(CODEX_CONFIG, &edited);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .failure()
@@ -686,7 +686,7 @@ fn adopt_refuses_an_owned_mcp_server() {
             "mcp_servers.dart comes from the MCP source",
         ));
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success()
@@ -704,7 +704,7 @@ fn adopt_all_moves_changed_owned_keys_into_codex_settings() {
     project.write(CODEX_CONFIG, &edited);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .success()
@@ -715,7 +715,7 @@ fn adopt_all_moves_changed_owned_keys_into_codex_settings() {
         project.read(CODEX_SETTINGS),
         "# mine\nmodel = \"ui-pick\"\neffort = \"low\"\n"
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read(CODEX_CONFIG).contains("[projects.p]"));
 }
 
@@ -732,12 +732,12 @@ fn adopt_takes_mcp_server_fields_the_settings_own() {
         ".ai/src/mcp.json",
         r#"{"mcpServers":{"shared":{"command":"x"}}}"#,
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let edited = project.read(CODEX_CONFIG).replace("\"repl\"", "\"repl2\"");
     project.write(CODEX_CONFIG, &edited);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .success();
@@ -756,7 +756,7 @@ fn adopt_refuses_a_whole_file_copy_of_a_key_owned_config() {
     );
     std::fs::remove_file(project.join(".ai/src/mcp.json")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .failure()
@@ -776,7 +776,7 @@ fn adopt_refuses_to_create_a_settings_source_from_owned_keys() {
     project.write(CODEX_CONFIG, &edited);
 
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .failure()

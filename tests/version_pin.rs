@@ -49,7 +49,7 @@ fn set_version_pin_mode(project: &Project, mode: &str) {
 
 fn init_committed(project: &Project) {
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -57,7 +57,7 @@ fn init_committed(project: &Project) {
 
 fn init_local(project: &Project) {
     project
-        .agentsync()
+        .exuno()
         .args([
             "init",
             "--tools",
@@ -76,7 +76,7 @@ fn version_pin_committed_mode_refuses_to_sync_with_a_different_engine() {
     let project = Project::empty();
     init_committed(&project);
     pin_version(&project, "0.1.0");
-    project.agentsync().arg("sync").assert().code(1).stderr(
+    project.exuno().arg("sync").assert().code(1).stderr(
         predicate::str::contains("pins agentsync 0.1.0")
             .and(predicate::str::contains("agentsync update 0.1.0"))
             .and(predicate::str::contains("agentsync upgrade-config")),
@@ -103,19 +103,19 @@ fn version_pin_reads_an_exuno_version_key() {
         + "\n";
     project.write(".ai/agent_sync.yaml", &config);
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
         .stderr(predicate::str::contains("pins agentsync 0.1.0"));
     project
-        .agentsync()
+        .exuno()
         .arg("check")
         .assert()
         .code(1)
         .stderr(predicate::str::contains("pins agentsync 0.1.0"));
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("differs from pinned v0.1.0"));
@@ -125,10 +125,10 @@ fn version_pin_reads_an_exuno_version_key() {
 fn version_pin_committed_mode_check_fails_with_the_same_explanation() {
     let project = Project::empty();
     init_committed(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     pin_version(&project, "0.1.0");
     project
-        .agentsync()
+        .exuno()
         .arg("check")
         .assert()
         .code(1)
@@ -141,7 +141,7 @@ fn version_pin_local_mode_without_version_pin_only_warns_and_still_syncs() {
     init_local(&project);
     pin_version(&project, "0.1.0");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -156,7 +156,7 @@ fn version_pin_local_mode_set_to_warn_only_warns_and_still_syncs() {
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "warn");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -171,7 +171,7 @@ fn version_pin_the_scalar_shorthand_makes_local_mode_strict() {
     pin_version(&project, "0.1.0");
     project.append(".ai/agent_sync.yaml", "version_pin: strict\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -203,17 +203,17 @@ fn version_pin_check_treats_gitignore_update_false_as_committed_like_sync() {
             .read(".ai/agent_sync.yaml")
             .contains("  update: false\n")
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "strict");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
         .stderr(predicate::str::contains("committed outputs must come"));
     project
-        .agentsync()
+        .exuno()
         .arg("check")
         .assert()
         .code(1)
@@ -226,7 +226,7 @@ fn version_pin_local_mode_can_be_made_strict_for_sync() {
     init_local(&project);
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "strict");
-    project.agentsync().arg("sync").assert().code(1).stderr(
+    project.exuno().arg("sync").assert().code(1).stderr(
         predicate::str::contains("pins agentsync 0.1.0")
             .and(predicate::str::contains("version_pin.mode 'strict'"))
             .and(predicate::str::contains("committed outputs must come").not()),
@@ -238,10 +238,10 @@ fn version_pin_local_mode_can_be_made_strict_for_sync() {
 fn version_pin_local_strict_mode_also_fails_check() {
     let project = Project::empty();
     init_local(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "strict");
-    project.agentsync().arg("check").assert().code(1).stderr(
+    project.exuno().arg("check").assert().code(1).stderr(
         predicate::str::contains("pins agentsync 0.1.0")
             .and(predicate::str::contains("version_pin.mode 'strict'"))
             .and(predicate::str::contains("committed outputs must come").not()),
@@ -254,7 +254,7 @@ fn version_pin_unknown_mode_fails_before_writing() {
     init_local(&project);
     set_version_pin_mode(&project, "refuse");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -270,7 +270,7 @@ fn version_pin_check_rejects_an_unknown_mode() {
     init_local(&project);
     set_version_pin_mode(&project, "refuse");
     project
-        .agentsync()
+        .exuno()
         .arg("check")
         .assert()
         .code(1)
@@ -284,7 +284,7 @@ fn version_pin_a_matching_pin_is_silent() {
     let project = Project::empty();
     init_committed(&project);
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -304,7 +304,7 @@ fn version_pin_no_pin_means_no_check() {
         + "\n";
     project.write(".ai/agent_sync.yaml", &rewritten);
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -316,8 +316,8 @@ fn version_pin_upgrade_config_re_pins_to_the_running_engine_and_unblocks_sync() 
     let project = Project::empty();
     init_committed(&project);
     pin_version(&project, "0.1.0");
-    project.agentsync().arg("upgrade-config").assert().success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("upgrade-config").assert().success();
+    project.exuno().arg("sync").assert().success();
 }
 
 #[test]
@@ -326,7 +326,7 @@ fn upgrade_config_pins_the_config_agentsync_config_path_names() {
     let before = project.read(".ai/agent_sync.yaml");
     project.write("selected.yaml", "tools:\n  enabled: []\n");
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "selected.yaml")
         .arg("upgrade-config")
         .assert()

@@ -16,7 +16,7 @@ fn init_at(dir: &Path) {
     std::fs::create_dir_all(dir).unwrap();
     // A null stdin and stdout, or `init` reads the runner's console as a
     // terminal on Windows and waits for the wizard's answers forever.
-    let status = std::process::Command::new(env!("CARGO_BIN_EXE_agentsync"))
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_exuno"))
         .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -59,7 +59,7 @@ fn git_init_at(dir: &Path) {
 }
 
 fn dedupe_in(dir: &Path, args: &[&str]) -> assert_cmd::assert::Assert {
-    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command.arg("dedupe").args(args).assert()
@@ -214,7 +214,7 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
     let before = std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap();
     std::fs::write(child_dir.join("selected.yaml"), "tools:\n  enabled: []\n").unwrap();
 
-    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(&child_dir);
     common::scrub(&mut command);
     command
@@ -230,7 +230,7 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
         before
     );
 
-    let mut missing = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut missing = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     missing.current_dir(&child_dir);
     common::scrub(&mut missing);
     missing
@@ -407,7 +407,7 @@ fn dedupe_workspace_honors_per_project_shared_path_across_git_boundaries() {
 #[test]
 fn dedupe_help_prints_usage() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["dedupe", "--help"])
         .assert()
         .success()
@@ -423,7 +423,7 @@ fn dedupe_help_prints_usage() {
 #[test]
 fn dedupe_rejects_workspace_and_against_combination() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["dedupe", "--workspace", "--against", "/tmp", "--yes"])
         .assert()
         .failure()

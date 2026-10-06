@@ -18,7 +18,7 @@ fn list_reads_project_skills_without_a_catalog() {
         "---\nname: deploy\ndescription: Deploy the app safely\n---\n\n# Deploy\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list"])
         .assert()
         .success()
@@ -34,7 +34,7 @@ fn list_neutralizes_invisible_formatting_in_skill_metadata() {
         "---\nname: deploy\ndescription: safe\u{202e}spoof\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list"])
         .assert()
         .success()
@@ -50,7 +50,7 @@ fn list_reads_bundled_skill_and_folded_description() {
         "---\nname: deploy\ndescription: >-\n  Deploy the app\n  safely\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list"])
         .assert()
         .success()
@@ -69,7 +69,7 @@ fn check_reports_invalid_frontmatter_without_changing_sync() {
         "---\nname: wrong\ndescription: Deploy\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "check"])
         .assert()
         .failure()
@@ -77,7 +77,7 @@ fn check_reports_invalid_frontmatter_without_changing_sync() {
             "name 'wrong' does not match directory 'deploy'",
         ));
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list"])
         .assert()
         .success()
@@ -85,7 +85,7 @@ fn check_reports_invalid_frontmatter_without_changing_sync() {
             "deploy\t\t.ai/src/skills/deploy/SKILL.md",
         ));
     project.enable_tools(&["claude"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude/skills/deploy/SKILL.md"));
 }
 
@@ -101,7 +101,7 @@ fn list_uses_configured_source_path() {
         "---\nname: review\ndescription: Review changes\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list"])
         .assert()
         .success()
@@ -130,7 +130,7 @@ fn list_includes_shared_skills_and_respects_child_precedence() {
         "---\nname: deploy\ndescription: Child deployment\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list"])
         .assert()
         .success()
@@ -158,7 +158,7 @@ fn profile_list_uses_profile_overlay() {
         "---\nname: deploy\ndescription: Work deployment\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list", "--profile", "work"])
         .assert()
         .success()
@@ -166,7 +166,7 @@ fn profile_list_uses_profile_overlay() {
             "deploy\tWork deployment\t.ai/profiles/work/src/skills/deploy/SKILL.md",
         ));
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "show", "deploy", "--profile", "work"])
         .assert()
         .success()
@@ -179,7 +179,7 @@ fn profile_list_uses_profile_overlay() {
 #[test]
 fn unknown_profile_is_an_error() {
     project()
-        .agentsync()
+        .exuno()
         .args(["skills", "list", "--profile", "missing"])
         .assert()
         .failure()
@@ -194,7 +194,7 @@ fn show_displays_declared_fields_and_unverified_annotations() {
         "---\nname: review\ndescription: Review a selected diff\nlicense: MIT\ncompatibility: Requires git\nmetadata:\n  agentsync-use-when: Before merging\n  agentsync-not-for: Writing the change\n  agentsync-requirements: A selected diff\n---\n# Review\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "show", "review"])
         .assert()
         .success()
@@ -230,7 +230,7 @@ fn list_filters_names_without_affecting_check() {
         );
     }
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list", "--include", "re*", "--exclude", "release"])
         .assert()
         .success()
@@ -238,13 +238,13 @@ fn list_filters_names_without_affecting_check() {
         .stdout(predicate::str::contains("release\t").not())
         .stdout(predicate::str::contains("deploy\t").not());
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "check"])
         .assert()
         .success()
         .stdout("Checked 3 skills: 0 issue(s)\n");
     project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "list",
@@ -282,7 +282,7 @@ fn profile_reports_the_source_used_by_its_overlay() {
         "---\nname: other\ndescription: Profile skill\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "show", "review", "--profile", "work"])
         .assert()
         .success()
@@ -298,7 +298,7 @@ fn profile_reports_the_source_used_by_its_overlay() {
 fn show_reports_unknown_and_invalid_skills() {
     let project = project();
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "show", "absent"])
         .assert()
         .failure()
@@ -308,7 +308,7 @@ fn show_reports_unknown_and_invalid_skills() {
         "---\nname: review\ndescription:\n---\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "show", "review"])
         .assert()
         .failure()
@@ -322,7 +322,7 @@ fn check_reports_a_directory_with_no_skill_at_any_depth() {
     let project = project();
     project.write(".ai/src/skills/empty/reference.md", "# Reference\n");
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "check"])
         .assert()
         .failure()
@@ -349,7 +349,7 @@ fn categorized_project() -> Project {
 fn list_shows_each_category_and_filters_by_it() {
     let project = categorized_project();
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "list", "--include", "flutter/* commit"])
         .assert()
         .success()
@@ -365,7 +365,7 @@ fn list_shows_each_category_and_filters_by_it() {
 fn show_names_the_category_of_a_categorized_skill() {
     let project = categorized_project();
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "show", "slivers"])
         .assert()
         .success()
@@ -379,7 +379,7 @@ fn check_reports_name_collisions_across_categories() {
     let project = categorized_project();
     project.write(".ai/src/skills/flutter/auth/SKILL.md", &skill("auth"));
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "check"])
         .assert()
         .failure()
@@ -396,7 +396,7 @@ fn check_reports_a_category_name_add_would_refuse() {
         &skill("navigation"),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "check"])
         .assert()
         .failure()
@@ -410,7 +410,7 @@ fn check_reports_directories_below_the_category_limit() {
     let project = categorized_project();
     project.write(".ai/src/skills/a/b/c/d/e/f/SKILL.md", &skill("f"));
     project
-        .agentsync()
+        .exuno()
         .args(["skills", "check"])
         .assert()
         .failure()
@@ -422,13 +422,13 @@ fn check_reports_directories_below_the_category_limit() {
 #[test]
 fn help_and_invalid_arguments_do_not_read_the_project() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["skills", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("skills list [--profile <name>]"));
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["skills", "install"])
         .assert()
         .failure()

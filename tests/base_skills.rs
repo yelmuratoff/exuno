@@ -31,11 +31,7 @@ fn base_skills_the_agentsync_skill_reaches_outputs_without_living_in_ai_src() {
 #[test]
 fn base_skills_init_no_longer_scaffolds_it_as_project_content() {
     let project = synced_project();
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(!project.join(".ai/src/skills/agentsync").exists());
 }
 
@@ -64,11 +60,7 @@ fn base_skills_the_projects_own_copy_wins() {
         ".ai/src/skills/agentsync/SKILL.md",
         "---\nname: agentsync\ndescription: Project version\n---\n\nPROJECT OVERRIDE\n",
     );
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(
         project
             .read(".claude/skills/agentsync/SKILL.md")
@@ -83,11 +75,7 @@ fn base_skills_the_projects_categorized_copy_wins_without_a_collision() {
         ".ai/src/skills/meta/agentsync/SKILL.md",
         "---\nname: agentsync\ndescription: Project version\n---\n\nPROJECT OVERRIDE\n",
     );
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(
         project
             .read(".claude/skills/agentsync/SKILL.md")
@@ -104,11 +92,7 @@ fn base_skills_a_categorized_extension_adds_to_the_engine_skill_and_keeps_updati
         "## Team notes\n\nRead `references/team.md` before a release.\n",
     );
     project.write(".ai/src/skills/meta/agentsync/references/team.md", "TEAM\n");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
 
     let skill = project.read(".claude/skills/agentsync/SKILL.md");
     assert!(skill.starts_with("---\nname: agentsync\n"));
@@ -119,9 +103,9 @@ fn base_skills_a_categorized_extension_adds_to_the_engine_skill_and_keeps_updati
     );
     assert!(project.exists(".claude/skills/agentsync/references/maintenance.md"));
     assert!(!project.exists(".claude/skills/agentsync/SKILL.append.md"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("missing SKILL.md").not());
@@ -131,11 +115,7 @@ fn base_skills_a_categorized_extension_adds_to_the_engine_skill_and_keeps_updati
 fn base_skills_base_skills_false_leaves_it_out_entirely() {
     let project = synced_project();
     set_config(&project, "base_skills: false");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(!project.join(".claude/skills/agentsync").exists());
 }
 
@@ -156,7 +136,7 @@ fn base_skills_shared_inheritance_preserves_child_and_parent_skills_together() {
     );
     set_config(&project, "shared:\n  path: shared\n  inherit: skills");
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(
         project.read(".claude/skills/child-only/SKILL.md"),
         "child skill\n"
@@ -172,7 +152,7 @@ fn base_skills_shared_inheritance_preserves_child_and_parent_skills_together() {
 fn base_skills_a_second_sync_is_byte_identical_no_drift() {
     let project = synced_project();
     let before = project.sha256(".claude/skills/agentsync/SKILL.md");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let after = project.sha256(".claude/skills/agentsync/SKILL.md");
     assert_eq!(before, after);
 }
@@ -180,7 +160,7 @@ fn base_skills_a_second_sync_is_byte_identical_no_drift() {
 #[test]
 fn base_skills_check_stays_green_with_the_layer_active() {
     let project = synced_project();
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -188,11 +168,7 @@ fn base_skills_removing_the_engine_skill_from_a_project_prunes_the_output() {
     let project = synced_project();
     assert!(project.exists(".claude/skills/agentsync/SKILL.md"));
     set_config(&project, "base_skills: false");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(!project.exists(".claude/skills/agentsync/SKILL.md"));
 }
 
@@ -202,7 +178,7 @@ fn base_skills_the_overlay_leaves_no_temp_directory_behind() {
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
     project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", &sandbox)
         .args(["sync", "--force"])
         .assert()

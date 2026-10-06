@@ -12,18 +12,18 @@ use common::Project;
 use predicates::prelude::*;
 
 fn doctor(project: &Project) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("doctor").assert()
+    project.exuno().arg("doctor").assert()
 }
 
 fn doctor_at(dir: &Path) -> assert_cmd::assert::Assert {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command.arg("doctor").assert()
 }
 
 fn init_at(dir: &Path, args: &[&str]) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command.arg("init").args(args).assert().success();
@@ -84,7 +84,7 @@ fn doctor_passes_on_fresh_init() {
 fn doctor_advises_about_the_file_a_disabled_target_left_behind() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.write(
         ".ai/src/tools/claude.yaml",
         "targets:\n  agents:\n    enabled: false\n",
@@ -108,7 +108,7 @@ fn doctor_shows_customization_marker() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude"])
         .assert()
         .success();
@@ -166,7 +166,7 @@ fn doctor_checks_explicit_external_sources_at_their_configured_location() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_EXTERNAL_SOURCE_ROOTS", &outside_str)
         .arg("doctor")
         .assert()
@@ -178,7 +178,7 @@ fn doctor_checks_explicit_external_sources_at_their_configured_location() {
     std::fs::write(outside.path().join("AGENTS.md"), "# External\n").unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_EXTERNAL_SOURCE_ROOTS", &outside_str)
         .arg("doctor")
         .assert()
@@ -249,12 +249,12 @@ fn doctor_warns_about_legacy_flat_layout_payload_overrides() {
 fn list_shows_payload_override_column_when_hooks_override_exists() {
     let project = Project::seeded(&["--tools", "cursor"]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "cursor", "hooks", "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .arg("list")
         .assert()
         .success()
@@ -287,7 +287,7 @@ fn doctor_warns_when_pinned_version_differs_from_cli() {
 fn upgrade_config_bumps_pinned_version_to_current_cli() {
     let project = Project::seeded(&["--no-detect"]);
     pin_version(&project, "0.0.1");
-    project.agentsync().arg("upgrade-config").assert().success();
+    project.exuno().arg("upgrade-config").assert().success();
     assert!(
         !project
             .read(".ai/agent_sync.yaml")
@@ -302,7 +302,7 @@ fn doctor_shows_edit_paths_section_for_enabled_tools() {
     // Plain `enable`, not the no-scaffold helper: this asserts the scaffolded
     // settings.json path, which `--no-scaffold` would never create.
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
@@ -672,7 +672,7 @@ fn doctor_the_summary_follows_a_blank_line_with_no_rule() {
 #[test]
 fn doctor_help_is_answered_on_stdout_without_a_project() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["doctor", "--help"])
         .assert()
         .success()

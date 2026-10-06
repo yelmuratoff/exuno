@@ -12,15 +12,15 @@ use assert_cmd::Command;
 use common::Project;
 use predicates::prelude::*;
 
-fn agentsync_at(dir: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+fn exuno_at(dir: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command
 }
 
 fn init_at(dir: &Path, args: &[&str]) {
-    agentsync_at(dir).arg("init").args(args).assert().success();
+    exuno_at(dir).arg("init").args(args).assert().success();
 }
 
 /// `_workspace_init_pair`: `root + root/leaf`, each initialized with only
@@ -30,13 +30,13 @@ fn workspace_init_pair(project: &Project) -> (PathBuf, PathBuf) {
     let leaf = root.join("leaf");
     std::fs::create_dir_all(&root).unwrap();
     init_at(&root, &["--no-detect"]);
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["enable", "claude", "--no-scaffold"])
         .assert()
         .success();
     std::fs::create_dir_all(&leaf).unwrap();
     init_at(&leaf, &["--no-detect"]);
-    agentsync_at(&leaf)
+    exuno_at(&leaf)
         .args(["enable", "claude", "--no-scaffold"])
         .assert()
         .success();
@@ -46,7 +46,7 @@ fn workspace_init_pair(project: &Project) -> (PathBuf, PathBuf) {
 #[test]
 fn sync_workspace_fails_when_no_ai_found_below_cwd() {
     let project = Project::empty();
-    agentsync_at(project.path())
+    exuno_at(project.path())
         .args(["sync", "--workspace"])
         .assert()
         .failure()
@@ -58,7 +58,7 @@ fn sync_workspace_dry_run_touches_every_project_in_bottom_up_alpha_order() {
     let project = Project::empty();
     let (root, _leaf) = workspace_init_pair(&project);
 
-    let output = agentsync_at(&root)
+    let output = exuno_at(&root)
         .args(["sync", "--workspace", "--dry-run"])
         .assert()
         .success()
@@ -82,7 +82,7 @@ fn sync_workspace_dry_run_touches_every_project_in_bottom_up_alpha_order() {
 fn sync_workspace_exits_with_the_highest_project_status() {
     let project = Project::empty();
     let (root, leaf) = workspace_init_pair(&project);
-    agentsync_at(&leaf)
+    exuno_at(&leaf)
         .args(["enable", "opencode", "--no-scaffold"])
         .assert()
         .success();
@@ -91,10 +91,10 @@ fn sync_workspace_exits_with_the_highest_project_status() {
         "{\"mcpServers\":{\"x\":{}}}\n",
     )
     .unwrap();
-    agentsync_at(&leaf).arg("sync").assert().code(26);
+    exuno_at(&leaf).arg("sync").assert().code(26);
     std::fs::remove_file(root.join(".ai/src/AGENTS.md")).unwrap();
 
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["sync", "--workspace"])
         .assert()
         .code(26)
@@ -106,7 +106,7 @@ fn sync_workspace_writes_outputs_in_every_project() {
     let project = Project::empty();
     let (root, leaf) = workspace_init_pair(&project);
 
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["sync", "--workspace"])
         .assert()
         .success();
@@ -122,7 +122,7 @@ fn sync_workspace_forwards_extra_args_e_g_only_to_each_project() {
     let _ = std::fs::remove_file(leaf.join("CLAUDE.md"));
 
     // --only=cursor (not enabled) → claude output should NOT be touched.
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["sync", "--workspace", "--only", "cursor"])
         .assert()
         .success();
@@ -137,7 +137,7 @@ fn sync_workspace_continues_past_per_project_failures() {
     std::fs::remove_file(leaf.join(".ai/src/AGENTS.md")).unwrap();
 
     // The exit status is data here: one project of the workspace fails.
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["sync", "--workspace"])
         .output()
         .unwrap();
@@ -155,7 +155,7 @@ fn sync_workspace_skips_ai_inside_vendored_and_vcs_directories() {
     std::fs::create_dir_all(root.join("node_modules/some-pkg/.ai/src")).unwrap();
     std::fs::create_dir_all(root.join(".git/odd/.ai/src")).unwrap();
 
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["sync", "--workspace", "--dry-run"])
         .assert()
         .success()
@@ -176,7 +176,7 @@ fn sync_workspace_does_not_descend_into_a_projects_own_ai() {
     std::fs::create_dir_all(root.join(".ai/backups/20200101T000000Z-init-1/files/.ai/src"))
         .unwrap();
 
-    agentsync_at(&root)
+    exuno_at(&root)
         .args(["sync", "--workspace", "--dry-run"])
         .assert()
         .success()

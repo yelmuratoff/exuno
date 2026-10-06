@@ -7,7 +7,7 @@ use common::Project;
 use predicates::prelude::*;
 
 fn list(project: &Project) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("list").assert().success()
+    project.exuno().arg("list").assert().success()
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn list_works_even_without_ai_directory_uses_base_catalog() {
 fn list_shows_enabled_marker_after_enable() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
@@ -64,7 +64,7 @@ fn list_survives_a_tool_override_that_does_not_set_enabled() {
 #[test]
 fn list_help_is_answered_on_stdout_without_the_table() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["list", "-h"])
         .assert()
         .success()

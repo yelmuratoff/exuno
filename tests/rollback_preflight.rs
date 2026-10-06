@@ -20,7 +20,7 @@ use predicates::prelude::*;
 fn project() -> Project {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude,codex", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -39,7 +39,7 @@ fn project() -> Project {
 
 /// `sync_once`: a plain sync, returning the snapshot id it took.
 fn sync_once(project: &Project) -> String {
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.read(".ai/backups/.latest").trim().to_string()
 }
 
@@ -50,7 +50,7 @@ fn sync_once(project: &Project) -> String {
 fn assert_refused_unchanged(project: &Project, sync_id: &str) {
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", sync_id, "--yes"])
         .assert()
         .code(1)
@@ -119,7 +119,7 @@ fn describe(path: &Path) -> Entry {
     } else if ft.is_file() {
         Entry::File(
             mode_of(&meta),
-            agentsync::transaction::manifest::sha256_hex(&std::fs::read(path).unwrap()),
+            exuno::transaction::manifest::sha256_hex(&std::fs::read(path).unwrap()),
         )
     } else {
         #[cfg(unix)]
@@ -284,7 +284,7 @@ fn rollback_preflight_ignores_mutable_knowledge_contents_and_normal_undo_is_stil
     project.write("private-knowledge/new", "new entry\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .success();
@@ -297,7 +297,7 @@ fn rollback_preflight_ignores_mutable_knowledge_contents_and_normal_undo_is_stil
 
     let undo = project.read(".ai/backups/.latest").trim().to_string();
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &undo, "--yes"])
         .assert()
         .success();
@@ -324,7 +324,7 @@ fn rollback_preflight_compares_the_actual_post_sync_state_not_the_pre_sync_backu
     let after_sync = subset(&snapshot_tree(project.path()), ".claude/skills");
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .success();
@@ -335,7 +335,7 @@ fn rollback_preflight_compares_the_actual_post_sync_state_not_the_pre_sync_backu
 
     let undo = project.read(".ai/backups/.latest").trim().to_string();
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &undo, "--yes"])
         .assert()
         .success();
@@ -354,7 +354,7 @@ fn rollback_preflight_restores_an_unsealed_historical_snapshot_with_a_warning() 
     std::fs::remove_file(project.join(&format!(".ai/backups/{sync_id}/after.tsv"))).unwrap();
     project.write(".codex/config.toml", "after\n");
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .success()
@@ -372,7 +372,7 @@ fn rollback_preflight_dry_run_shows_the_plan_and_the_conflict_and_exits_1() {
     let before_refusal = snapshot_tree(project.path());
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--dry-run"])
         .assert()
         .code(1)
@@ -383,7 +383,7 @@ fn rollback_preflight_dry_run_shows_the_plan_and_the_conflict_and_exits_1() {
         .stdout(predicate::str::contains("Dry run — nothing was written."));
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--dry-run", "--force"])
         .assert()
         .success()
@@ -399,7 +399,7 @@ fn rollback_conflict_names_the_first_differing_path_inside_a_directory() {
     let sync_id = sync_once(&project);
     project.write(".claude/skills/.DS_Store", "finder\n");
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .code(1)
@@ -418,7 +418,7 @@ fn rollback_force_restores_over_a_conflict_and_keeps_it_undoable() {
     let sync_id = sync_once(&project);
     project.write(".claude/skills/foreign/NOTE.md", "unrelated\n");
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes", "--force"])
         .assert()
         .success();
@@ -426,7 +426,7 @@ fn rollback_force_restores_over_a_conflict_and_keeps_it_undoable() {
     let undo = project.read(".ai/backups/.latest").trim().to_string();
     assert_ne!(undo, sync_id);
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &undo, "--yes"])
         .assert()
         .success();
@@ -444,12 +444,12 @@ fn rolling_back_an_older_backup_after_a_newer_sync_points_at_the_newer_backups()
         ".ai/src/skills/added/SKILL.md",
         "---\nname: added\ndescription: Added after the first sync.\n---\n\nBody.\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let second = project.read(".ai/backups/.latest").trim().to_string();
     assert!(project.exists(".claude/skills/added/SKILL.md"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &first, "--yes"])
         .assert()
         .code(1)
@@ -460,12 +460,12 @@ fn rolling_back_an_older_backup_after_a_newer_sync_points_at_the_newer_backups()
             "Newer AgentSync operations may have changed this target. Roll back the newer backups first, or re-run with --force to restore anyway.",
         ));
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &second, "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &first, "--yes"])
         .assert()
         .success();
@@ -511,7 +511,7 @@ fn rollback_preflight_refuses_changed_ancestor_links_even_when_contents_match() 
     let before_refusal = snapshot_tree(project.path());
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .failure();
@@ -537,7 +537,7 @@ fn rollback_preflight_treats_a_malformed_post_operation_record_as_unsealed() {
     let record = format!(".ai/backups/{sync_id}/after.tsv");
     project.write(&record, "broken\n");
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--dry-run"])
         .assert()
         .success()
@@ -553,7 +553,7 @@ fn rollback_preflight_treats_a_malformed_post_operation_record_as_unsealed() {
         ),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--dry-run"])
         .assert()
         .success()
@@ -563,7 +563,7 @@ fn rollback_preflight_treats_a_malformed_post_operation_record_as_unsealed() {
 
     project.write(&record, "");
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .success()
@@ -585,7 +585,7 @@ fn rollback_preflight_treats_a_record_with_a_malformed_body_as_unsealed() {
         &format!("{header}\nfile\tnot-a-hash\t.claude/skills\n"),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .success()
@@ -612,7 +612,7 @@ fn rollback_preflight_supports_unusual_child_names_without_ignoring_their_change
 fn rollback_preflight_supports_sealed_init_snapshots_and_their_undo() {
     let fresh = Project::empty();
     fresh
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -620,7 +620,7 @@ fn rollback_preflight_supports_sealed_init_snapshots_and_their_undo() {
     let before_init_rollback = subset(&snapshot_tree(fresh.path()), ".ai/src");
 
     fresh
-        .agentsync()
+        .exuno()
         .args(["rollback", &init_id, "--yes"])
         .assert()
         .success();
@@ -628,7 +628,7 @@ fn rollback_preflight_supports_sealed_init_snapshots_and_their_undo() {
 
     let undo_id = fresh.read(".ai/backups/.latest").trim().to_string();
     fresh
-        .agentsync()
+        .exuno()
         .args(["rollback", &undo_id, "--yes"])
         .assert()
         .success();
@@ -662,7 +662,7 @@ fn an_unreadable_file_is_the_reported_conflict_not_the_files_hashed_after_it() {
         return;
     }
     let output = project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--dry-run"])
         .output()
         .unwrap();
@@ -701,7 +701,7 @@ fn sync_through_a_claude_symlink_inside_the_project_succeeds_and_seals() {
     std::fs::create_dir_all(project.join("tooling/claude")).unwrap();
     symlink(&project.join("tooling/claude"), &project.join(".claude"));
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -712,7 +712,7 @@ fn sync_through_a_claude_symlink_inside_the_project_succeeds_and_seals() {
     assert!(record.contains("dir\t-\t.claude/skills"));
     assert!(project.join(".claude").is_symlink());
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--yes"])
         .assert()
         .success();
@@ -734,7 +734,7 @@ fn sync_with_a_fifo_under_a_target_succeeds_and_records_it_by_type() {
         return;
     }
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()

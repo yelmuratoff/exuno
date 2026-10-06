@@ -17,7 +17,7 @@ fn baseline_a_pre_existing_claude_md_is_reported_before_being_replaced() {
     let project = seeded();
     project.write("CLAUDE.md", "# Hand-written rules\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -30,7 +30,7 @@ fn baseline_the_warning_names_adopt_and_rollback() {
     let project = seeded();
     project.write("CLAUDE.md", "# Hand-written rules\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .stderr(predicate::str::contains("agentsync adopt"))
@@ -41,11 +41,11 @@ fn baseline_the_warning_names_adopt_and_rollback() {
 fn baseline_the_replaced_content_is_restorable_from_the_snapshot() {
     let project = seeded();
     project.write("CLAUDE.md", "# Hand-written rules\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.read("CLAUDE.md").contains("Hand-written rules"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .success();
@@ -57,7 +57,7 @@ fn baseline_a_file_inside_a_generated_directory_is_reported_too() {
     let project = seeded();
     project.write(".claude/rules/legacy.md", "# Legacy rule\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -70,7 +70,7 @@ fn baseline_a_path_several_tools_write_is_counted_once() {
     project.enable_tools(&["cursor", "codex"]);
     project.write("AGENTS.md", "# Hand-written agents\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -84,7 +84,7 @@ fn baseline_an_empty_generated_directory_is_not_reported() {
     let project = seeded();
     std::fs::create_dir_all(project.join(".claude/rules")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -96,7 +96,7 @@ fn baseline_dry_run_reports_nothing_and_writes_nothing() {
     let project = seeded();
     project.write("CLAUDE.md", "# Hand-written rules");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run"])
         .assert()
         .success()
@@ -109,7 +109,7 @@ fn baseline_adopt_before_the_first_sync_keeps_the_content() {
     let project = seeded();
     project.write("CLAUDE.md", "# Hand-written rules\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "CLAUDE.md"])
         .assert()
         .success();
@@ -119,7 +119,7 @@ fn baseline_adopt_before_the_first_sync_keeps_the_content() {
             .contains("Hand-written rules")
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read("CLAUDE.md").contains("Hand-written rules"));
 }
 
@@ -127,7 +127,7 @@ fn baseline_adopt_before_the_first_sync_keeps_the_content() {
 fn baseline_adopt_of_a_missing_destination_still_fails() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", "CLAUDE.md"])
         .assert()
         .failure()
@@ -139,7 +139,7 @@ fn baseline_adopt_all_still_needs_a_manifest() {
     let project = seeded();
     project.write("CLAUDE.md", "# Hand-written rules\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--all", "--yes"])
         .assert()
         .failure()
@@ -149,9 +149,9 @@ fn baseline_adopt_all_still_needs_a_manifest() {
 #[test]
 fn baseline_a_second_sync_reports_nothing() {
     let project = seeded();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()

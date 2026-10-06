@@ -15,7 +15,7 @@ fn seeded() -> Project {
 fn add_rule_creates_ai_src_rules_name_md() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing"])
         .assert()
         .success();
@@ -30,7 +30,7 @@ fn add_rule_creates_ai_src_rules_name_md() {
 fn add_skill_creates_ai_src_skills_name_skill_md() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "deploy"])
         .assert()
         .success();
@@ -43,7 +43,7 @@ fn add_skill_creates_ai_src_skills_name_skill_md() {
 fn add_skill_places_it_in_the_named_category() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "slivers", "--category", "flutter/ui"])
         .assert()
         .success()
@@ -58,12 +58,12 @@ fn add_skill_places_it_in_the_named_category() {
 fn add_skill_refuses_a_name_another_category_holds() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "auth", "--category", "backend"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "auth", "--category", "flutter", "--force"])
         .assert()
         .failure()
@@ -71,7 +71,7 @@ fn add_skill_refuses_a_name_another_category_holds() {
             "Skill 'auth' already exists at .ai/src/skills/backend/auth/",
         ));
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "auth"])
         .assert()
         .failure();
@@ -101,7 +101,7 @@ fn add_refuses_an_invalid_category_or_one_on_another_kind() {
         ),
     ] {
         project
-            .agentsync()
+            .exuno()
             .args(args)
             .assert()
             .failure()
@@ -116,7 +116,7 @@ fn add_skill_rejects_names_outside_the_agent_skills_spec() {
     let project = seeded();
     for name in ["MySkill", "my_skill", "my--skill", "my-skill-"] {
         project
-            .agentsync()
+            .exuno()
             .args(["add", "skill", name])
             .assert()
             .failure()
@@ -129,7 +129,7 @@ fn add_skill_rejects_names_outside_the_agent_skills_spec() {
 fn add_command_creates_ai_src_commands_name_md_with_description_frontmatter() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "command", "deploy"])
         .assert()
         .success();
@@ -144,7 +144,7 @@ fn add_command_creates_ai_src_commands_name_md_with_description_frontmatter() {
 fn add_subagent_creates_ai_src_agents_name_md() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "subagent", "reviewer"])
         .assert()
         .success();
@@ -156,7 +156,7 @@ fn add_subagent_creates_ai_src_agents_name_md() {
 #[test]
 fn add_prints_next_step_hint() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing"])
         .assert()
         .success()
@@ -168,7 +168,7 @@ fn add_prints_next_step_hint() {
 #[test]
 fn add_with_no_args_fails_with_usage() {
     seeded()
-        .agentsync()
+        .exuno()
         .arg("add")
         .assert()
         .failure()
@@ -179,7 +179,7 @@ fn add_with_no_args_fails_with_usage() {
 #[test]
 fn add_with_only_kind_fails_with_usage() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule"])
         .assert()
         .failure()
@@ -189,7 +189,7 @@ fn add_with_only_kind_fails_with_usage() {
 #[test]
 fn add_rejects_unknown_kind() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "banana", "myname"])
         .assert()
         .failure()
@@ -200,7 +200,7 @@ fn add_rejects_unknown_kind() {
 fn add_rejects_name_with_slash() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "sub/dir"])
         .assert()
         .failure()
@@ -211,7 +211,7 @@ fn add_rejects_name_with_slash() {
 #[test]
 fn add_rejects_name_with_dotdot() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "..evil"])
         .assert()
         .failure()
@@ -221,7 +221,7 @@ fn add_rejects_name_with_dotdot() {
 #[test]
 fn add_rejects_name_with_relative_traversal() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "../evil"])
         .assert()
         .failure()
@@ -231,7 +231,7 @@ fn add_rejects_name_with_relative_traversal() {
 #[test]
 fn add_rejects_name_starting_with_dot() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule", ".hidden"])
         .assert()
         .failure()
@@ -241,7 +241,7 @@ fn add_rejects_name_starting_with_dot() {
 #[test]
 fn add_rejects_name_with_space() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "my rule"])
         .assert()
         .failure()
@@ -251,7 +251,7 @@ fn add_rejects_name_with_space() {
 #[test]
 fn add_rejects_name_with_extension() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing.md"])
         .assert()
         .failure()
@@ -264,12 +264,12 @@ fn add_rejects_name_with_extension() {
 fn add_refuses_existing_file_without_force() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing"])
         .assert()
         .failure()
@@ -281,14 +281,14 @@ fn add_refuses_existing_file_without_force() {
 fn add_force_overwrites_existing_file() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing"])
         .assert()
         .success();
     project.write(".ai/src/rules/testing.md", "custom content\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["add", "--force", "rule", "testing"])
         .assert()
         .success();
@@ -301,12 +301,12 @@ fn add_force_overwrites_existing_file() {
 fn add_force_works_with_f_short_flag() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "testing"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "-f", "rule", "testing"])
         .assert()
         .success();
@@ -316,12 +316,12 @@ fn add_force_works_with_f_short_flag() {
 fn add_refuses_existing_skill_directory_without_force() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "deploy"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "deploy"])
         .assert()
         .failure()
@@ -334,7 +334,7 @@ fn add_refuses_existing_skill_directory_without_force() {
 fn add_accepts_kebab_case_name() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "my-rule"])
         .assert()
         .success();
@@ -345,7 +345,7 @@ fn add_accepts_kebab_case_name() {
 fn add_accepts_snake_case_name() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "my_rule"])
         .assert()
         .success();
@@ -356,7 +356,7 @@ fn add_accepts_snake_case_name() {
 fn add_accepts_digits_in_name() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "rule", "rule42"])
         .assert()
         .success();
@@ -367,7 +367,7 @@ fn add_accepts_digits_in_name() {
 fn add_substitutes_name_into_skill_frontmatter() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "skill", "my-skill"])
         .assert()
         .success();
@@ -383,7 +383,7 @@ fn add_mcp_creates_ai_src_mcp_json_on_first_run() {
     let project = seeded();
     assert!(!project.exists(".ai/src/mcp.json"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -403,7 +403,7 @@ fn add_mcp_creates_ai_src_mcp_json_on_first_run() {
 fn add_mcp_appends_a_second_server_without_touching_the_first() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -414,7 +414,7 @@ fn add_mcp_appends_a_second_server_without_touching_the_first() {
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -434,7 +434,7 @@ fn add_mcp_appends_a_second_server_without_touching_the_first() {
 fn add_mcp_parses_args_into_a_list() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -456,7 +456,7 @@ fn add_mcp_parses_args_into_a_list() {
 fn add_mcp_parses_env_pairs_into_a_map() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -478,12 +478,12 @@ fn add_mcp_parses_env_pairs_into_a_map() {
 fn add_mcp_refuses_duplicate_server_without_force() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "gh", "--command", "gh-mcp"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "gh", "--command", "other"])
         .assert()
         .failure()
@@ -498,12 +498,12 @@ fn add_mcp_refuses_duplicate_server_without_force() {
 fn add_mcp_force_overwrites_existing_entry() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "gh", "--command", "gh-mcp"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "gh", "--command", "other", "--force"])
         .assert()
         .success();
@@ -516,7 +516,7 @@ fn add_mcp_force_overwrites_existing_entry() {
 #[test]
 fn add_mcp_requires_url_or_command() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "gh"])
         .assert()
         .failure()
@@ -526,7 +526,7 @@ fn add_mcp_requires_url_or_command() {
 #[test]
 fn add_mcp_rejects_both_url_and_command() {
     seeded()
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -544,7 +544,7 @@ fn add_mcp_rejects_both_url_and_command() {
 #[test]
 fn add_mcp_rejects_invalid_server_name() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "bad/name", "--command", "x"])
         .assert()
         .failure()
@@ -555,22 +555,22 @@ fn add_mcp_rejects_invalid_server_name() {
 fn add_mcp_overwrites_a_middle_server_without_disturbing_its_siblings() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "aaa", "--command", "cmd-a"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "bbb", "--command", "cmd-b", "--args", "x y"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "ccc", "--url", "https://c"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "bbb", "--command", "cmd-b2", "--force"])
         .assert()
         .success();
@@ -588,7 +588,7 @@ fn add_mcp_overwrites_a_middle_server_without_disturbing_its_siblings() {
 fn add_mcp_json_escapes_quotes_and_backslashes_in_values() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -610,7 +610,7 @@ fn add_mcp_json_escapes_quotes_and_backslashes_in_values() {
 fn add_mcp_attaches_env_to_an_http_server() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "h", "--url", "https://x", "--env", "TOKEN=t"])
         .assert()
         .success();
@@ -627,12 +627,12 @@ fn add_mcp_attaches_env_to_an_http_server() {
 fn add_mcp_output_is_valid_json_parseable_across_repeated_edits() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "one", "--command", "c1"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args([
             "add",
             "mcp",
@@ -647,7 +647,7 @@ fn add_mcp_output_is_valid_json_parseable_across_repeated_edits() {
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "three", "--url", "https://three"])
         .assert()
         .success();
@@ -661,7 +661,7 @@ fn add_mcp_output_is_valid_json_parseable_across_repeated_edits() {
 fn add_mcp_names_a_flag_that_is_missing_its_value() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["add", "mcp", "gh", "--url"])
         .assert()
         .code(1)

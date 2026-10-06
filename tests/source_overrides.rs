@@ -93,7 +93,7 @@ fn write_external_fixture(
 
 fn run_external_sync(project: &Project, config: &Path) -> assert_cmd::assert::Assert {
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", config)
         .arg("sync")
         .assert()
@@ -165,7 +165,7 @@ fn source_tools_absolute_override_drives_the_same_layout() {
         write_external_fixture(&project, external_tools_root.path().to_str().unwrap(), None);
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .env(
             "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
@@ -191,7 +191,7 @@ fn external_config_and_sources_remain_valid_through_isolated_check() {
     run_external_sync(&project, &config).success();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .arg("check")
         .assert()
@@ -213,7 +213,7 @@ fn isolated_check_reads_the_version_pin_from_an_external_config() {
     }
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .arg("check")
         .assert()
@@ -242,7 +242,7 @@ fn external_source_sync_is_idempotent_and_detects_source_drift() {
         file.write_all(b"# changed externally\n").unwrap();
     }
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .arg("check")
         .assert()
@@ -261,7 +261,7 @@ fn source_tools_changes_trigger_sync_if_stale() {
         "{\"external\":false}\n",
     );
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .args(["sync", "--if-stale"])
         .assert()
@@ -278,7 +278,7 @@ fn show_and_doctor_resolve_an_external_tool_catalog() {
     let config = write_external_fixture(&project, "sources/tools", None);
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .args(["show", "claude"])
         .assert()
@@ -288,7 +288,7 @@ fn show_and_doctor_resolve_an_external_tool_catalog() {
     // The fixture's settings payload does not register the guard, so doctor
     // warns (exit 1) about the unwired guard script.
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .arg("doctor")
         .assert()
@@ -342,7 +342,7 @@ fn profile_variants_use_the_configured_external_source_tools_directory() {
     let config = write_external_fixture(&project, "sources/tools", None);
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
@@ -366,7 +366,7 @@ fn source_containment_default_config_refuses_a_ai_src_symlink_that_escapes_the_p
     write_rules_config(&project, None);
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -390,7 +390,7 @@ fn source_containment_an_explicit_in_project_source_rules_symlink_escaping_the_p
     write_rules_config(&project, Some(".ai/src/rules"));
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -409,7 +409,7 @@ fn source_containment_explicit_absolute_source_rules_outside_the_project_syncs_a
     write_rules_config(&project, Some(outside_rules.to_str().unwrap()));
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
             common::canonical_engine_path(&outside_rules),
@@ -421,7 +421,7 @@ fn source_containment_explicit_absolute_source_rules_outside_the_project_syncs_a
     assert!(!project.exists(".claude/rules/project.md"));
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
             common::canonical_engine_path(&outside_rules),
@@ -442,7 +442,7 @@ fn source_containment_an_outside_source_rules_not_listed_in_agentsync_external_s
     let other_root = tempfile::tempdir().unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -459,7 +459,7 @@ fn source_containment_an_outside_source_rules_not_listed_in_agentsync_external_s
         &common::canonical_engine_path(other_root.path()),
     ]);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_EXTERNAL_SOURCE_ROOTS", roots)
         .arg("sync")
         .assert()
@@ -480,7 +480,7 @@ fn source_containment_a_trusted_parent_directory_admits_every_source_below_it() 
         &common::canonical_engine_path(outside.path()),
     ]);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_EXTERNAL_SOURCE_ROOTS", roots)
         .arg("sync")
         .assert()
@@ -497,7 +497,7 @@ fn doctor_fails_an_outside_source_that_agentsync_external_source_roots_does_not_
     write_rules_config(&project, Some(outside_rules.to_str().unwrap()));
 
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .code(2)
@@ -515,7 +515,7 @@ fn source_containment_explicit_dot_dot_source_rules_resolves_from_the_project_ro
     write_rules_config(&project, Some(&format!("../{sibling_name}/rules")));
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
             common::canonical_engine_path(outside.path()),
@@ -526,7 +526,7 @@ fn source_containment_explicit_dot_dot_source_rules_resolves_from_the_project_ro
     assert!(project.exists(".claude/rules/outside.md"));
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
             common::canonical_engine_path(outside.path()),
@@ -543,7 +543,7 @@ fn source_containment_explicit_source_root_at_slash_is_refused() {
     write_rules_config(&project, Some("/"));
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -563,7 +563,7 @@ fn source_containment_explicit_source_root_at_home_is_refused() {
     write_rules_config(&project, Some(outside.path().to_str().unwrap()));
 
     project
-        .agentsync()
+        .exuno()
         .env("HOME", outside.path())
         .arg("sync")
         .assert()
@@ -581,7 +581,7 @@ fn source_containment_explicit_source_root_at_a_project_ancestor_is_refused() {
     write_rules_config(&project, Some(".."));
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -602,7 +602,7 @@ fn tool_resolver_ignores_an_auto_detected_flat_ai_tools_catalog_like_show_does()
     );
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -610,7 +610,7 @@ fn tool_resolver_ignores_an_auto_detected_flat_ai_tools_catalog_like_show_does()
         .stderr(predicate::str::contains("Flat Claude").not());
 
     project
-        .agentsync()
+        .exuno()
         .args(["show", "claude"])
         .assert()
         .success()
@@ -625,7 +625,7 @@ fn customize_refuses_to_write_into_an_external_source_tools_directory() {
         write_external_fixture(&project, external_tools_root.path().to_str().unwrap(), None);
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .args(["customize", "codex"])
         .assert()
@@ -642,7 +642,7 @@ fn profile_remove_refuses_to_delete_from_an_external_source_tools_directory() {
     let project = Project::empty();
     let config = write_external_fixture(&project, "sources/tools", None);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
@@ -674,7 +674,7 @@ fn profile_remove_refuses_to_delete_from_an_external_source_tools_directory() {
     std::fs::write(&config, config_content).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", &config)
         .args(["profile", "remove", "hub", "--yes"])
         .assert()
@@ -705,7 +705,7 @@ fn source_symlinks_a_rule_file_linking_outside_the_project_is_refused_before_any
     write_rules_config(&project, None);
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -733,7 +733,7 @@ fn source_symlinks_an_agents_md_linking_outside_the_project_is_refused() {
     write_rules_config(&project, None);
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -763,7 +763,7 @@ fn source_symlinks_a_link_to_a_safe_directory_is_followed_and_its_own_links_are_
     write_rules_config(&project, None);
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -784,7 +784,7 @@ fn source_symlinks_links_that_stay_inside_the_project_keep_syncing() {
     );
     write_rules_config(&project, None);
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".claude/rules/shared.md"), "# Shared Rule\n");
 }
 
@@ -800,7 +800,7 @@ fn source_symlinks_a_trusted_outside_target_is_read() {
     write_rules_config(&project, None);
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
             common::canonical_engine_path(outside.path()),

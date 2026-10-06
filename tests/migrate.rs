@@ -35,7 +35,7 @@ fn migrate_outputs_a_grounded_upgrade_prompt() {
     project.write(".ai/agent_sync.yaml", &config);
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_NO_CLIPBOARD", "1")
         .arg("migrate")
         .assert()
@@ -73,7 +73,7 @@ fn migrate_copies_the_full_prompt_with_an_available_clipboard_tool() {
     let new_path = format!("{}:{path}", mock_bin.display());
 
     project
-        .agentsync()
+        .exuno()
         .env("PATH", new_path)
         .env("AGENTSYNC_NO_CLIPBOARD", "0")
         .env("MIGRATE_CLIPBOARD_CAPTURE", &clipboard_capture)
@@ -96,7 +96,7 @@ fn migrate_uses_an_explicit_fallback_when_the_project_version_is_absent() {
     std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_NO_CLIPBOARD", "1")
         .arg("migrate")
         .assert()
@@ -109,7 +109,7 @@ fn migrate_uses_an_explicit_fallback_when_the_project_version_is_absent() {
 #[test]
 fn migrate_legacy_reports_nothing_when_layout_is_already_clean() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -123,7 +123,7 @@ fn migrate_legacy_dry_run_shows_planned_moves_but_does_not_touch_files() {
     project.write(".ai/src/settings/claude.json", "{\"m\":\"S\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -144,7 +144,7 @@ fn migrate_apply_moves_hooks_and_settings_to_per_tool_dirs() {
     project.write(".ai/src/settings/claude.json", "{\"m\":\"S\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success();
@@ -181,7 +181,7 @@ fn migrate_apply_consolidates_identical_mcp_files_into_shared_mcp_json() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
@@ -200,7 +200,7 @@ fn migrate_apply_migrates_mcp_per_tool_when_files_differ() {
     project.write(".ai/src/mcp/cursor.json", "{\"m\":\"B\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success();
@@ -227,7 +227,7 @@ fn migrate_apply_skips_collisions_without_overwriting_target() {
     project.write(".ai/src/tools/cursor/hooks.json", "{\"m\":\"EXISTING\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success()
@@ -247,7 +247,7 @@ fn doctor_hint_points_at_migrate_apply_when_legacy_files_exist() {
     project.write(".ai/src/hooks/cursor.json", "{}\n");
 
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("agentsync migrate --apply"));
@@ -256,7 +256,7 @@ fn doctor_hint_points_at_migrate_apply_when_legacy_files_exist() {
 #[test]
 fn migrate_rejects_unknown_flag() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--bogus"])
         .assert()
         .failure()
@@ -266,7 +266,7 @@ fn migrate_rejects_unknown_flag() {
 #[test]
 fn migrate_help_prints_usage() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--help"])
         .assert()
         .success()
@@ -278,7 +278,7 @@ fn migrate_help_prints_usage() {
 #[test]
 fn migrate_legacy_help_documents_the_legacy_route() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy", "--help"])
         .assert()
         .success()
@@ -298,7 +298,7 @@ fn migrate_legacy_dry_run_lists_legacy_agent_dir_contents() {
     project.write(".agent/AGENTS.md", "legacy AGENTS\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -316,7 +316,7 @@ fn migrate_apply_yes_removes_legacy_agent_dir() {
     project.write(".agent/AGENTS.md", "legacy\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success()
@@ -332,7 +332,7 @@ fn migrate_apply_without_yes_and_without_tty_leaves_agent_dir_in_place() {
 
     // assert_cmd spawns without a controlling TTY, matching bats' non-interactive `run`.
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success()
@@ -349,14 +349,14 @@ fn migrate_flags_agent_dir_even_when_antigravity_is_enabled() {
     project.write(".agent/AGENTS.md", "stale\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Legacy pre-v0.6"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success()
@@ -372,7 +372,7 @@ fn migrate_detects_agent_dir_even_alongside_flat_layout_overrides() {
     project.write(".ai/src/hooks/cursor.json", "{}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -393,7 +393,7 @@ fn migrate_apply_moves_overrides_into_the_source_tools_directory() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
@@ -416,7 +416,7 @@ fn migrate_apply_keeps_a_non_json_mcp_override_next_to_identical_json_ones() {
     project.write(".ai/src/mcp/codex.toml", "[mcp_servers]\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();

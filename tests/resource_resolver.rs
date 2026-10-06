@@ -11,7 +11,7 @@ use predicates::prelude::*;
 
 fn init(project: &Project) {
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-detect"])
         .assert()
         .success();
@@ -26,7 +26,7 @@ fn sync_falls_back_to_base_template_when_override_is_absent() {
     // No .ai/src/hooks/cursor.json override exists.
     assert!(!project.exists(".ai/src/hooks/cursor.json"));
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     // Base template was used — destination file appears.
     assert!(project.exists(".cursor/hooks.json"));
@@ -44,7 +44,7 @@ fn project_override_wins_over_base_template() {
         "{\"marker\":\"USER_OVERRIDE\"}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(project.read(".cursor/hooks.json").contains("USER_OVERRIDE"));
 }
@@ -56,7 +56,7 @@ fn no_override_and_no_base_template_sync_skips_silently() {
     // Claude has no hooks template — neither override nor base for hooks.
     project.enable_tools(&["claude"]);
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     // Claude's settings and .mcp.json come from base — should exist.
     assert!(project.exists(".claude/settings.json"));
@@ -71,7 +71,7 @@ fn base_fallback_works_for_settings_across_template_types_json_toml() {
     init(&project);
     project.enable_tools(&["gemini", "codex"]);
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(project.exists(".gemini/settings.json")); // json base
     assert!(project.exists(".codex/config.toml")); // toml base
@@ -87,11 +87,11 @@ fn removing_an_override_after_sync_restores_base_on_next_sync() {
         ".ai/src/hooks/cursor.json",
         "{\"marker\":\"USER_OVERRIDE\"}\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read(".cursor/hooks.json").contains("USER_OVERRIDE"));
 
     std::fs::remove_file(project.join(".ai/src/hooks/cursor.json")).unwrap();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     // Base content replaced the override.
     assert!(project.exists(".cursor/hooks.json"));
@@ -111,7 +111,7 @@ fn new_per_tool_dir_override_is_used_by_sync() {
         "{\"marker\":\"PER_TOOL_DIR\"}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(project.read(".cursor/hooks.json").contains("PER_TOOL_DIR"));
 }
@@ -128,7 +128,7 @@ fn new_layout_wins_over_legacy_flat_layout_when_both_exist() {
         "{\"marker\":\"CANONICAL\"}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     let hooks = project.read(".cursor/hooks.json");
     assert!(hooks.contains("CANONICAL"));
@@ -144,7 +144,7 @@ fn legacy_flat_override_emits_deprecation_warning() {
     project.write(".ai/src/hooks/cursor.json", "{\"marker\":\"LEGACY\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -167,7 +167,7 @@ fn shared_mcp_json_propagates_to_every_enabled_tool() {
         "{\"mcpServers\":{\"shared\":{\"command\":\"shared-mcp\"}}}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     // Claude's dest is repo-root .mcp.json; Cursor's is .cursor/mcp.json.
     assert!(project.read(".mcp.json").contains("shared-mcp"));
@@ -189,7 +189,7 @@ fn per_tool_mcp_override_wins_over_shared_source() {
         "{\"mcpServers\":{\"cursor_only\":{\"command\":\"cursor-mcp\"}}}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     // Cursor takes the override; claude keeps the shared source.
     let cursor_mcp = project.read(".cursor/mcp.json");
@@ -213,7 +213,7 @@ fn legacy_flat_mcp_override_wins_over_shared_source() {
         "{\"mcpServers\":{\"legacy\":{\"command\":\"legacy-mcp\"}}}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(project.read(".cursor/mcp.json").contains("legacy-mcp"));
     assert!(project.read(".mcp.json").contains("shared-mcp"));
@@ -228,7 +228,7 @@ fn sync_emits_source_label_line_for_mcp() {
     project.write(".ai/src/mcp.json", "{\"mcpServers\":{}}\n");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -246,7 +246,7 @@ fn sync_mcp_label_is_base_when_nothing_overrides() {
     assert!(!project.exists(".ai/src/mcp.json"));
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -261,7 +261,7 @@ fn opencode_hooks_fall_back_to_the_native_base_plugin() {
     init(&project);
     project.enable_tools(&["opencode"]);
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(project.exists(".opencode/plugins/agentsync.ts"));
     assert!(
@@ -285,7 +285,7 @@ fn opencode_hook_override_wins_and_preserves_sibling_plugins() {
         "export const UserPlugin = async () => ({})\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(
         project
@@ -301,7 +301,7 @@ fn customize_creates_the_canonical_opencode_hook_override() {
     init(&project);
 
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "opencode", "hooks", "--yes"])
         .assert()
         .success();
@@ -328,7 +328,7 @@ fn skills_exclude_accepts_a_block_style_list() {
         "targets:\n  skills:\n    exclude:\n      - dropme\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.join(".claude/skills/keepme").is_dir());
     assert!(!project.join(".claude/skills/dropme").is_dir());
 }
@@ -348,7 +348,7 @@ fn skills_exclude_accepts_an_inline_list() {
         "targets:\n  skills:\n    exclude: [dropone, droptwo]\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.join(".claude/skills/keepme").is_dir());
     assert!(!project.join(".claude/skills/dropone").is_dir());
     assert!(!project.join(".claude/skills/droptwo").is_dir());
@@ -368,7 +368,7 @@ fn skills_exclude_still_accepts_a_plain_scalar_string() {
         "targets:\n  skills:\n    exclude: \"dropme\"\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.join(".claude/skills/keepme").is_dir());
     assert!(!project.join(".claude/skills/dropme").is_dir());
 }

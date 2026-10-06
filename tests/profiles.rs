@@ -10,7 +10,7 @@ use predicates::prelude::*;
 fn seeded() -> Project {
     let project = Project::seeded(&["--no-detect", "--yes"]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .arg("--no-scaffold")
         .assert()
@@ -20,7 +20,7 @@ fn seeded() -> Project {
 
 fn add_hub(project: &Project) {
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
@@ -30,7 +30,7 @@ fn add_hub(project: &Project) {
 fn profile_add_scaffolds_a_thin_variant_tool_with_config_home_dests() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
@@ -46,7 +46,7 @@ fn profile_add_scaffolds_a_thin_variant_tool_with_config_home_dests() {
 fn profile_add_refuses_minimax_project_files_before_writing() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "minimax"])
         .assert()
         .code(2)
@@ -66,7 +66,7 @@ fn sync_refuses_a_hand_written_minimax_profile() {
         "\nprofiles:\n  hub:\n    overlay: \".ai/profiles/hub\"\n    active: true\n    tools: [minimax-hub]\n",
     );
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -80,12 +80,12 @@ fn sync_refuses_a_hand_written_minimax_profile() {
 fn profile_add_nested_base_dest_keeps_internal_structure_not_basename() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "amazonq", "--no-scaffold"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "amazonq"])
         .assert()
         .success();
@@ -109,12 +109,12 @@ fn profile_add_second_profile_inserts_under_the_existing_profiles_block() {
     let project = seeded();
     add_hub(&project);
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "klara", "--tools", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "list"])
         .assert()
         .success()
@@ -128,7 +128,7 @@ fn profile_add_second_profile_inserts_under_the_existing_profiles_block() {
 fn sync_profile_produces_a_self_contained_config_home_directory() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude-hub/CLAUDE.md"));
     assert!(project.join(".claude-hub/rules").is_dir());
     assert!(project.exists(".claude-hub/.mcp.json"));
@@ -138,7 +138,7 @@ fn sync_profile_produces_a_self_contained_config_home_directory() {
 fn sync_profile_output_does_not_touch_personal_tool_output() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists("CLAUDE.md"));
     assert!(project.join(".claude/rules").is_dir());
 }
@@ -148,7 +148,7 @@ fn sync_profile_only_rule_lands_in_the_profile_output_not_personal() {
     let project = seeded();
     add_hub(&project);
     project.write(".ai/profiles/hub/src/rules/work-only.md", "work-only\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude-hub/rules/work-only.md"));
     assert!(!project.exists(".claude/rules/work-only.md"));
 }
@@ -159,7 +159,7 @@ fn sync_base_rules_fill_into_profile_output_overlay_fill() {
     add_hub(&project);
     project.write(".ai/src/rules/base-rule.md", "base-rule body\n");
     project.write(".ai/profiles/hub/src/rules/work-only.md", "work-only\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     // Both the profile extra and the inherited base rule are present.
     assert!(project.exists(".claude-hub/rules/work-only.md"));
     assert!(project.exists(".claude-hub/rules/base-rule.md"));
@@ -177,7 +177,7 @@ fn sync_a_profile_with_its_own_source_keeps_the_engine_skill_and_its_extension()
         ".ai/src/skills/meta/agentsync/SKILL.append.md",
         "Local notes.\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     for home in [".claude", ".claude-hub"] {
         let skill = project.read(&format!("{home}/skills/agentsync/SKILL.md"));
@@ -188,7 +188,7 @@ fn sync_a_profile_with_its_own_source_keeps_the_engine_skill_and_its_extension()
         )));
     }
     assert!(project.exists(".claude-hub/skills/work/SKILL.md"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -222,7 +222,7 @@ fn sync_profile_filters_skills_by_category_and_shadows_by_name() {
         ),
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(
         project.read(".claude-hub/skills/auth/SKILL.md"),
         skill("auth", "Profile")
@@ -241,7 +241,7 @@ fn sync_profile_wins_on_path_collision_with_base() {
     add_hub(&project);
     project.write(".ai/src/rules/clash.md", "BASE VERSION\n");
     project.write(".ai/profiles/hub/src/rules/clash.md", "PROFILE VERSION\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(
         project
             .read(".claude-hub/rules/clash.md")
@@ -254,12 +254,12 @@ fn sync_profile_flag_syncs_only_the_named_profile() {
     let project = seeded();
     add_hub(&project);
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "klara", "--tools", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--profile", "hub"])
         .assert()
         .success();
@@ -272,11 +272,11 @@ fn sync_a_plain_run_syncs_every_active_profile() {
     let project = seeded();
     add_hub(&project);
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "klara", "--tools", "claude"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.join(".claude-hub").is_dir());
     assert!(project.join(".claude-klara").is_dir());
 }
@@ -287,16 +287,16 @@ fn sync_variant_inherits_behaviour_flags_from_base_base_fallback() {
     // must inherit that, proving unset fields resolve through base:.
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "codex", "--no-scaffold"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "codex"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".codex-hub/AGENTS.md"));
     assert!(!project.join(".codex-hub/rules").is_dir());
 }
@@ -305,7 +305,7 @@ fn sync_variant_inherits_behaviour_flags_from_base_base_fallback() {
 fn sync_profile_dests_are_gitignored() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read(".gitignore").contains("claude-hub"));
 }
 
@@ -313,10 +313,10 @@ fn sync_profile_dests_are_gitignored() {
 fn sync_editing_a_profile_output_is_detected_as_drift() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.append(".claude-hub/CLAUDE.md", "manual edit\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -327,9 +327,9 @@ fn sync_editing_a_profile_output_is_detected_as_drift() {
 fn sync_idempotent_across_runs_with_a_profile() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
-    project.agentsync().arg("sync").assert().success();
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -339,7 +339,7 @@ fn sync_profile_and_shared_overlays_compose() {
     let project = seeded();
     let parent = project.join("parent");
     std::fs::create_dir_all(&parent).unwrap();
-    let mut init_in_parent = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut init_in_parent = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     init_in_parent.current_dir(&parent);
     common::scrub(&mut init_in_parent);
     init_in_parent
@@ -357,7 +357,7 @@ fn sync_profile_and_shared_overlays_compose() {
         ".ai/profiles/hub/src/rules/profile-only.md",
         "from-profile\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     // Parent (shared) + profile extra both materialise into the profile
     // output.
     assert!(project.exists(".claude-hub/rules/parent-only.md"));
@@ -372,7 +372,7 @@ fn sync_tears_down_profile_overlay_tmpdir_no_leaked_dirs() {
     add_hub(&project);
     project.write(".ai/profiles/hub/src/rules/x.md", "x\n");
     project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", &sandbox)
         .arg("sync")
         .assert()
@@ -384,10 +384,10 @@ fn sync_tears_down_profile_overlay_tmpdir_no_leaked_dirs() {
 fn profile_remove_deletes_config_home_output_variant_file_and_config_entry() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.join(".claude-hub").is_dir());
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "remove", "hub", "--yes"])
         .assert()
         .success();
@@ -401,11 +401,11 @@ fn profile_remove_deletes_config_home_output_variant_file_and_config_entry() {
 fn profile_remove_keeps_files_agentsync_did_not_generate_in_the_config_home() {
     let project = seeded();
     add_hub(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude-hub/CLAUDE.md"));
     project.write(".claude-hub/.credentials.json", "{\"token\":\"t\"}\n");
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "remove", "hub", "--yes"])
         .assert()
         .success()
@@ -422,18 +422,14 @@ fn profile_remove_keeps_files_agentsync_did_not_generate_in_the_config_home() {
 #[test]
 fn sync_profile_flag_missing_value_is_a_usage_error() {
     let project = seeded();
-    project
-        .agentsync()
-        .args(["sync", "--profile"])
-        .assert()
-        .code(1);
+    project.exuno().args(["sync", "--profile"]).assert().code(1);
 }
 
 #[test]
 fn profile_add_scaffolds_a_readme_not_empty_overlay_dirs() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();

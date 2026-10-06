@@ -3,13 +3,13 @@ use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agentsync::cli::{self, Command};
-use agentsync::config::names;
-use agentsync::engine::render::Env;
-use agentsync::output::log::{Sink, Stream};
-use agentsync::output::style::Style;
-use agentsync::project::Project;
-use agentsync::{Error, engine_version, output::prompts, paths};
+use exuno::cli::{self, Command};
+use exuno::config::names;
+use exuno::engine::render::Env;
+use exuno::output::log::{Sink, Stream};
+use exuno::output::style::Style;
+use exuno::project::Project;
+use exuno::{Error, engine_version, output::prompts, paths};
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -234,7 +234,7 @@ fn update_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let mut env = cli::update::Env {
         exe,
         project_dir: repo_root()?,
-        today: agentsync::config::snapshot::utc_date(now),
+        today: exuno::config::snapshot::utc_date(now),
         width: cli::update::terminal_width(),
         fetch: &mut cli::update::curl_fetch,
         extract: &mut cli::update::tar_extract,
@@ -501,7 +501,7 @@ fn sync_env() -> cli::sync::Env {
             config_path: path_setting("CONFIG_PATH"),
             skip_post_sync: setting("SKIP_POST_SYNC"),
             allow_post_sync: setting("ALLOW_POST_SYNC"),
-            backup: (!skip_backup).then(|| agentsync::engine::render::BackupBounds {
+            backup: (!skip_backup).then(|| exuno::engine::render::BackupBounds {
                 limit: setting("BACKUP_LIMIT"),
                 max_age: setting("BACKUP_MAX_AGE_DAYS"),
             }),

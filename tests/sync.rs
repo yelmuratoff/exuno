@@ -45,7 +45,7 @@ fn synced_project() -> Project {
         ".ai/src/commands/explicit-only.md",
         &explicit_only_command(true),
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
 }
 
@@ -199,7 +199,7 @@ fn sync_codex_rule_references_point_at_the_project_rules_directory() {
     project.enable_tools(&["codex"]);
     let home = tempfile::tempdir().unwrap();
     project
-        .agentsync()
+        .exuno()
         .env("HOME", home.path())
         .args(["sync", "--only", "codex"])
         .assert()
@@ -216,7 +216,7 @@ fn sync_codex_rule_references_point_at_the_home_rules_directory_when_the_project
     let project = Project::seeded(&[]);
     project.enable_tools(&["codex"]);
     project
-        .agentsync()
+        .exuno()
         .env("HOME", project.path())
         .args(["sync", "--only", "codex"])
         .assert()
@@ -281,21 +281,21 @@ fn sync_codex_drops_the_openai_yaml_opt_out_once_the_command_allows_model_invoca
         ".ai/src/commands/explicit-only.md",
         &explicit_only_command(false),
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.exists(".agents/skills/command-explicit-only/agents/openai.yaml"));
 
     project.write(
         ".ai/src/commands/explicit-only.md",
         &explicit_only_command(true),
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".agents/skills/command-explicit-only/agents/openai.yaml"));
 }
 
 #[test]
 fn sync_codex_repeat_sync_is_idempotent_no_command_sweep() {
     let project = synced_project();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.join(".agents/skills/command-fix-issue").is_dir());
     assert!(project.join(".agents/skills/command-review").is_dir());
 }
@@ -396,11 +396,11 @@ fn sync_minimax_uses_project_agents_and_shared_mcp() {
         ".ai/src/mcp.json",
         "{\"mcpServers\":{\"docs\":{\"type\":\"http\",\"url\":\"https://example.com/mcp\"}}}\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read("AGENTS.md").contains("## Rules"));
     assert_eq!(project.read(".mcp.json"), project.read(".ai/src/mcp.json"));
-    project.agentsync().arg("sync").assert().success();
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("sync").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -412,7 +412,7 @@ fn sync_rejects_different_mcp_sources_at_one_destination() {
         "{\"mcpServers\":{\"docs\":{\"type\":\"http\",\"url\":\"https://example.com/mcp\"}}}\n",
     );
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -427,19 +427,19 @@ fn sync_claude_minimax_and_opencode_keep_their_mcp_outputs() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude", "minimax", "opencode"]);
     project.write(".ai/src/mcp.json", "{\"mcpServers\":{}}\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".mcp.json"), project.read(".ai/src/mcp.json"));
     assert!(project.exists("opencode.json"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
 fn sync_minimax_and_windsurf_preserve_rule_references() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["minimax", "windsurf"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read("AGENTS.md").contains("## Rules"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -453,7 +453,7 @@ fn sync_rejects_different_agents_sources_at_one_destination() {
         "targets:\n  agents:\n    source: .ai/src/other-agents.md\n",
     );
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -473,7 +473,7 @@ fn sync_only_ignores_a_shared_agents_conflict_in_skipped_tools() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "minimax"])
         .assert()
         .success();
@@ -518,7 +518,7 @@ fn sync_a_folded_command_description_reads_whole_in_the_index_and_the_generated_
         ".ai/src/commands/folded.md",
         "---\ndescription: >\n  Review the diff\n  before a merge.\n---\n\nGo.\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(
         project
             .read(".rules")
@@ -646,7 +646,7 @@ fn sync_re_sync_emits_no_churn_for_shared_dest_command_or_nested_agents() {
     // the rules step) only to re-copy it every run.
     let project = synced_project();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -665,7 +665,7 @@ fn sync_kiro_writes_steering_skills_agents_and_mcp() {
         ".ai/src/agents/reviewer.md",
         "---\nname: reviewer\ndescription: Reviews\nmodel: sonnet\ntools: [Read, Grep, Bash]\n---\nReview.\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert!(project.exists("AGENTS.md"));
     assert!(
@@ -689,8 +689,8 @@ fn sync_kiro_writes_steering_skills_agents_and_mcp() {
             .read(".kiro/settings/mcp.json")
             .contains("\"mcpServers\"")
     );
-    project.agentsync().arg("sync").assert().success();
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("sync").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 // ── Moved destinations ───────────────────────────────────────────────────
@@ -703,14 +703,14 @@ fn sync_removes_what_it_generated_at_a_moved_destination_and_keeps_the_rest() {
         ".ai/src/tools/windsurf.yaml",
         "targets:\n  rules:\n    dest: \".windsurf/rules\"\n  skills:\n    dest: \".windsurf/skills\"\n  hooks:\n    dest: \".windsurf/hooks.json\"\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".windsurf/rules/core.md"));
     assert!(project.exists(".windsurf/hooks.json"));
     project.write(".windsurf/rules/mine.md", "hand-written\n");
 
     std::fs::remove_file(project.join(".ai/src/tools/windsurf.yaml")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -722,8 +722,8 @@ fn sync_removes_what_it_generated_at_a_moved_destination_and_keeps_the_rest() {
     assert!(!project.exists(".windsurf/skills"));
     assert!(!project.exists(".windsurf/hooks.json"));
     assert_eq!(project.read(".windsurf/rules/mine.md"), "hand-written\n");
-    project.agentsync().arg("check").assert().success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("check").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".windsurf/rules/mine.md"), "hand-written\n");
 }
 
@@ -735,14 +735,14 @@ fn rollback_restores_what_a_moved_destination_removed() {
         ".ai/src/tools/windsurf.yaml",
         "targets:\n  rules:\n    dest: \".windsurf/rules\"\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let generated = project.read(".windsurf/rules/core.md");
     std::fs::remove_file(project.join(".ai/src/tools/windsurf.yaml")).unwrap();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.exists(".windsurf/rules/core.md"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .success();
@@ -757,7 +757,7 @@ fn sync_cline_writes_native_skills_and_moves_off_clinerules() {
         ".ai/src/tools/cline.yaml",
         "targets:\n  agents:\n    dest: \".clinerules/00-context.md\"\n  rules:\n    dest: \".clinerules\"\n  commands:\n    dest: \".clinerules/workflows\"\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".clinerules/00-context.md"));
     project.write(".clinerules/team.md", "hand-written\n");
 
@@ -766,7 +766,7 @@ fn sync_cline_writes_native_skills_and_moves_off_clinerules() {
         ".ai/src/skills/flutter/bloc/SKILL.md",
         "---\nname: bloc\ndescription: Bloc\n---\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists("AGENTS.md"));
     assert!(project.exists(".cline/rules/core.md"));
     assert!(project.exists(".cline/skills/bloc/SKILL.md"));
@@ -776,7 +776,7 @@ fn sync_cline_writes_native_skills_and_moves_off_clinerules() {
     assert!(!project.exists(".clinerules/workflows"));
     assert_eq!(project.read(".clinerules/team.md"), "hand-written\n");
     assert!(!project.read("AGENTS.md").contains("## Skills"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -784,7 +784,7 @@ fn sync_cline_leaves_a_single_file_clinerules_alone() {
     let project = Project::seeded(&["--outputs", "local"]);
     project.enable_tools(&["cline"]);
     project.write(".clinerules", "# hand-written Cline rules\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".cline/rules/core.md"));
     assert_eq!(project.read(".clinerules"), "# hand-written Cline rules\n");
 }
@@ -797,10 +797,10 @@ fn a_failed_sync_restores_what_it_removed_at_a_moved_destination() {
         ".ai/src/tools/windsurf.yaml",
         "targets:\n  rules:\n    dest: \".windsurf/rules\"\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.write(".ai/src/tools/windsurf.yaml", "post_sync: \"false\"\n");
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
         .arg("sync")
         .assert()
@@ -821,12 +821,12 @@ fn sync_command_filters_apply_to_native_and_toml_command_dirs() {
             "targets:\n  commands:\n    exclude:\n      - review.md\n",
         );
     }
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.exists(".claude/commands/review.md"));
     assert!(project.exists(".claude/commands/fix-issue.md"));
     assert!(!project.exists(".gemini/commands/review.toml"));
     assert!(project.exists(".gemini/commands/fix-issue.toml"));
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 // ── Skill categories ─────────────────────────────────────────────────────
@@ -857,7 +857,7 @@ fn categorized_project() -> Project {
 #[test]
 fn sync_lands_categorized_skills_flat_by_name_in_every_skills_dir() {
     let project = categorized_project();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     for dest in [".claude/skills", ".agents/skills"] {
         assert_eq!(
             project.read(&format!("{dest}/bloc/SKILL.md")),
@@ -867,14 +867,14 @@ fn sync_lands_categorized_skills_flat_by_name_in_every_skills_dir() {
         assert!(project.exists(&format!("{dest}/wrangler/SKILL.md")));
         assert!(!project.exists(&format!("{dest}/flutter")));
     }
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
 fn sync_groups_the_inlined_skill_index_by_category() {
     let project = categorized_project();
     project.enable_tools(&["amazonq"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let index = project.read(".amazonq/rules/00-context.md");
     assert!(index.contains(
         "\n### cloudflare\n\n- `wrangler` — The wrangler fixture skill\n\n### flutter\n\n- `bloc` — The bloc fixture skill\n\n### flutter/ui\n\n- `slivers` — The slivers fixture skill\n"
@@ -889,7 +889,7 @@ fn sync_filters_a_whole_category_by_its_path() {
         ".ai/src/tools/codex.yaml",
         "targets:\n  skills:\n    exclude:\n      - cloudflare/*\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.exists(".agents/skills/wrangler"));
     assert!(project.exists(".agents/skills/bloc/SKILL.md"));
     assert!(project.exists(".claude/skills/wrangler/SKILL.md"));
@@ -906,14 +906,14 @@ fn sync_ignores_a_shared_name_every_skills_consumer_filters_out() {
             "targets:\n  skills:\n    exclude:\n      - backend/*\n",
         );
     }
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".claude/skills/bloc/SKILL.md"), skill("bloc"));
 }
 
 #[test]
 fn sync_refuses_two_skills_sharing_a_name_and_changes_nothing() {
     let project = categorized_project();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let before = project.sha256(".claude/skills/bloc/SKILL.md");
     project.write(
         ".ai/src/skills/flutter/bloc/SKILL.md",
@@ -921,7 +921,7 @@ fn sync_refuses_two_skills_sharing_a_name_and_changes_nothing() {
     );
     project.write(".ai/src/skills/backend/bloc/SKILL.md", &skill("bloc"));
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -936,6 +936,6 @@ fn sync_reads_the_tools_an_ai_exuno_yaml_enables() {
     let project = Project::seeded(&[]);
     std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
     project.write(".ai/exuno.yaml", "tools:\n  enabled: [zed]\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".rules"));
 }

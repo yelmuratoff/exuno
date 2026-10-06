@@ -13,11 +13,11 @@ use std::time::{Duration, SystemTime};
 fn synced_project() -> Project {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude", "--no-scaffold"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
 }
 
@@ -81,7 +81,7 @@ fn manifest_contains_expected_destinations() {
 fn second_sync_produces_byte_identical_manifest() {
     let project = synced_project();
     let before = project.sha256(".ai/.sync-manifest");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let after = project.sha256(".ai/.sync-manifest");
     assert_eq!(before, after);
 }
@@ -93,7 +93,7 @@ fn manual_edit_triggers_refusal() {
     let project = synced_project();
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .code(1)
@@ -105,7 +105,7 @@ fn manual_edit_triggers_refusal() {
 fn refused_sync_leaves_edited_file_untouched() {
     let project = synced_project();
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
-    let _ = project.agentsync().arg("sync").assert();
+    let _ = project.exuno().arg("sync").assert();
     assert!(
         project
             .read(".claude/rules/core.md")
@@ -118,7 +118,7 @@ fn refused_sync_does_not_rewrite_manifest() {
     let project = synced_project();
     let before = project.sha256(".ai/.sync-manifest");
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
-    let _ = project.agentsync().arg("sync").assert();
+    let _ = project.exuno().arg("sync").assert();
     let after = project.sha256(".ai/.sync-manifest");
     assert_eq!(before, after);
 }
@@ -127,11 +127,7 @@ fn refused_sync_does_not_rewrite_manifest() {
 fn force_overwrites_edited_file() {
     let project = synced_project();
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(
         !project
             .read(".claude/rules/core.md")
@@ -144,11 +140,7 @@ fn force_updates_manifest_to_new_dest_hashes() {
     let project = synced_project();
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
     let before = project.sha256(".ai/.sync-manifest");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     let after = project.sha256(".ai/.sync-manifest");
     // The manual edit never touched the manifest, and `--force` restores the
     // dest content to what source produced originally, so the manifest hash
@@ -162,7 +154,7 @@ fn force_updates_manifest_to_new_dest_hashes() {
 fn manually_deleted_dest_is_rewritten_without_error() {
     let project = synced_project();
     std::fs::remove_file(project.join(".claude/rules/core.md")).unwrap();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude/rules/core.md"));
 }
 
@@ -172,7 +164,7 @@ fn dry_run_does_not_check_drift_and_does_not_write_manifest() {
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
     let before = project.sha256(".ai/.sync-manifest");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run"])
         .assert()
         .success();
@@ -197,12 +189,12 @@ fn disabling_a_tool_drops_its_entries_from_the_manifest() {
             .any(|l| l.starts_with(".claude/"))
     );
     project
-        .agentsync()
+        .exuno()
         .arg("disable")
         .arg("claude")
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     // With claude the only enabled tool, an empty manifest is removed rather
     // than written empty (see `manifest::write`) — either state means no
     // `.claude/` entries remain.
@@ -220,7 +212,7 @@ fn disabling_a_tool_drops_its_entries_from_the_manifest() {
 fn doctor_reports_clean_manifest_when_nothing_changed() {
     let project = synced_project();
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("match the manifest"));
@@ -231,7 +223,7 @@ fn doctor_reports_edited_file_as_drift() {
     let project = synced_project();
     project.append(".claude/rules/core.md", "MANUAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains(".claude/rules/core.md"))
@@ -243,7 +235,7 @@ fn doctor_reports_deleted_file_as_missing() {
     let project = synced_project();
     std::fs::remove_file(project.join(".claude/rules/core.md")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains(".claude/rules/core.md"))
@@ -257,7 +249,7 @@ fn sync_preserves_a_user_added_rule_in_a_generated_dir() {
     let project = synced_project();
     project.write(".claude/rules/my-own.md", "my own rule\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -270,7 +262,7 @@ fn sync_preserves_a_user_added_rule_in_a_generated_dir() {
 fn preserved_user_added_file_is_not_recorded_in_the_manifest() {
     let project = synced_project();
     project.write(".claude/rules/my-own.md", "my own rule\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.read(".ai/.sync-manifest").contains("my-own.md"));
 }
 
@@ -278,11 +270,7 @@ fn preserved_user_added_file_is_not_recorded_in_the_manifest() {
 fn sync_force_prunes_a_user_added_rule_in_a_generated_dir() {
     let project = synced_project();
     project.write(".claude/rules/my-own.md", "my own rule\n");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     assert!(!project.exists(".claude/rules/my-own.md"));
 }
 
@@ -291,7 +279,7 @@ fn dry_run_previews_keeping_a_user_added_file_without_deleting_it() {
     let project = synced_project();
     project.write(".claude/rules/my-own.md", "my own rule\n");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run"])
         .assert()
         .success()
@@ -303,10 +291,10 @@ fn dry_run_previews_keeping_a_user_added_file_without_deleting_it() {
 fn obsolete_sync_generated_rule_is_still_pruned_when_removed_from_source() {
     let project = synced_project();
     project.write(".ai/src/rules/temp-rule.md", "# Temp\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude/rules/temp-rule.md"));
     std::fs::remove_file(project.join(".ai/src/rules/temp-rule.md")).unwrap();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!project.exists(".claude/rules/temp-rule.md"));
 }
 
@@ -317,11 +305,11 @@ fn obsolete_sync_generated_skill_directory_is_pruned_when_removed_from_source() 
         ".ai/src/skills/temp-skill/SKILL.md",
         "---\nname: temp-skill\n---\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude/skills/temp-skill/SKILL.md"));
     std::fs::remove_dir_all(project.join(".ai/src/skills/temp-skill")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -334,7 +322,7 @@ fn sync_preserves_a_user_added_skill_directory_in_a_generated_dir() {
     let project = synced_project();
     project.write(".claude/skills/my-own/SKILL.md", "mine\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -352,7 +340,7 @@ fn if_stale_is_a_no_op_when_source_is_older_than_the_manifest() {
     // Manifest in the future — nothing under .ai/src/ is newer — fresh.
     set_mtime(&project.join(".ai/.sync-manifest"), future_mtime());
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--if-stale"])
         .assert()
         .success()
@@ -365,7 +353,7 @@ fn if_stale_leaves_the_manifest_untouched_when_fresh() {
     set_mtime(&project.join(".ai/.sync-manifest"), future_mtime());
     let before = project.sha256(".ai/.sync-manifest");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--if-stale"])
         .assert()
         .success();
@@ -379,7 +367,7 @@ fn if_stale_runs_a_full_sync_when_source_is_newer_than_the_manifest() {
     // Manifest in the past — every source file is newer — stale.
     set_mtime(&project.join(".ai/.sync-manifest"), past_mtime());
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--if-stale"])
         .assert()
         .success()
@@ -391,7 +379,7 @@ fn if_stale_treats_a_missing_manifest_as_stale_and_re_syncs() {
     let project = synced_project();
     std::fs::remove_file(project.join(".ai/.sync-manifest")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--if-stale"])
         .assert()
         .success()
@@ -406,7 +394,7 @@ fn first_sync_baseline_message_printed() {
     let project = synced_project();
     std::fs::remove_file(project.join(".ai/.sync-manifest")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()

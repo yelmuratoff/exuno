@@ -25,10 +25,7 @@ fn codex_project(ownership: Option<&str>) -> Project {
 }
 
 fn sync(project: &Project) -> assert_cmd::assert::Assert {
-    project
-        .agentsync()
-        .args(["sync", "--only", "codex"])
-        .assert()
+    project.exuno().args(["sync", "--only", "codex"]).assert()
 }
 
 #[test]
@@ -42,7 +39,7 @@ fn app_written_keys_survive_sync_and_check() {
     project.append(CONFIG, APP_STATE);
     let with_app_state = project.read(CONFIG);
 
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
     sync(&project).success();
     assert_eq!(project.read(CONFIG), with_app_state);
     let manifest = project.read(".ai/.sync-manifest");
@@ -66,14 +63,14 @@ fn a_changed_owned_key_stops_sync_and_names_it() {
         .stderr(predicate::str::contains(".codex/config.toml (model)"));
     assert_eq!(project.read(CONFIG), edited);
     project
-        .agentsync()
+        .exuno()
         .arg("check")
         .assert()
         .failure()
         .stdout(predicate::str::contains(".codex/config.toml"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "codex", "--force"])
         .assert()
         .success();
@@ -110,14 +107,14 @@ fn a_first_keyed_sync_stops_on_a_value_it_never_owned() {
         .stderr(predicate::str::contains("      model\n"));
     assert_eq!(project.read(CONFIG), "model = \"ui-pick\"\n");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "codex", "--dry-run"])
         .assert()
         .success()
         .stderr(predicate::str::contains("A real sync would stop"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "codex", "--force"])
         .assert()
         .success();
@@ -143,7 +140,7 @@ fn switching_to_keys_keeps_what_the_app_wrote_after_a_whole_file_sync() {
 fn auto_owns_keys_when_the_project_root_is_home() {
     let project = codex_project(None);
     let home = project.path().to_str().unwrap().to_string();
-    let run = |args: &[&str]| project.agentsync().env("HOME", &home).args(args).assert();
+    let run = |args: &[&str]| project.exuno().env("HOME", &home).args(args).assert();
     run(&["sync", "--only", "codex"]).success();
     project.append(CONFIG, APP_STATE);
     run(&["sync", "--only", "codex"]).success();
@@ -190,7 +187,7 @@ fn switching_from_keys_to_file_needs_force() {
         "targets:\n  settings:\n    ownership: file\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "codex", "--dry-run"])
         .assert()
         .success()
@@ -203,7 +200,7 @@ fn switching_from_keys_to_file_needs_force() {
         .stderr(predicate::str::contains("agentsync sync --force"));
     assert_eq!(project.read(CONFIG), with_app_state);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "codex", "--force"])
         .assert()
         .success();
@@ -225,12 +222,12 @@ fn disabling_codex_leaves_a_key_owned_config_in_place() {
     project.append(CONFIG, APP_STATE);
     let before = project.read(CONFIG);
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "codex"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -251,7 +248,7 @@ fn rollback_restores_the_whole_config() {
     assert_ne!(project.read(CONFIG), before);
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .success();
@@ -264,7 +261,7 @@ fn live_toml_that_does_not_parse_stops_sync_before_writing() {
     sync(&project).success();
     project.write(CONFIG, "model = \n");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "codex", "--force"])
         .assert()
         .failure()
@@ -287,7 +284,7 @@ impl Home {
 
     fn run(&self, args: &[&str]) -> assert_cmd::assert::Assert {
         let home = self.0.path().to_str().unwrap().to_string();
-        self.0.agentsync().env("HOME", home).args(args).assert()
+        self.0.exuno().env("HOME", home).args(args).assert()
     }
 }
 
@@ -456,7 +453,7 @@ fn a_profile_variant_in_a_repository_owns_its_config_home_by_key() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
@@ -464,18 +461,18 @@ fn a_profile_variant_in_a_repository_owns_its_config_home_by_key() {
         ".ai/src/tools/claude/settings.json",
         "{\"theme\": \"dark\"}\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let hub = ".claude-hub/settings.json";
     let with_app_key =
         project
             .read(hub)
             .replacen('{', "{\n  \"feedbackSurveyState\": {\"last\": 1},", 1);
     project.write(hub, &with_app_key);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(hub), with_app_key);
     project.write(".claude/settings.json", "{\"theme\": \"light\"}\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()

@@ -178,12 +178,8 @@ fn guard_doctor_warns_when_a_settings_override_never_registers_the_hook() {
         ".ai/src/tools/claude/settings.json",
         "{\n  \"permissions\": {\n    \"allow\": [\"Read\"]\n  }\n}\n",
     );
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
-    let output = project.agentsync().arg("doctor").output().unwrap();
+    project.exuno().args(["sync", "--force"]).assert().success();
+    let output = project.exuno().arg("doctor").output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("inert"));
     assert!(stdout.contains("agentsync-guard.sh"));
@@ -192,7 +188,7 @@ fn guard_doctor_warns_when_a_settings_override_never_registers_the_hook() {
 #[test]
 fn guard_doctor_stays_quiet_when_the_hook_is_registered() {
     let project = synced_project();
-    let output = project.agentsync().arg("doctor").output().unwrap();
+    let output = project.exuno().arg("doctor").output().unwrap();
     assert!(!String::from_utf8_lossy(&output.stdout).contains("inert"));
 }
 
@@ -200,15 +196,11 @@ fn guard_doctor_stays_quiet_when_the_hook_is_registered() {
 fn guard_a_config_home_profile_shares_the_one_script_no_dead_copy() {
     let project = synced_project();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     // The profile's settings reference ${CLAUDE_PROJECT_DIR}/.claude/hooks/…,
     // so the script has to stay there rather than be copied per config home.
     assert!(project.join(GUARD).is_file());
@@ -228,15 +220,11 @@ fn guard_a_config_home_profile_shares_the_one_script_no_dead_copy() {
 fn guard_the_shared_script_is_not_swept_into_the_profiles_ignore_list() {
     let project = synced_project();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     // Committed outputs: profile homes are personal and ignored, the guard is not.
     assert!(project.read(".gitignore").contains("claude-hub"));
     assert!(!is_git_ignored(&project, GUARD));
@@ -246,13 +234,13 @@ fn guard_the_shared_script_is_not_swept_into_the_profiles_ignore_list() {
 fn guard_a_profile_only_sync_still_writes_the_script() {
     let project = synced_project();
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
     std::fs::remove_dir_all(project.join(".claude/hooks")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--profile", "hub", "--force"])
         .assert()
         .success();
@@ -263,11 +251,7 @@ fn guard_a_profile_only_sync_still_writes_the_script() {
 fn guard_a_project_override_replaces_the_shipped_script() {
     let project = synced_project();
     project.write(".ai/src/tools/claude/guard.sh", "#!/bin/sh\nexit 0\n");
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .success();
+    project.exuno().args(["sync", "--force"]).assert().success();
     let path = path_str(&project.join("CLAUDE.md"));
     let output = guard_for(&project, &path);
     assert_eq!(output.status.code(), Some(0));

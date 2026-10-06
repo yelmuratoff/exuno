@@ -10,7 +10,7 @@ use predicates::prelude::*;
 fn an_invalid_explicit_config_path_fails_without_falling_back_or_mutating_outputs() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -18,7 +18,7 @@ fn an_invalid_explicit_config_path_fails_without_falling_back_or_mutating_output
     let missing_config = project.join("missing-agent-sync.yaml");
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_CONFIG_PATH",
             common::engine_path(&missing_config),
@@ -37,7 +37,7 @@ fn an_invalid_explicit_config_path_fails_without_falling_back_or_mutating_output
 fn a_missing_config_refuses_write_sync_before_cleanup_defaults_can_run() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -45,7 +45,7 @@ fn a_missing_config_refuses_write_sync_before_cleanup_defaults_can_run() {
     project.write(".claude/skills/config-safety-sentinel.md", "");
 
     project
-        .agentsync()
+        .exuno()
         .env_remove("AGENTSYNC_CONFIG_PATH")
         .arg("sync")
         .assert()
@@ -64,7 +64,7 @@ fn a_project_without_a_config_still_syncs_tools_enabled_in_their_own_yaml() {
     project.write(".ai/src/tools/claude.yaml", "enabled: true\n");
 
     project
-        .agentsync()
+        .exuno()
         .env_remove("AGENTSYNC_CONFIG_PATH")
         .arg("sync")
         .assert()
@@ -76,7 +76,7 @@ fn a_project_without_a_config_still_syncs_tools_enabled_in_their_own_yaml() {
 fn check_hands_a_relative_explicit_config_outside_ai_to_its_isolated_sync() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -87,14 +87,14 @@ fn check_hands_a_relative_explicit_config_outside_ai_to_its_isolated_sync() {
     )
     .unwrap();
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "config/agentsync.yaml")
         .arg("sync")
         .assert()
         .success();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "config/agentsync.yaml")
         .arg("check")
         .assert()
@@ -106,7 +106,7 @@ fn check_hands_a_relative_explicit_config_outside_ai_to_its_isolated_sync() {
 fn a_missing_config_remains_usable_for_a_dry_run() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -114,7 +114,7 @@ fn a_missing_config_remains_usable_for_a_dry_run() {
     project.write(".claude/skills/config-safety-sentinel.md", "");
 
     project
-        .agentsync()
+        .exuno()
         .env_remove("AGENTSYNC_CONFIG_PATH")
         .args(["sync", "--dry-run"])
         .assert()
@@ -126,14 +126,14 @@ fn a_missing_config_remains_usable_for_a_dry_run() {
 fn check_rejects_an_invalid_explicit_config_path_instead_of_using_the_local_config() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
     let missing_config = project.join("missing-agent-sync.yaml");
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_CONFIG_PATH",
             common::engine_path(&missing_config),
@@ -150,7 +150,7 @@ fn check_rejects_an_invalid_explicit_config_path_instead_of_using_the_local_conf
 fn read_only_commands_reject_an_invalid_explicit_config_path_instead_of_using_the_local_config() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -161,7 +161,7 @@ fn read_only_commands_reject_an_invalid_explicit_config_path_instead_of_using_th
     );
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_CONFIG_PATH",
             common::engine_path(&missing_config),
@@ -172,7 +172,7 @@ fn read_only_commands_reject_an_invalid_explicit_config_path_instead_of_using_th
         .stderr(predicate::str::contains(expected.clone()));
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_CONFIG_PATH",
             common::engine_path(&missing_config),
@@ -183,7 +183,7 @@ fn read_only_commands_reject_an_invalid_explicit_config_path_instead_of_using_th
         .stderr(predicate::str::contains(expected.clone()));
 
     project
-        .agentsync()
+        .exuno()
         .env(
             "AGENTSYNC_CONFIG_PATH",
             common::engine_path(&missing_config),

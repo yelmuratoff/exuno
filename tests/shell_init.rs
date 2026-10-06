@@ -10,7 +10,7 @@ use common::Project;
 use predicates::prelude::*;
 
 fn shell_init(project: &Project, args: &[&str]) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("shell-init").args(args).assert()
+    project.exuno().arg("shell-init").args(args).assert()
 }
 
 #[cfg(unix)]
@@ -99,7 +99,7 @@ fn shell_init_does_not_sync_a_parent_project_from_a_nested_directory() {
 
     let script = format!(
         "eval \"$('{}' shell-init bash)\"\ncd \"$TEST_PROJECT_ROOT/nested\"\n_agentsync_autosync\n",
-        env!("CARGO_BIN_EXE_agentsync")
+        env!("CARGO_BIN_EXE_exuno")
     );
     let output = spawn(
         &project,
@@ -131,7 +131,7 @@ fn shell_init_syncs_when_the_current_directory_is_a_project_root() {
 
     let script = format!(
         "eval \"$('{}' shell-init bash)\"\ncd \"$TEST_PROJECT_ROOT\"\n_agentsync_autosync\n",
-        env!("CARGO_BIN_EXE_agentsync")
+        env!("CARGO_BIN_EXE_exuno")
     );
     let output = spawn(
         &project,
@@ -206,7 +206,7 @@ fn shell_init_zsh_hook_does_not_recurse_on_cd() {
 
     let script = format!(
         "eval \"$('{}' shell-init zsh)\"\ncd '{}'\nprint OK\n",
-        env!("CARGO_BIN_EXE_agentsync"),
+        env!("CARGO_BIN_EXE_exuno"),
         project.join("proj").display()
     );
     let output = spawn(
@@ -224,7 +224,7 @@ fn shell_init_zsh_hook_does_not_recurse_on_cd() {
 #[test]
 fn shell_init_auto_detects_zsh_from_shell() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .arg("shell-init")
         .env("SHELL", "/usr/bin/zsh")
         .assert()
@@ -235,7 +235,7 @@ fn shell_init_auto_detects_zsh_from_shell() {
 #[test]
 fn shell_init_auto_detects_bash_from_shell() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .arg("shell-init")
         .env("SHELL", "/bin/bash")
         .assert()
@@ -251,7 +251,7 @@ fn shell_init_errors_when_the_shell_is_unsupported() {
 #[test]
 fn shell_init_errors_when_the_shell_cannot_be_detected() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .arg("shell-init")
         .env("SHELL", "")
         .assert()

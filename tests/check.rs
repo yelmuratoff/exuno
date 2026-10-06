@@ -9,16 +9,16 @@ use predicates::prelude::*;
 fn synced_project() -> Project {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
 }
 
 fn check(project: &Project) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("check").assert()
+    project.exuno().arg("check").assert()
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn check_warns_about_the_file_a_disabled_target_left_behind() {
         ".ai/src/tools/claude.yaml",
         "targets:\n  agents:\n    enabled: false\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project)
         .success()
         .stdout(predicate::str::contains(
@@ -53,7 +53,7 @@ fn check_detects_minimax_mcp_drift() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["minimax"]);
     project.write(".ai/src/mcp.json", "{\"mcpServers\":{}}\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project).success();
     project.write(
         ".ai/src/mcp.json",
@@ -68,7 +68,7 @@ fn check_detects_minimax_mcp_drift() {
 fn check_detects_kiro_steering_drift() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["kiro"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project).success();
     project.append(".kiro/steering/core.md", "Edited by hand.\n");
     check(&project)
@@ -112,7 +112,7 @@ fn check_follows_relative_shared_sources_and_detects_parent_changes_without_writ
         ".ai/agent_sync.yaml",
         "\nshared:\n  path: \"shared parent\"\n  inherit: rules\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let config_before = project.sha256(".ai/agent_sync.yaml");
     let manifest_before = project.sha256(".ai/.sync-manifest");
     let manifest = project.read(".ai/.sync-manifest");
@@ -192,7 +192,7 @@ fn check_leaves_no_temp_artifacts_behind() {
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
     project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", &sandbox)
         .arg("check")
         .assert()
@@ -212,7 +212,7 @@ fn check_agrees_with_sync_when_shared_inherit_names_a_category_sync_skips() {
         ".ai/agent_sync.yaml",
         "\nshared:\n  path: \"parent\"\n  inherit: rules, tools\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project)
         .success()
         .stdout(predicate::str::contains("synced"));
@@ -221,7 +221,7 @@ fn check_agrees_with_sync_when_shared_inherit_names_a_category_sync_skips() {
 #[test]
 fn check_help_is_answered_on_stdout_without_rendering() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["check", "--help"])
         .assert()
         .success()

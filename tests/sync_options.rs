@@ -58,7 +58,7 @@ fn sync_only_filters_to_single_tool() {
     let project = seeded();
     project.enable_tools(&["claude", "cursor"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -71,7 +71,7 @@ fn sync_skip_excludes_a_tool() {
     let project = seeded();
     project.enable_tools(&["claude", "cursor"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--skip", "claude"])
         .assert()
         .success();
@@ -84,7 +84,7 @@ fn sync_only_and_skip_filter_kiro() {
     let project = seeded();
     project.enable_tools(&["claude", "kiro"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "kiro"])
         .assert()
         .success();
@@ -94,7 +94,7 @@ fn sync_only_and_skip_filter_kiro() {
     let skipped = seeded();
     skipped.enable_tools(&["claude", "kiro"]);
     skipped
-        .agentsync()
+        .exuno()
         .args(["sync", "--skip", "kiro"])
         .assert()
         .success();
@@ -107,7 +107,7 @@ fn sync_only_and_skip_filter_minimax() {
     let project = seeded();
     project.enable_tools(&["claude", "minimax"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "minimax"])
         .assert()
         .success();
@@ -117,7 +117,7 @@ fn sync_only_and_skip_filter_minimax() {
     let skipped = seeded();
     skipped.enable_tools(&["claude", "minimax"]);
     skipped
-        .agentsync()
+        .exuno()
         .args(["sync", "--skip", "minimax"])
         .assert()
         .success();
@@ -130,7 +130,7 @@ fn sync_only_multiple_tools() {
     let project = seeded();
     project.enable_tools(&["claude", "cursor", "copilot"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude,cursor"])
         .assert()
         .success();
@@ -145,7 +145,7 @@ fn sync_dry_run_does_not_create_files() {
     project.enable_tools(&["claude"]);
     let backups_before = complete_backup_count(&project);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run"])
         .assert()
         .success()
@@ -159,7 +159,7 @@ fn sync_skips_disabled_tools() {
     // Claude is disabled by default after init — no need to flip.
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -171,18 +171,18 @@ fn sync_cleans_up_when_tool_is_disabled() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
     assert!(project.exists("CLAUDE.md"));
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -198,7 +198,7 @@ fn sync_copies_settings_json_for_claude() {
         "{\"permissions\":{\"allow\":[\"Read\"]}}",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -211,13 +211,13 @@ fn sync_is_idempotent() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
     let snapshot1 = snapshot_dir(&project.join(".claude"));
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -234,7 +234,7 @@ fn sync_backs_up_the_pre_sync_target_state() {
     project.write("CLAUDE.md", "before-sync\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -263,7 +263,7 @@ fn sync_restores_every_target_when_a_post_sync_hook_fails() {
     project.write(".ai/src/tools/claude.yaml", "post_sync: \"false\"\n");
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
         .args(["sync", "--only", "claude"])
         .assert()
@@ -282,7 +282,7 @@ fn sync_preflight_failures_do_not_create_a_backup() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -290,7 +290,7 @@ fn sync_preflight_failures_do_not_create_a_backup() {
     let backups_before = complete_backup_count(&project);
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .failure()
@@ -303,14 +303,14 @@ fn sync_if_stale_no_op_does_not_create_a_backup() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
     let backups_before = complete_backup_count(&project);
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude", "--if-stale"])
         .assert()
         .success()
@@ -331,7 +331,7 @@ fn sync_in_repo_post_sync_allow_does_not_enable_the_hook() {
     // An in-repo allow must be ignored — cloning a repo can't run its hook.
     project.append(".ai/agent_sync.yaml", "\npost_sync:\n  allow: true\n");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -350,7 +350,7 @@ fn sync_out_of_repo_env_allow_runs_the_post_sync_hook() {
         "post_sync: \"touch post_sync_ran\"\n",
     );
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
         .arg("sync")
         .assert()
@@ -369,7 +369,7 @@ fn sync_bad_per_tool_source_is_skipped_run_completes_and_writes_manifest() {
         "targets:\n  rules:\n    source: \".ai/src/DOES_NOT_EXIST\"\n",
     );
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .success()
@@ -379,7 +379,7 @@ fn sync_bad_per_tool_source_is_skipped_run_completes_and_writes_manifest() {
     assert!(project.exists("AGENTS.md"));
     assert!(project.exists(".ai/.sync-manifest"));
     // A second sync sees no false drift.
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 // ── Per-target enabled: false opts a tool out of one whole category ──────
@@ -393,7 +393,7 @@ fn sync_targets_category_enabled_false_skips_that_category_keeps_the_rest() {
         "targets:\n  rules:\n    enabled: false\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -408,7 +408,7 @@ fn sync_a_category_with_no_enabled_flag_stays_on_default() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -422,7 +422,7 @@ fn sync_quiet_leaves_only_the_closing_line_on_stderr_and_nothing_on_stdout() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--quiet"])
         .assert()
         .success()
@@ -435,7 +435,7 @@ fn sync_json_prints_one_summary_object_on_stdout() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     let output = project
-        .agentsync()
+        .exuno()
         .args(["sync", "--json"])
         .assert()
         .success()
@@ -458,7 +458,7 @@ fn sync_json_on_a_dry_run_reports_no_writes_and_no_backup() {
     let project = seeded();
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run", "--json"])
         .assert()
         .success()

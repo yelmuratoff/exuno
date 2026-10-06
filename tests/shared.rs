@@ -8,8 +8,8 @@ use common::Project;
 use predicates::prelude::*;
 use std::path::{Path, PathBuf};
 
-fn agentsync_in(dir: &Path) -> assert_cmd::Command {
-    let mut cmd = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+fn exuno_in(dir: &Path) -> assert_cmd::Command {
+    let mut cmd = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     cmd.current_dir(dir);
     common::scrub(&mut cmd);
     cmd
@@ -49,7 +49,7 @@ fn make_pair(project: &Project) -> (PathBuf, PathBuf) {
     let parent_dir = project.join("parent");
     let child_dir = parent_dir.join("child");
     std::fs::create_dir_all(&parent_dir).unwrap();
-    agentsync_in(&parent_dir)
+    exuno_in(&parent_dir)
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
@@ -59,11 +59,11 @@ fn make_pair(project: &Project) -> (PathBuf, PathBuf) {
     );
 
     std::fs::create_dir_all(&child_dir).unwrap();
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir)
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir)
         .args(["enable", "claude", "--no-scaffold"])
         .assert()
         .success();
@@ -100,18 +100,15 @@ fn make_sparse_pair(project: &Project) -> (PathBuf, PathBuf) {
     ];
 
     std::fs::create_dir_all(&parent_dir).unwrap();
-    agentsync_in(&parent_dir)
-        .args(init_flags)
-        .assert()
-        .success();
+    exuno_in(&parent_dir).args(init_flags).assert().success();
     write(
         &parent_dir.join(".ai/src/rules/parent-only.md"),
         "parent-rule\n",
     );
 
     std::fs::create_dir_all(&child_dir).unwrap();
-    agentsync_in(&child_dir).args(init_flags).assert().success();
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir).args(init_flags).assert().success();
+    exuno_in(&child_dir)
         .args(["enable", "claude", "--no-scaffold"])
         .assert()
         .success();
@@ -142,7 +139,7 @@ fn sync_succeeds_when_overlay_omits_commands_agents_and_agents_md() {
     let project = Project::empty();
     let (_parent, child) = make_sparse_pair(&project);
 
-    agentsync_in(&child)
+    exuno_in(&child)
         .arg("sync")
         .assert()
         .success()
@@ -156,7 +153,7 @@ fn parent_rules_materialise_into_child_output_dirs() {
     let project = Project::empty();
     let (_parent, child) = make_pair(&project);
 
-    agentsync_in(&child)
+    exuno_in(&child)
         .arg("sync")
         .assert()
         .success()
@@ -173,7 +170,7 @@ fn child_wins_on_path_collision() {
     write(&parent.join(".ai/src/rules/clash.md"), "PARENT VERSION\n");
     write(&child.join(".ai/src/rules/clash.md"), "CHILD VERSION\n");
 
-    agentsync_in(&child).arg("sync").assert().success();
+    exuno_in(&child).arg("sync").assert().success();
     assert_eq!(
         std::fs::read_to_string(child.join(".claude/rules/clash.md")).unwrap(),
         "CHILD VERSION\n"
@@ -195,13 +192,13 @@ fn a_categorized_child_skill_shadows_the_parent_skill_of_its_name() {
         "---\nname: bloc\ndescription: Child\n---\n",
     );
 
-    agentsync_in(&child).arg("sync").assert().success();
+    exuno_in(&child).arg("sync").assert().success();
     assert_eq!(
         std::fs::read_to_string(child.join(".claude/skills/bloc/SKILL.md")).unwrap(),
         "---\nname: bloc\ndescription: Child\n---\n"
     );
     assert!(!child.join(".claude/skills/bloc/references").exists());
-    agentsync_in(&child).arg("check").assert().success();
+    exuno_in(&child).arg("check").assert().success();
 }
 
 #[test]
@@ -223,7 +220,7 @@ fn a_categorized_child_extension_adds_to_the_parent_skill_of_its_name() {
         "c\n",
     );
 
-    agentsync_in(&child).arg("sync").assert().success();
+    exuno_in(&child).arg("sync").assert().success();
     let out = child.join(".claude/skills/bloc");
     assert_eq!(
         std::fs::read_to_string(out.join("SKILL.md")).unwrap(),
@@ -232,7 +229,7 @@ fn a_categorized_child_extension_adds_to_the_parent_skill_of_its_name() {
     assert!(out.join("references/p.md").is_file());
     assert!(out.join("references/c.md").is_file());
     assert!(!out.join("SKILL.append.md").exists());
-    agentsync_in(&child).arg("check").assert().success();
+    exuno_in(&child).arg("check").assert().success();
 }
 
 #[test]
@@ -243,7 +240,7 @@ fn inherit_list_filters_which_categories_materialise() {
     // Parent has a custom skill — but child only inherits rules, not skills.
     write(&parent.join(".ai/src/skills/parent-skill/SKILL.md"), "ps\n");
 
-    agentsync_in(&child).arg("sync").assert().success();
+    exuno_in(&child).arg("sync").assert().success();
     // Inherited via rules — present.
     assert!(child.join(".claude/rules/parent-only.md").is_file());
     // NOT inherited (skills not in list) — absent.
@@ -259,7 +256,7 @@ fn child_skills_survive_alongside_the_engine_base_skills() {
         "---\nname: child-skill\ndescription: child fixture skill\n---\n",
     );
 
-    agentsync_in(&child).arg("sync").assert().success();
+    exuno_in(&child).arg("sync").assert().success();
     assert!(child.join(".claude/skills/child-skill/SKILL.md").is_file());
     assert!(child.join(".claude/skills/agentsync/SKILL.md").is_file());
 }
@@ -273,7 +270,7 @@ fn missing_parent_path_warns_and_skips_overlay() {
         "\nshared:\n  path: \"../does-not-exist\"\n  inherit: rules\n",
     );
 
-    project.agentsync().arg("sync").assert().success().stderr(
+    project.exuno().arg("sync").assert().success().stderr(
         predicate::str::contains("shared.path does not exist")
             .or(predicate::str::contains("overlay skipped")),
     );
@@ -288,7 +285,7 @@ fn cleans_up_tmpdir_after_sync_no_leaked_dirs() {
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
 
-    agentsync_in(&child)
+    exuno_in(&child)
         .env("TMPDIR", &sandbox)
         .arg("sync")
         .assert()
@@ -305,7 +302,7 @@ fn dry_run_does_not_produce_output_but_still_tears_down_tmpdir() {
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
 
-    agentsync_in(&child)
+    exuno_in(&child)
         .env("TMPDIR", &sandbox)
         .args(["sync", "--dry-run"])
         .assert()
@@ -323,7 +320,7 @@ fn doctor_finds_a_parent_skill_the_child_copied_into_a_category() {
     write(&parent.join(".ai/src/skills/bloc/SKILL.md"), skill);
     write(&child.join(".ai/src/skills/flutter/bloc/SKILL.md"), skill);
 
-    agentsync_in(&child)
+    exuno_in(&child)
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains(
@@ -343,7 +340,7 @@ fn doctor_adds_inherited_via_shared_hint_on_duplicates_in_inherited_categories()
     )
     .unwrap();
 
-    agentsync_in(&child)
+    exuno_in(&child)
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("rules/parent-only.md — duplicate"))
@@ -356,7 +353,7 @@ fn doctor_governance_category_divergent_file_is_upgraded_to_advisory() {
     let parent_dir = project.join("parent");
     let child_dir = parent_dir.join("child");
     std::fs::create_dir_all(&parent_dir).unwrap();
-    agentsync_in(&parent_dir)
+    exuno_in(&parent_dir)
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
@@ -366,7 +363,7 @@ fn doctor_governance_category_divergent_file_is_upgraded_to_advisory() {
     );
 
     std::fs::create_dir_all(&child_dir).unwrap();
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir)
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
@@ -375,7 +372,7 @@ fn doctor_governance_category_divergent_file_is_upgraded_to_advisory() {
         "---\nname: governance-rule\ndescription: a rule\ncategory: governance\n---\nCHILD overrides body\n",
     );
 
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir)
         .arg("doctor")
         .assert()
         .success()
@@ -391,7 +388,7 @@ fn doctor_non_governance_divergent_file_stays_info_tier() {
     let parent_dir = project.join("parent");
     let child_dir = parent_dir.join("child");
     std::fs::create_dir_all(&parent_dir).unwrap();
-    agentsync_in(&parent_dir)
+    exuno_in(&parent_dir)
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
@@ -401,7 +398,7 @@ fn doctor_non_governance_divergent_file_stays_info_tier() {
     );
 
     std::fs::create_dir_all(&child_dir).unwrap();
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir)
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
@@ -410,7 +407,7 @@ fn doctor_non_governance_divergent_file_stays_info_tier() {
         "no frontmatter, child\n",
     );
 
-    agentsync_in(&child_dir)
+    exuno_in(&child_dir)
         .arg("doctor")
         .assert()
         .success()

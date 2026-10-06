@@ -5,17 +5,17 @@ fn engine_version() -> &'static str {
     include_str!("../VERSION").trim()
 }
 
-fn agentsync() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_agentsync"))
+fn exuno() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_exuno"))
 }
 
 #[test]
 fn version_prints_the_engine_version() {
-    agentsync()
+    exuno()
         .arg("version")
         .assert()
         .success()
-        .stdout(format!("agentsync v{}\n", engine_version()));
+        .stdout(format!("exuno v{}\n", engine_version()));
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn version_names_the_binary_it_was_run_as() {
         let copy = dir
             .path()
             .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-        std::fs::copy(env!("CARGO_BIN_EXE_agentsync"), &copy).unwrap();
+        std::fs::copy(env!("CARGO_BIN_EXE_exuno"), &copy).unwrap();
         Command::new(&copy)
             .arg("version")
             .assert()
@@ -37,18 +37,18 @@ fn version_names_the_binary_it_was_run_as() {
 #[test]
 fn version_flags_match_the_bash_cli() {
     for flag in ["--version", "-v"] {
-        agentsync()
+        exuno()
             .arg(flag)
             .assert()
             .success()
-            .stdout(format!("agentsync v{}\n", engine_version()));
+            .stdout(format!("exuno v{}\n", engine_version()));
     }
 }
 
 #[test]
 fn list_works_without_a_project_config() {
     let dir = tempfile::tempdir().unwrap();
-    agentsync()
+    exuno()
         .current_dir(dir.path())
         .arg("list")
         .assert()
@@ -62,7 +62,7 @@ fn list_works_without_a_project_config() {
 #[test]
 fn ls_is_an_alias_for_list() {
     let dir = tempfile::tempdir().unwrap();
-    agentsync()
+    exuno()
         .current_dir(dir.path())
         .arg("ls")
         .assert()
@@ -73,17 +73,17 @@ fn ls_is_an_alias_for_list() {
 #[test]
 fn list_and_version_ignore_extra_arguments_like_bash() {
     let dir = tempfile::tempdir().unwrap();
-    agentsync()
+    exuno()
         .current_dir(dir.path())
         .args(["list", "--bogus"])
         .assert()
         .success()
         .stdout(predicate::str::contains("  AgentSync Tools\n"));
-    agentsync()
+    exuno()
         .args(["version", "extra"])
         .assert()
         .success()
-        .stdout(format!("agentsync v{}\n", engine_version()));
+        .stdout(format!("exuno v{}\n", engine_version()));
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn list_counts_configured_tools_and_honours_the_repo_root_variable() {
         "tools:\n  enabled:\n    - claude\n",
     )
     .unwrap();
-    agentsync()
+    exuno()
         .env("AGENTSYNC_REPO_ROOT", dir.path())
         .arg("list")
         .assert()
@@ -125,7 +125,7 @@ fn sync_project(tool_yaml: Option<&str>) -> tempfile::TempDir {
 
 #[cfg(unix)]
 fn sync_in(dir: &tempfile::TempDir) -> Command {
-    let mut command = agentsync();
+    let mut command = exuno();
     command
         .env("AGENTSYNC_REPO_ROOT", dir.path())
         .env_remove("AGENTSYNC_ALLOW_POST_SYNC")
@@ -203,7 +203,7 @@ fn a_terminated_sync_restores_the_pre_sync_state_and_dies_of_the_signal() {
 
     let dir = sync_project(Some("post_sync: \"sleep 1\"\n"));
     std::fs::write(dir.path().join("CLAUDE.md"), "before-sync\n").unwrap();
-    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_agentsync"))
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_exuno"))
         .env("AGENTSYNC_REPO_ROOT", dir.path())
         .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
         .env_remove("AGENTSYNC_SKIP_POST_SYNC")
@@ -289,7 +289,7 @@ fn sync_writes_a_plain_log_to_a_redirected_stderr_even_when_stdout_is_a_terminal
     let inner = format!(
         "AGENTSYNC_REPO_ROOT={} AGENTSYNC_NO_UPDATE_CHECK=1 NO_COLOR= {} sync --dry-run 2>{} </dev/null",
         dir.path().display(),
-        env!("CARGO_BIN_EXE_agentsync"),
+        env!("CARGO_BIN_EXE_exuno"),
         log.display()
     );
     let status = if gnu {
@@ -322,7 +322,7 @@ mod common;
 #[test]
 fn help_shows_usage() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .arg("help")
         .assert()
         .success()
@@ -336,7 +336,7 @@ fn help_shows_usage() {
 #[test]
 fn help_flag_shows_usage() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .arg("--help")
         .assert()
         .success()
@@ -346,7 +346,7 @@ fn help_flag_shows_usage() {
 #[test]
 fn unknown_command_fails_with_error() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .arg("nonexistent")
         .assert()
         .code(1)
@@ -356,7 +356,7 @@ fn unknown_command_fails_with_error() {
 #[test]
 fn no_arguments_shows_help() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .assert()
         .success()
         .stdout(predicate::str::contains("COMMANDS"));
@@ -399,7 +399,7 @@ fn every_command_with_its_own_usage_answers_help_without_running() {
         "release",
     ] {
         project
-            .agentsync()
+            .exuno()
             .args([command, "--help"])
             .assert()
             .success()
@@ -418,7 +418,7 @@ fn every_command_with_its_own_usage_answers_help_without_running() {
 #[test]
 fn rollback_help_documents_safe_restore_options() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .args(["rollback", "--help"])
         .assert()
         .success()

@@ -3,22 +3,6 @@
 version = 4
 
 [[package]]
-name = "agentsync"
-version = "0.44.2"
-dependencies = [
- "assert_cmd",
- "include_dir",
- "predicates",
- "serde",
- "serde_json",
- "sha2",
- "signal-hook",
- "tempfile",
- "thiserror",
- "toml_edit",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -134,6 +118,22 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "exuno"
+version = "0.44.2"
+dependencies = [
+ "assert_cmd",
+ "include_dir",
+ "predicates",
+ "serde",
+ "serde_json",
+ "sha2",
+ "signal-hook",
+ "tempfile",
+ "thiserror",
+ "toml_edit",
 ]
 
 [[package]]

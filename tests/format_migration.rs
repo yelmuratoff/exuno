@@ -56,7 +56,7 @@ fn format_init_records_the_engines_revision_on_a_fresh_project() {
 fn format_a_fresh_project_has_nothing_to_migrate() {
     let project = Project::seeded(&["--tools", "claude", "--yes", "--no-sync"]);
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -67,7 +67,7 @@ fn format_a_fresh_project_has_nothing_to_migrate() {
 fn format_doctor_reports_the_revision() {
     let project = Project::seeded(&["--tools", "claude", "--yes", "--no-sync"]);
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("Project format"));
@@ -77,7 +77,7 @@ fn format_doctor_reports_the_revision() {
 fn format_doctor_warns_when_the_project_is_behind() {
     let project = seed_pre_format_project();
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("behind the engine"))
@@ -88,7 +88,7 @@ fn format_doctor_warns_when_the_project_is_behind() {
 fn format_migrate_previews_the_stale_skill_copy_without_touching_it() {
     let project = seed_pre_format_project();
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -112,7 +112,7 @@ fn format_migrate_apply_removes_the_unedited_copy_and_records_the_revision() {
             .trim()
             .to_string();
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
@@ -135,11 +135,11 @@ fn format_migrate_apply_removes_the_unedited_copy_and_records_the_revision() {
 fn format_after_migrating_the_engine_supplies_the_skill_again() {
     let project = seed_pre_format_project();
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists(".claude/skills/agentsync/SKILL.md"));
 }
 
@@ -154,7 +154,7 @@ fn format_an_edited_copy_is_kept_as_a_deliberate_override() {
             .to_string();
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success()
@@ -178,11 +178,11 @@ fn format_an_edited_copy_still_shadows_the_engine_version_after_sync() {
     let project = seed_pre_format_project();
     project.append(".ai/src/skills/agentsync/SKILL.md", "\nMY OWN NOTE\n");
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(
         project
             .read(".claude/skills/agentsync/SKILL.md")
@@ -194,12 +194,12 @@ fn format_an_edited_copy_still_shadows_the_engine_version_after_sync() {
 fn format_migrating_twice_is_a_no_op() {
     let project = seed_pre_format_project();
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -209,7 +209,7 @@ fn format_migrating_twice_is_a_no_op() {
 #[test]
 fn format_upgrade_config_does_not_silence_a_pending_migration() {
     let project = seed_pre_format_project();
-    project.agentsync().arg("upgrade-config").assert().success();
+    project.exuno().arg("upgrade-config").assert().success();
     assert!(
         !project
             .read(".ai/agent_sync.yaml")

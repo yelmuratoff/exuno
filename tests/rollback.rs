@@ -24,7 +24,7 @@ fn rollback_restores_the_latest_pre_sync_state_and_creates_an_undo_backup() {
     let project = project_with_claude();
     project.write("CLAUDE.md", "before-sync\n");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -40,7 +40,7 @@ fn rollback_restores_the_latest_pre_sync_state_and_creates_an_undo_backup() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .success()
@@ -61,7 +61,7 @@ fn rollback_restores_the_latest_pre_sync_state_and_creates_an_undo_backup() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &undo_id, "--yes"])
         .assert()
         .success();
@@ -73,7 +73,7 @@ fn rollback_dry_run_previews_an_explicit_backup_without_changing_state() {
     let project = project_with_claude();
     project.write("CLAUDE.md", "before-sync\n");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
@@ -82,7 +82,7 @@ fn rollback_dry_run_previews_an_explicit_backup_without_changing_state() {
     let backups_before = complete_backup_count(&project);
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &sync_id, "--dry-run"])
         .assert()
         .success()
@@ -96,13 +96,13 @@ fn rollback_dry_run_previews_an_explicit_backup_without_changing_state() {
 fn rollback_list_shows_complete_init_and_sync_backups() {
     let project = project_with_claude();
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
 
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--list"])
         .assert()
         .success()
@@ -116,7 +116,7 @@ fn rollback_reads_the_project_named_by_agentsync_repo_root() {
     std::fs::create_dir_all(project.join("sub")).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .current_dir(project.join("sub"))
         .env("AGENTSYNC_REPO_ROOT", project.path())
         .args(["rollback", "--list"])
@@ -130,13 +130,13 @@ fn rollback_requires_confirmation_outside_a_tty_unless_yes_is_passed() {
     let project = project_with_claude();
     project.write("CLAUDE.md", "before-sync\n");
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .success();
 
     project
-        .agentsync()
+        .exuno()
         .arg("rollback")
         .assert()
         .code(130)
@@ -150,7 +150,7 @@ fn rollback_rejects_backup_ids_containing_path_traversal() {
     let latest = project.read(".ai/backups/.latest");
     let latest = latest.trim();
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &format!("../{latest}"), "--yes"])
         .assert()
         .failure()
@@ -161,13 +161,13 @@ fn rollback_rejects_backup_ids_containing_path_traversal() {
 fn rollback_leaves_no_temp_artifacts_behind() {
     let project = project_with_claude();
     project.write("CLAUDE.md", "before-sync\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", &sandbox)
         .args(["rollback", "--yes"])
         .assert()

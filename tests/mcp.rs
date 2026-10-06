@@ -8,14 +8,14 @@ fn bundled_pilot_catalog_validates_and_renders_each_connection() {
     let project = Project::empty();
     let library = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("catalog/mcp");
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "list", "--library"])
         .arg(&library)
         .assert()
         .success()
         .stdout("context7\tContext7\nmicrosoft-learn\tMicrosoft Learn\noctocode\tOctocode\n");
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library"])
         .arg(&library)
         .assert()
@@ -35,7 +35,7 @@ fn bundled_pilot_catalog_validates_and_renders_each_connection() {
         ),
     ] {
         project
-            .agentsync()
+            .exuno()
             .args(["mcp", "render", &format!("{id}@recommended"), "--library"])
             .arg(&library)
             .assert()
@@ -56,7 +56,7 @@ fn manifest(id: &str, title: &str) -> String {
 fn help_and_read_only_commands_need_no_project_setup() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "--help"])
         .assert()
         .success()
@@ -65,13 +65,13 @@ fn help_and_read_only_commands_need_no_project_setup() {
     project.write("catalog/zeta/manifest.json", &manifest("zeta", "Last"));
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "list", "--library", "catalog"])
         .assert()
         .success()
         .stdout("alpha\tFirst\nzeta\tLast\n");
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library", "catalog"])
         .assert()
         .success()
@@ -86,13 +86,13 @@ fn show_preserves_exact_source_bytes_and_validates_only_the_selected_entry() {
     project.write("catalog/alpha/manifest.json", &original);
     project.write("catalog/broken/manifest.json", "not JSON");
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "show", "alpha", "--library", "catalog"])
         .assert()
         .success()
         .stdout(original);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "list", "--library", "catalog"])
         .assert()
         .failure()
@@ -106,7 +106,7 @@ fn render_default_stdio_as_source_without_running_or_writing() {
     project.write("catalog/broken/manifest.json", "not JSON");
     for selection in ["alpha", "alpha@default"] {
         project
-            .agentsync()
+            .exuno()
             .args(["mcp", "render", selection, "--library", "catalog"])
             .assert()
             .success()
@@ -123,14 +123,14 @@ fn render_resolves_http_alternatives_and_recommendation_explicitly() {
     let v2 = r#"{"schema_version":2,"id":"docs","title":"Docs","connection":{"type":"http","url":"https://example.invalid/default"},"requirements":{"binaries":[],"inputs":[]},"alternatives":{"remote":{"connection":{"type":"http","url":"https://example.invalid/remote"},"requirements":{"binaries":[],"inputs":[]}}},"guidance":{"recommended":"remote","authority":"vendor","source":"https://example.invalid/docs","checked_at":"2024-02-29","reason":"Documented remote option"}}"#;
     project.write("catalog/docs/manifest.json", v2);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "docs", "--library", "catalog"])
         .assert()
         .success()
         .stdout("{\"mcpServers\":{\"docs\":{\"type\":\"http\",\"url\":\"https://example.invalid/default\"}}}\n");
     for selection in ["docs@remote", "docs@recommended"] {
         project
-            .agentsync()
+            .exuno()
             .args(["mcp", "render", selection, "--library", "catalog"])
             .assert()
             .success()
@@ -141,7 +141,7 @@ fn render_resolves_http_alternatives_and_recommendation_explicitly() {
         &v2.replace("\"recommended\":\"remote\"", "\"recommended\":\"default\""),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "docs@recommended", "--library", "catalog"])
         .assert()
         .success()
@@ -154,28 +154,28 @@ fn render_rejects_bad_selections_and_invalid_manifests_without_stdout() {
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     for selection in ["alpha@", "alpha@bad/name", "alpha@@remote", "../alpha"] {
         project
-            .agentsync()
+            .exuno()
             .args(["mcp", "render", selection, "--library", "catalog"])
             .assert()
             .failure()
             .stdout("");
     }
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "--library", "catalog"])
         .assert()
         .failure()
         .stdout("")
         .stderr(predicate::str::contains("requires an id"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "alpha@recommended", "--library", "catalog"])
         .assert()
         .failure()
         .stdout("")
         .stderr(predicate::str::contains("no attributed recommendation"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "alpha@remote", "--library", "catalog"])
         .assert()
         .failure()
@@ -183,7 +183,7 @@ fn render_rejects_bad_selections_and_invalid_manifests_without_stdout() {
         .stderr(predicate::str::contains("Unknown MCP variant"));
     project.write("catalog/alpha/manifest.json", "not JSON");
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "alpha", "--library", "catalog"])
         .assert()
         .failure()
@@ -199,7 +199,7 @@ fn render_serializes_connection_strings_as_json_data() {
     );
     project.write("catalog/alpha/manifest.json", &escaped);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "render", "alpha", "--library", "catalog"])
         .assert()
         .success()
@@ -212,7 +212,7 @@ fn use_previews_then_creates_a_per_tool_source_without_syncing() {
     project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "use", "alpha", "--tool", "claude", "--library", "catalog"])
         .assert()
         .success()
@@ -220,7 +220,7 @@ fn use_previews_then_creates_a_per_tool_source_without_syncing() {
     assert!(!project.exists(".ai/src/tools/claude/mcp.json"));
     assert!(!project.exists(".ai/backups"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "use", "alpha", "--tool", "claude", "--library", "catalog", "--apply"])
         .assert()
         .success()
@@ -231,13 +231,13 @@ fn use_previews_then_creates_a_per_tool_source_without_syncing() {
     );
     assert!(!project.exists(".mcp.json"));
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("mcp-use"));
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .success();
@@ -252,7 +252,7 @@ fn use_merge_preserves_other_servers_and_rolls_back() {
     let original = "{\"notes\":{\"private\":\"SECRET_SOURCE_VALUE\"},\"mcpServers\":{\"existing\":{\"command\":\"old\"}}}\n";
     project.write(".ai/src/tools/claude/mcp.json", original);
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -270,7 +270,7 @@ fn use_merge_preserves_other_servers_and_rolls_back() {
     assert_eq!(project.read(".ai/src/tools/claude/mcp.json"), original);
     assert!(!project.exists(".ai/backups"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -290,7 +290,7 @@ fn use_merge_preserves_other_servers_and_rolls_back() {
     assert_eq!(value["mcpServers"]["existing"]["command"], "old");
     assert_eq!(value["mcpServers"]["alpha"]["command"], "never-run");
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -307,7 +307,7 @@ fn use_merge_preserves_other_servers_and_rolls_back() {
         .stdout(predicate::str::contains("no change needed"));
     assert_eq!(project.read(".ai/src/tools/claude/mcp.json"), merged);
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--yes"])
         .assert()
         .success();
@@ -332,17 +332,17 @@ fn use_merge_requires_explicit_replacement_and_refuses_ambiguous_sources() {
         "--merge",
         "--apply",
     ];
-    project.agentsync().args(base).assert().failure().stdout("");
+    project.exuno().args(base).assert().failure().stdout("");
     assert_eq!(project.read(".ai/src/tools/claude/mcp.json"), original);
     project
-        .agentsync()
+        .exuno()
         .args(base)
         .args(["--replace", "other"])
         .assert()
         .failure()
         .stdout("");
     project
-        .agentsync()
+        .exuno()
         .args(base)
         .args(["--replace", "alpha"])
         .assert()
@@ -354,7 +354,7 @@ fn use_merge_requires_explicit_replacement_and_refuses_ambiguous_sources() {
     );
 
     project.write(".ai/src/tools/claude/mcp.json.bak", "other");
-    project.agentsync().args(base).assert().failure().stdout("");
+    project.exuno().args(base).assert().failure().stdout("");
 }
 
 #[test]
@@ -366,7 +366,7 @@ fn use_merge_refuses_a_live_or_stale_lock_without_writing() {
     project.write(".ai/src/tools/claude/mcp.json", original);
     project.write(".ai/src/tools/claude/.agentsync-mcp-use.lock", "occupied");
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -407,23 +407,13 @@ fn use_merge_refuses_invalid_sources_and_backup_failure() {
         "{\"mcpServers\":{\"other\":[]}}",
     ] {
         project.write(".ai/src/tools/claude/mcp.json", invalid);
-        project
-            .agentsync()
-            .args(command)
-            .assert()
-            .failure()
-            .stdout("");
+        project.exuno().args(command).assert().failure().stdout("");
         assert_eq!(project.read(".ai/src/tools/claude/mcp.json"), invalid);
     }
     let original = "{\"mcpServers\":{}}";
     project.write(".ai/src/tools/claude/mcp.json", original);
     project.write(".ai/backups", "private bytes");
-    project
-        .agentsync()
-        .args(command)
-        .assert()
-        .failure()
-        .stdout("");
+    project.exuno().args(command).assert().failure().stdout("");
     assert_eq!(project.read(".ai/src/tools/claude/mcp.json"), original);
     assert_eq!(project.read(".ai/backups"), "private bytes");
     assert!(!project.exists(".ai/src/tools/claude/.agentsync-mcp-use.lock"));
@@ -437,7 +427,7 @@ fn use_merge_does_not_migrate_a_shared_source() {
     let original = "{\"mcpServers\":{}}";
     project.write(".ai/src/mcp.json", original);
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -467,7 +457,7 @@ fn use_respects_source_tools_and_opencode_composition() {
     );
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -483,7 +473,7 @@ fn use_respects_source_tools_and_opencode_composition() {
         .stdout(predicate::str::contains("custom/tools/opencode/mcp.json"));
     assert!(project.exists("custom/tools/opencode/mcp.json"));
     assert!(!project.exists("opencode.json"));
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read("opencode.json").contains("\"alpha\""));
 }
 
@@ -494,7 +484,7 @@ fn use_source_reaches_claude_on_a_separate_sync() {
     project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -507,7 +497,7 @@ fn use_source_reaches_claude_on_a_separate_sync() {
         ])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(
         project.read(".mcp.json"),
         project.read(".ai/src/tools/claude/mcp.json")
@@ -523,7 +513,7 @@ fn use_kimi_http_writes_native_source_and_round_trips_through_sync_and_adopt() {
         r#"{"schema_version":1,"id":"docs","title":"Docs","connection":{"type":"http","url":"https://example.invalid/mcp"},"requirements":{"binaries":[],"inputs":[]}}"#,
     );
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -540,7 +530,7 @@ fn use_kimi_http_writes_native_source_and_round_trips_through_sync_and_adopt() {
         ));
     assert!(!project.exists(".ai/src/tools/kimi/mcp.json"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -555,13 +545,13 @@ fn use_kimi_http_writes_native_source_and_round_trips_through_sync_and_adopt() {
         .success();
     let native = "{\"mcpServers\":{\"docs\":{\"url\":\"https://example.invalid/mcp\"}}}\n";
     assert_eq!(project.read(".ai/src/tools/kimi/mcp.json"), native);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".kimi-code/mcp.json"), native);
-    project.agentsync().arg("check").assert().success();
-    project.agentsync().arg("doctor").assert().success();
+    project.exuno().arg("check").assert().success();
+    project.exuno().arg("doctor").assert().success();
     project.append(".kimi-code/mcp.json", "\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".kimi-code/mcp.json"])
         .assert()
         .success();
@@ -577,7 +567,7 @@ fn use_kimi_stdio_keeps_native_command_and_args() {
     project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [kimi]\n");
     project.write("catalog/docs/manifest.json", &manifest("docs", "Docs"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -606,7 +596,7 @@ fn use_http_selection_reaches_claude_and_opencode_through_normal_sync() {
     );
     for slug in ["claude", "opencode"] {
         project
-            .agentsync()
+            .exuno()
             .args([
                 "mcp",
                 "use",
@@ -620,7 +610,7 @@ fn use_http_selection_reaches_claude_and_opencode_through_normal_sync() {
             .assert()
             .success();
     }
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(
         project.read(".mcp.json"),
         "{\"mcpServers\":{\"docs\":{\"type\":\"http\",\"url\":\"https://example.invalid/mcp\"}}}\n"
@@ -630,11 +620,11 @@ fn use_http_selection_reaches_claude_and_opencode_through_normal_sync() {
         opencode
             .contains("\"docs\": {\"type\": \"remote\", \"url\": \"https://example.invalid/mcp\"}")
     );
-    project.agentsync().arg("check").assert().success();
-    project.agentsync().arg("doctor").assert().success();
+    project.exuno().arg("check").assert().success();
+    project.exuno().arg("doctor").assert().success();
     project.append(".mcp.json", "\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".mcp.json"])
         .assert()
         .success();
@@ -654,7 +644,7 @@ fn use_codex_composes_selected_http_source_with_settings() {
         r#"{"schema_version":1,"id":"docs","title":"Docs","connection":{"type":"http","url":"https://example.invalid/mcp"},"requirements":{"binaries":[],"inputs":[]}}"#,
     );
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -668,16 +658,16 @@ fn use_codex_composes_selected_http_source_with_settings() {
         .assert()
         .success();
     assert!(!project.exists(".codex/config.toml"));
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(
         project.read(".codex/config.toml"),
         "model = \"gpt-5\"\n\n[mcp_servers.docs]\nurl = \"https://example.invalid/mcp\"\n"
     );
-    project.agentsync().arg("check").assert().success();
-    project.agentsync().arg("doctor").assert().success();
+    project.exuno().arg("check").assert().success();
+    project.exuno().arg("doctor").assert().success();
     project.write("catalog/extra/manifest.json", &manifest("extra", "Extra"));
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -691,7 +681,7 @@ fn use_codex_composes_selected_http_source_with_settings() {
         ])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(
         project
             .read(".codex/config.toml")
@@ -702,10 +692,10 @@ fn use_codex_composes_selected_http_source_with_settings() {
             .read(".codex/config.toml")
             .contains("[mcp_servers.extra]")
     );
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
     project.append(".codex/config.toml", "\n");
     project
-        .agentsync()
+        .exuno()
         .args(["adopt", "--yes", ".codex/config.toml"])
         .assert()
         .failure()
@@ -716,7 +706,7 @@ fn use_codex_composes_selected_http_source_with_settings() {
 fn codex_ownership_conflict_refuses_sync_without_changing_output() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["codex"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.write(
         ".ai/src/tools/codex/settings.toml",
         "[mcp_servers.existing]\ncommand = \"manual\"\n",
@@ -727,7 +717,7 @@ fn codex_ownership_conflict_refuses_sync_without_changing_output() {
     );
     let before = project.read(".codex/config.toml");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -737,7 +727,7 @@ fn codex_ownership_conflict_refuses_sync_without_changing_output() {
         ));
     assert_eq!(project.read(".codex/config.toml"), before);
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .failure()
@@ -758,10 +748,10 @@ fn codex_settings_keep_their_servers_when_mcp_composition_is_disabled() {
         ".ai/src/tools/codex.yaml",
         "targets:\n  mcp:\n    enabled: false\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".codex/config.toml"), settings);
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("MCP ownership conflict").not());
@@ -776,13 +766,13 @@ fn codex_composes_native_server_fields_from_a_per_tool_source() {
         ".ai/src/tools/codex/mcp.json",
         r#"{"mcpServers":{"repl":{"command":"node_repl","args":[],"cwd":".","enabled":false,"startup_timeout_sec":120,"env":{"MODE":"1"}}}}"#,
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(
         project.read(".codex/config.toml"),
         "model = \"gpt\"\n\n[mcp_servers.repl]\ncommand = \"node_repl\"\nargs = []\ncwd = \".\"\n\
          enabled = false\nstartup_timeout_sec = 120\n\n[mcp_servers.repl.env]\n\"MODE\" = \"1\"\n"
     );
-    project.agentsync().arg("check").assert().success();
+    project.exuno().arg("check").assert().success();
 }
 
 #[test]
@@ -798,7 +788,7 @@ fn use_refuses_occupied_sources_without_revealing_or_changing_them() {
     ] {
         project.write(occupied, "SECRET_SOURCE_VALUE");
         for apply in [false, true] {
-            let mut command = project.agentsync();
+            let mut command = project.exuno();
             command.args([
                 "mcp",
                 "use",
@@ -838,7 +828,7 @@ fn use_refuses_disabled_tools_invalid_selections_and_unsafe_source_roots() {
         vec!["alpha@missing", "--tool", "claude"],
     ] {
         project
-            .agentsync()
+            .exuno()
             .arg("mcp")
             .arg("use")
             .args(args)
@@ -856,7 +846,7 @@ fn use_refuses_disabled_tools_invalid_selections_and_unsafe_source_roots() {
         ),
     );
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -881,7 +871,7 @@ fn use_keeps_the_source_absent_when_backup_creation_fails() {
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project.write(".ai/backups", "private bytes");
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -913,7 +903,7 @@ fn use_discards_a_snapshot_when_the_new_source_cannot_be_written() {
     std::fs::create_dir_all(&parent).unwrap();
     common::chmod(&parent, 0o500);
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -931,7 +921,7 @@ fn use_discards_a_snapshot_when_the_new_source_cannot_be_written() {
     assert!(output.stdout.is_empty());
     assert!(!project.exists(".ai/src/tools/claude/mcp.json"));
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--list"])
         .assert()
         .success()
@@ -951,7 +941,7 @@ fn use_refuses_a_per_tool_directory_link_outside_the_project() {
     std::fs::create_dir_all(project.join(".ai/src/tools")).unwrap();
     symlink(external.path(), project.join(".ai/src/tools/claude")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args([
             "mcp",
             "use",
@@ -978,7 +968,7 @@ fn configured_catalog_stays_inside_project_root() {
     );
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "list"])
         .assert()
         .success()
@@ -993,7 +983,7 @@ fn configured_catalog_stays_inside_project_root() {
         ),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "list"])
         .assert()
         .failure()
@@ -1010,7 +1000,7 @@ fn duplicate_keys_and_oversized_or_deep_manifests_fail_without_stdout() {
     );
     project.write(path, &duplicate);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "show", "alpha", "--library", "catalog"])
         .assert()
         .failure()
@@ -1020,7 +1010,7 @@ fn duplicate_keys_and_oversized_or_deep_manifests_fail_without_stdout() {
     let oversized = " ".repeat(131_073);
     project.write(path, &oversized);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "alpha", "--library", "catalog"])
         .assert()
         .failure()
@@ -1036,7 +1026,7 @@ fn duplicate_keys_and_oversized_or_deep_manifests_fail_without_stdout() {
     );
     project.write(path, &deep);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "alpha", "--library", "catalog"])
         .assert()
         .failure()
@@ -1049,7 +1039,7 @@ fn v2_validates_every_variant_and_attributed_guidance() {
     let v2 = r#"{"schema_version":2,"id":"docs","title":"Docs","connection":{"type":"http","url":"https://example.invalid/mcp"},"requirements":{"binaries":[],"inputs":[]},"alternatives":{"local":{"connection":{"type":"stdio","command":"never-run","args":[]},"requirements":{"binaries":[],"inputs":[]}}},"guidance":{"recommended":"local","authority":"vendor","source":"https://example.invalid/docs","checked_at":"2024-02-29","reason":"Documented local option"}}"#;
     project.write("catalog/docs/manifest.json", v2);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library", "catalog"])
         .assert()
         .success();
@@ -1059,7 +1049,7 @@ fn v2_validates_every_variant_and_attributed_guidance() {
         &v2.replace("2024-02-29", "2026-02-29"),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library", "catalog"])
         .assert()
         .failure()
@@ -1070,7 +1060,7 @@ fn v2_validates_every_variant_and_attributed_guidance() {
         &v2.replace(",\"args\":[]", ""),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library", "catalog"])
         .assert()
         .failure()
@@ -1081,7 +1071,7 @@ fn v2_validates_every_variant_and_attributed_guidance() {
         &v2.replace("https://example.invalid/docs", "https://:"),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library", "catalog"])
         .assert()
         .failure()
@@ -1104,7 +1094,7 @@ fn schema_errors_reject_unknown_fields_inputs_and_mismatched_ids() {
     ] {
         project.write("catalog/alpha/manifest.json", &invalid);
         project
-            .agentsync()
+            .exuno()
             .args(["mcp", "validate", "alpha", "--library", "catalog"])
             .assert()
             .failure()
@@ -1118,7 +1108,7 @@ fn escaped_nul_is_data_but_raw_nul_is_invalid_json() {
     let original = manifest("alpha", "First").replace("First", r"First\u0000End");
     project.write("catalog/alpha/manifest.json", &original);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "show", "alpha", "--library", "catalog"])
         .assert()
         .success()
@@ -1127,7 +1117,7 @@ fn escaped_nul_is_data_but_raw_nul_is_invalid_json() {
     let raw = manifest("alpha", "First").replace("First", "First\0End");
     project.write("catalog/alpha/manifest.json", &raw);
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "alpha", "--library", "catalog"])
         .assert()
         .failure()
@@ -1143,7 +1133,7 @@ fn list_escapes_control_characters_in_titles() {
     );
     project.write("catalog/alpha/manifest.json", &manifest("alpha", &title));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "list", "--library", "catalog"])
         .assert()
         .success()
@@ -1164,7 +1154,7 @@ fn diagnostics_escape_untrusted_json_keys() {
         ),
     );
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "alpha", "--library", "catalog"])
         .assert()
         .failure()
@@ -1176,7 +1166,7 @@ fn diagnostics_escape_untrusted_json_keys() {
         &original.replace("\"connection\":", &format!("\"{key}\":1,\"connection\":")),
     );
     let output = project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "alpha", "--library", "catalog"])
         .output()
         .unwrap();
@@ -1194,13 +1184,13 @@ fn catalog_entry_limit_and_unsafe_ids_are_rejected() {
         std::fs::create_dir_all(project.join(&format!("catalog/item{index}"))).unwrap();
     }
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "validate", "--library", "catalog"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("entry limit"));
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "show", "../item0", "--library", "catalog"])
         .assert()
         .failure()
@@ -1222,7 +1212,7 @@ fn symlinks_cannot_escape_the_selected_catalog() {
     )
     .unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["mcp", "show", "alpha", "--library", "catalog"])
         .assert()
         .failure()

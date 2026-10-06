@@ -16,7 +16,7 @@ use predicates::prelude::*;
 /// `CLAUDE.md` sync would otherwise regenerate.
 fn init_project(project: &Project) {
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -107,7 +107,7 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
             walk(root, &path, out);
         } else {
             let bytes = std::fs::read(&path).unwrap();
-            out.push((rel, agentsync::transaction::manifest::sha256_hex(&bytes)));
+            out.push((rel, exuno::transaction::manifest::sha256_hex(&bytes)));
         }
     }
 }
@@ -149,7 +149,7 @@ fn retention_default_sync_still_sweeps_staging_when_both_snapshot_limits_are_zer
     init_project(&project);
     seed_recovery(&project);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "0")
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "0")
         .args(["sync", "--only", "claude"])
@@ -177,7 +177,7 @@ fn retention_bounded_sync_applies_age_and_count_limits_and_sweeps_old_staging() 
     set_retention(&project, "bounded");
     seed_recovery(&project);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "1")
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "30")
         .args(["sync", "--only", "claude"])
@@ -208,7 +208,7 @@ fn retention_preserve_sync_keeps_snapshots_and_every_staging_kind_despite_low_li
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "1")
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "1")
         .args(["sync", "--only", "claude"])
@@ -224,7 +224,7 @@ fn retention_preserve_sync_keeps_snapshots_and_every_staging_kind_despite_low_li
 
     // AgentSync's own restore, in addition to the hash-based evidence above.
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", &snapshot, "--yes"])
         .assert()
         .success();
@@ -239,7 +239,7 @@ fn retention_preserve_sync_with_zero_limits_also_keeps_abandoned_staging() {
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "0")
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "0")
         .args(["sync", "--only", "claude"])
@@ -259,7 +259,7 @@ fn retention_invalid_or_empty_values_reject_sync_before_any_project_mutation() {
         set_retention(&project, value);
         let before = snapshot_tree(project.path());
         project
-            .agentsync()
+            .exuno()
             .args(["sync", "--only", "claude"])
             .assert()
             .failure()
@@ -280,7 +280,7 @@ fn retention_malformed_backup_section_rejects_sync_before_changes() {
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
         .failure()
@@ -295,7 +295,7 @@ fn retention_invalid_init_config_fails_before_scaffolding_or_recovery_changes() 
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .failure()
@@ -310,7 +310,7 @@ fn retention_preserve_init_keeps_existing_snapshots_and_staging() {
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "1")
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "1")
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
@@ -329,7 +329,7 @@ fn retention_preserve_failed_sync_restores_outputs_without_pruning_recovery() {
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
         .env("AGENTSYNC_BACKUP_LIMIT", "1")
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "1")
@@ -350,7 +350,7 @@ fn retention_invalid_rollback_config_fails_before_safety_snapshot_or_restore() {
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "20200101T000000Z-sync-old", "--yes"])
         .assert()
         .failure()
@@ -370,7 +370,7 @@ fn retention_uses_the_explicit_config_instead_of_a_conflicting_local_policy() {
     );
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "selected.yaml")
         .env("AGENTSYNC_BACKUP_LIMIT", "1")
         .args(["sync", "--only", "claude"])
@@ -384,7 +384,7 @@ fn retention_reads_exuno_backup_limit_before_the_legacy_name() {
     let project = Project::empty();
     init_project(&project);
     project
-        .agentsync()
+        .exuno()
         .env("EXUNO_BACKUP_LIMIT", "typo")
         .env("AGENTSYNC_BACKUP_LIMIT", "1")
         .args(["sync", "--only", "claude"])
@@ -400,7 +400,7 @@ fn retention_invalid_numeric_bounds_reject_sync_before_changes() {
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "typo")
         .args(["sync", "--only", "claude"])
         .assert()
@@ -408,7 +408,7 @@ fn retention_invalid_numeric_bounds_reject_sync_before_changes() {
         .stderr(predicate::str::contains("Backup limit must be"));
     assert_eq!(snapshot_tree(project.path()), before);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_MAX_AGE_DAYS", "-1")
         .args(["sync", "--only", "claude"])
         .assert()
@@ -424,7 +424,7 @@ fn retention_invalid_explicit_config_rejects_init_and_rollback_without_fallback(
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "missing.yaml")
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
@@ -434,7 +434,7 @@ fn retention_invalid_explicit_config_rejects_init_and_rollback_without_fallback(
         ));
     assert_eq!(snapshot_tree(project.path()), before);
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "missing.yaml")
         .args(["rollback", "20200101T000000Z-sync-old", "--yes"])
         .assert()
@@ -452,7 +452,7 @@ fn retention_invalid_policy_still_lets_rollback_list_read_the_store() {
     set_retention(&project, "typo");
     seed_recovery(&project);
     project
-        .agentsync()
+        .exuno()
         .args(["rollback", "--list"])
         .assert()
         .success()
@@ -463,9 +463,9 @@ fn retention_invalid_policy_still_lets_rollback_list_read_the_store() {
 fn retention_invalid_bounds_do_not_fail_check_which_takes_no_backup() {
     let project = Project::empty();
     init_project(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_BACKUP_LIMIT", "typo")
         .arg("check")
         .assert()

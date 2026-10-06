@@ -9,7 +9,7 @@ use predicates::prelude::*;
 fn generate_with_argument_outputs_prompt_with_context() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["generate", "Flutter app with BLoC"])
         .assert()
         .success()
@@ -22,7 +22,7 @@ fn generate_with_argument_outputs_prompt_with_context() {
 fn generate_with_argument_includes_instructions() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["generate", "React project"])
         .assert()
         .success()
@@ -35,7 +35,7 @@ fn generate_with_argument_includes_instructions() {
 fn generate_piped_outputs_raw_prompt() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .arg("generate")
         .write_stdin("")
         .assert()
@@ -48,7 +48,7 @@ fn generate_piped_outputs_raw_prompt() {
 fn generate_context_appears_before_instructions() {
     let project = Project::empty();
     let output = project
-        .agentsync()
+        .exuno()
         .args(["generate", "My custom project"])
         .assert()
         .success()
@@ -71,7 +71,7 @@ fn generate_context_appears_before_instructions() {
 fn generate_multi_word_context_is_preserved() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["generate", "React + Next.js + Prisma ORM with PostgreSQL"])
         .assert()
         .success()
@@ -84,7 +84,7 @@ fn generate_multi_word_context_is_preserved() {
 fn generate_prompt_mentions_all_source_types() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["generate", "test"])
         .assert()
         .success()
@@ -100,7 +100,7 @@ fn generate_prompt_mentions_all_source_types() {
 fn generate_prompt_uses_yaml_safe_frontmatter_examples() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["generate", "test"])
         .assert()
         .success()

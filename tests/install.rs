@@ -165,7 +165,7 @@ fn publish_release(fake_releases: &Path, rel_root: &Path, tag: &str) {
         .status()
         .unwrap();
     assert!(status.success());
-    let sum = agentsync::transaction::manifest::sha256_hex(&std::fs::read(&archive).unwrap());
+    let sum = exuno::transaction::manifest::sha256_hex(&std::fs::read(&archive).unwrap());
     write(
         &release_dir.join("archive.tar.xz.sha256"),
         &format!("{sum}  archive.tar.xz\n"),
