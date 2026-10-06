@@ -1,4 +1,4 @@
-use crate::config::yaml_subset;
+use crate::config::{names, yaml_subset};
 
 #[derive(Debug)]
 pub struct SkillMetadata {
@@ -78,13 +78,19 @@ pub fn read(bytes: &[u8], directory: &str) -> Result<SkillMetadata, String> {
         description,
         license: field(&frontmatter, "license")?.filter(|value| !value.is_empty()),
         compatibility,
-        use_when: field(&frontmatter, "metadata.agentsync-use-when")?
-            .filter(|value| !value.is_empty()),
-        not_for: field(&frontmatter, "metadata.agentsync-not-for")?
-            .filter(|value| !value.is_empty()),
-        requirements: field(&frontmatter, "metadata.agentsync-requirements")?
-            .filter(|value| !value.is_empty()),
+        use_when: annotation(&frontmatter, "use-when")?.filter(|value| !value.is_empty()),
+        not_for: annotation(&frontmatter, "not-for")?.filter(|value| !value.is_empty()),
+        requirements: annotation(&frontmatter, "requirements")?.filter(|value| !value.is_empty()),
     })
+}
+
+fn annotation(frontmatter: &[&str], name: &str) -> Result<Option<String>, String> {
+    for prefix in names::SKILL_METADATA_PREFIXES {
+        if let Some(value) = field(frontmatter, &format!("{prefix}{name}"))? {
+            return Ok(Some(value));
+        }
+    }
+    Ok(None)
 }
 
 pub fn valid_name(name: &str) -> bool {
@@ -211,6 +217,15 @@ mod tests {
         assert_eq!(card.use_when.as_deref(), Some("Changes need review"));
         assert_eq!(card.not_for.as_deref(), Some("Writing code"));
         assert_eq!(card.requirements.as_deref(), Some("A selected diff"));
+    }
+
+    #[test]
+    fn exuno_annotations_win_over_the_legacy_ones() {
+        let skill = b"---\nname: review\ndescription: Review a diff\nmetadata:\n  agentsync-use-when: Old\n  exuno-use-when: New\n  agentsync-not-for: Writing code\n---\n";
+        let card = read(skill, "review").unwrap();
+        assert_eq!(card.use_when.as_deref(), Some("New"));
+        assert_eq!(card.not_for.as_deref(), Some("Writing code"));
+        assert_eq!(card.requirements, None);
     }
 
     #[test]
