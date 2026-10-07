@@ -18,7 +18,10 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::paths::{DiskText, ExplicitSource, Paths};
 use crate::project::Project;
-use crate::{Error, config::catalog, config::edit_paths, config::format_rev, config::yaml_subset};
+use crate::{
+    Error, config::catalog, config::edit_paths, config::format_rev, config::leftovers,
+    config::yaml_subset,
+};
 
 pub const HELP: Help = Help {
     command: "doctor",
@@ -308,7 +311,22 @@ impl Doctor<'_> {
             Some(config) => self.check_project_config(&config)?,
             None => self.warn("No exuno.yaml — using defaults only")?,
         }
+        self.check_leftovers(Path::new(&root))?;
         Ok(true)
+    }
+
+    /// One warning per thing that still carries the `agentsync` name.
+    fn check_leftovers(&mut self, root: &Path) -> Result<(), Error> {
+        let style = self.style;
+        for leftover in leftovers::scan(root) {
+            let line = leftover.describe(root);
+            if leftover.blocked_by.is_some() || leftover.kind == leftovers::Kind::HookBlock {
+                self.warn(&line)?;
+            } else {
+                self.warn(&format!("{line} — run {}", style.cyan("exuno migrate")))?;
+            }
+        }
+        Ok(())
     }
 
     /// The config's path, its pinned engine version, and its format revision.

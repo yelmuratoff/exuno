@@ -67,6 +67,26 @@ fn pin_version(project: &Project, version: &str) {
 }
 
 #[test]
+fn doctor_names_what_still_carries_the_agentsync_name() {
+    let project = Project::seeded(&["--tools", "claude", "--yes", "--no-sync"]);
+    project.write(
+        ".ai/src/skills/deploy/SKILL.md",
+        "---\nname: deploy\ndescription: Deploy\nmetadata:\n  agentsync-use-when: Shipping\n---\n",
+    );
+    project.write(
+        ".git/hooks/post-merge",
+        "#!/bin/sh\n# >>> AGENTSYNC AUTO SYNC START >>>\nagentsync sync\n# <<< AGENTSYNC AUTO SYNC END <<<\n",
+    );
+    doctor(&project)
+        .stdout(predicate::str::contains(
+            "! metadata.agentsync-* → metadata.exuno-* in .ai/src/skills/deploy/SKILL.md — run exuno migrate\n",
+        ))
+        .stdout(predicate::str::contains(
+            "! .git/hooks/post-merge still runs the agentsync block — run exuno setup-hooks\n",
+        ));
+}
+
+#[test]
 fn doctor_fails_with_exit_2_when_ai_missing() {
     doctor(&Project::empty())
         .code(2)
