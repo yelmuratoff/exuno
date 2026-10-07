@@ -1,32 +1,39 @@
 #!/usr/bin/env bash
-# AgentSync Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh | bash
-#        AGENTSYNC_VERSION=0.37.0 curl -fsSL .../install.sh | bash   # pin a release tag
+# Exuno Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash
+#        EXUNO_VERSION=0.45.0 curl -fsSL .../install.sh | bash   # pin a release tag
 #
 # What it does:
-#   1. Downloads the agentsync binary for this platform from GitHub Releases
-#      and verifies its sha256, into ~/.agentsync/bin/agentsync
-#   2. Creates a symlink: /usr/local/bin/agentsync → ~/.agentsync/bin/agentsync
-#      (~/.local/bin when /usr/local/bin is not writable)
+#   1. Downloads the exuno binary for this platform from GitHub Releases
+#      and verifies its sha256, into ~/.exuno/bin/exuno
+#   2. Creates symlinks: /usr/local/bin/exuno and /usr/local/bin/agentsync
+#      → ~/.exuno/bin/exuno (~/.local/bin when /usr/local/bin is not
+#      writable). The agentsync link keeps hooks and CI gates written before
+#      the rename working until 1.0.
 #
-# A release tag older than 0.37.0, the first binary release, has no archive;
-# pinning to one clones the repository into ~/.agentsync/ and links
-# bin/agentsync.sh, as the installer did before the binary.
+# Exuno shipped as AgentSync before 0.45.0. Pinning to such a release installs
+# its agentsync-<target> archive; a release tag older than 0.37.0, the first
+# binary release, has no archive, and pinning to one clones the repository
+# into ~/.exuno/ and links bin/agentsync.sh, as the installer did before the
+# binary. Every EXUNO_* variable below also answers to its AGENTSYNC_* name.
 #
-# AGENTSYNC_REPO_URL, AGENTSYNC_INSTALL_DIR, and AGENTSYNC_BIN_DIR override the
-# defaults so the installer can run against local fixtures in tests.
+# EXUNO_REPO_URL, EXUNO_INSTALL_DIR, and EXUNO_BIN_DIR override the defaults
+# so the installer can run against local fixtures in tests.
 #
 # To uninstall:
-#   rm -rf ~/.agentsync && rm -f /usr/local/bin/agentsync
+#   rm -rf ~/.exuno && rm -f /usr/local/bin/exuno /usr/local/bin/agentsync
 
 set -euo pipefail
 
-readonly REPO="yelmuratoff/agent_sync"
-REPO_URL="${AGENTSYNC_REPO_URL:-https://github.com/$REPO.git}"
-INSTALL_DIR="${AGENTSYNC_INSTALL_DIR:-$HOME/.agentsync}"
-PIN_VERSION="${AGENTSYNC_VERSION:-}"
-readonly REPO_URL INSTALL_DIR PIN_VERSION
-readonly BIN_NAME="agentsync"
+readonly REPO="yelmuratoff/exuno"
+REPO_URL="${EXUNO_REPO_URL:-${AGENTSYNC_REPO_URL:-https://github.com/$REPO.git}}"
+INSTALL_DIR="${EXUNO_INSTALL_DIR:-${AGENTSYNC_INSTALL_DIR:-$HOME/.exuno}}"
+PIN_VERSION="${EXUNO_VERSION:-${AGENTSYNC_VERSION:-}}"
+BIN_DIR_OVERRIDE="${EXUNO_BIN_DIR:-${AGENTSYNC_BIN_DIR:-}}"
+readonly REPO_URL INSTALL_DIR PIN_VERSION BIN_DIR_OVERRIDE
+readonly BIN_NAME="exuno"
+readonly LEGACY_NAME="agentsync"
+readonly LEGACY_INSTALL_DIR="$HOME/.agentsync"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 # Evaluate once at startup (not inside subshells where [[ -t 1 ]] would be false)
@@ -79,7 +86,7 @@ fetch() {
 # The tag of the latest GitHub release.
 latest_release_tag() {
     local body code
-    body=$(mktemp "${TMPDIR:-/tmp}/agentsync-latest.XXXXXX")
+    body=$(mktemp "${TMPDIR:-/tmp}/exuno-latest.XXXXXX")
     code=$(fetch "https://api.github.com/repos/$REPO/releases/latest" "$body") || code="000"
     if [[ "$code" != "200" ]]; then
         rm -f "$body"
@@ -91,24 +98,28 @@ latest_release_tag() {
 
 # ─── Binary install ───────────────────────────────────────────────────────────
 # Downloads, verifies, and unpacks the release archive for <tag> and <target>
-# into $INSTALL_DIR/bin and sets INSTALLED to the binary. On a failure to
-# download it sets HTTP_CODE and returns 1: 404 means the tag has no binary
+# — exuno-<target>, else the agentsync-<target> a release before the rename
+# ships — into $INSTALL_DIR/bin/exuno and sets INSTALLED to it. On a failure
+# to download it sets HTTP_CODE and returns 1: 404 means the tag has no binary
 # release. Usage: install_binary <tag> <target>
 INSTALLED=""
 HTTP_CODE=""
 install_binary() {
     local tag="$1" target="$2"
-    local ext="tar.xz" exe="$BIN_NAME"
+    local ext="tar.xz" suffix=""
     if _is_windows_target "$target"; then
-        ext="zip"; exe="$BIN_NAME.exe"
+        ext="zip"; suffix=".exe"
     fi
-    local archive_name="agentsync-$target.$ext"
     local base="https://github.com/$REPO/releases/download/$tag"
     local work
-    work=$(mktemp -d "${TMPDIR:-/tmp}/agentsync-install.XXXXXX")
+    work=$(mktemp -d "${TMPDIR:-/tmp}/exuno-install.XXXXXX")
 
-    local code
-    code=$(fetch "$base/$archive_name" "$work/$archive_name") || code="000"
+    local name archive_name="" code=""
+    for name in "$BIN_NAME" "$LEGACY_NAME"; do
+        archive_name="$name-$target.$ext"
+        code=$(fetch "$base/$archive_name" "$work/$archive_name") || code="000"
+        [[ "$code" == "404" ]] || break
+    done
     if [[ "$code" != "200" ]]; then
         rm -rf "$work"
         HTTP_CODE="$code"
@@ -141,26 +152,28 @@ install_binary() {
         echo "$(_red "Error"): could not unpack $archive_name." >&2
         exit 1
     }
-    local unpacked=""
-    local candidate
-    for candidate in "$work/unpacked/$exe" "$work/unpacked"/*/"$exe"; do
-        if [[ -f "$candidate" ]]; then
-            unpacked="$candidate"
-            break
-        fi
+    local unpacked="" exe candidate
+    for exe in "$BIN_NAME$suffix" "$LEGACY_NAME$suffix"; do
+        for candidate in "$work/unpacked/$exe" "$work/unpacked"/*/"$exe"; do
+            if [[ -f "$candidate" ]]; then
+                unpacked="$candidate"
+                break 2
+            fi
+        done
     done
     if [[ -z "$unpacked" ]]; then
         rm -rf "$work"
-        echo "$(_red "Error"): $archive_name does not contain $exe." >&2
+        echo "$(_red "Error"): $archive_name does not contain $BIN_NAME$suffix." >&2
         exit 1
     fi
 
+    local dest="$INSTALL_DIR/bin/$BIN_NAME$suffix"
     mkdir -p "$INSTALL_DIR/bin"
-    cp "$unpacked" "$INSTALL_DIR/bin/$exe.new"
-    chmod +x "$INSTALL_DIR/bin/$exe.new"
-    mv -f "$INSTALL_DIR/bin/$exe.new" "$INSTALL_DIR/bin/$exe"
+    cp "$unpacked" "$dest.new"
+    chmod +x "$dest.new"
+    mv -f "$dest.new" "$dest"
     rm -rf "$work"
-    INSTALLED="$INSTALL_DIR/bin/$exe"
+    INSTALLED="$dest"
 }
 
 # ─── Source install (tags before the first binary release) ────────────────────
@@ -181,12 +194,12 @@ install_from_source() {
             echo "  Cleaning up previous installation..."
             rm -rf "$INSTALL_DIR"
         fi
-        echo "  Cloning AgentSync..."
+        echo "  Cloning Exuno..."
         git clone --quiet "$REPO_URL" "$INSTALL_DIR"
     fi
     echo "  Pinning to $(_cyan "v$PIN_VERSION")..."
     git -C "$INSTALL_DIR" checkout --quiet --detach "refs/tags/$PIN_VERSION" 2>/dev/null || {
-        echo "$(_red "Error"): No AgentSync release is tagged $PIN_VERSION." >&2
+        echo "$(_red "Error"): No Exuno release is tagged $PIN_VERSION." >&2
         exit 1
     }
 
@@ -199,11 +212,11 @@ install_from_source() {
     INSTALLED="$cli_script"
 }
 
-# ─── Determine where to put the symlink ──────────────────────────────────────
+# ─── Determine where to put the symlinks ─────────────────────────────────────
 resolve_bin_dir() {
-    if [[ -n "${AGENTSYNC_BIN_DIR:-}" ]]; then
-        mkdir -p "$AGENTSYNC_BIN_DIR"
-        echo "$AGENTSYNC_BIN_DIR"
+    if [[ -n "$BIN_DIR_OVERRIDE" ]]; then
+        mkdir -p "$BIN_DIR_OVERRIDE"
+        echo "$BIN_DIR_OVERRIDE"
         return 0
     fi
     # Prefer /usr/local/bin if writable, otherwise ~/.local/bin
@@ -217,10 +230,21 @@ resolve_bin_dir() {
     fi
 }
 
+# Points <link> at $INSTALLED, with sudo when the directory needs it.
+link_installed() {
+    local link="$1"
+    rm -f "$link" 2>/dev/null || true
+    if ! ln -sf "$INSTALLED" "$link" 2>/dev/null; then
+        echo "  Need sudo to create symlink in $(dirname "$link")..."
+        sudo ln -sf "$INSTALLED" "$link"
+    fi
+    echo "  Linked $(_cyan "$link") → $(_dim "$INSTALLED")"
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 main() {
     echo ""
-    _bold "  AgentSync Installer"; echo ""
+    _bold "  Exuno Installer"; echo ""
     echo ""
 
     if ! command -v curl >/dev/null 2>&1; then
@@ -240,13 +264,13 @@ main() {
         echo "  Checking the latest release..."
         tag=$(latest_release_tag) || {
             echo "$(_red "Error"): could not read the latest release from GitHub." >&2
-            echo "  $(_dim "Check your network connection, or pin a release with AGENTSYNC_VERSION=<tag>.")" >&2
+            echo "  $(_dim "Check your network connection, or pin a release with EXUNO_VERSION=<tag>.")" >&2
             exit 1
         }
     fi
 
     # 2. The binary, or the checkout for a tag without one
-    echo "  Downloading agentsync $(_cyan "v$tag") for $target..."
+    echo "  Downloading exuno $(_cyan "v$tag") for $target..."
     if ! install_binary "$tag" "$target"; then
         if [[ "$HTTP_CODE" == "404" ]] && [[ -n "$PIN_VERSION" ]]; then
             echo "  $(_dim "v$tag predates the binary releases; installing from source.")"
@@ -261,24 +285,22 @@ main() {
         fi
     fi
 
-    # 3. Create symlink
+    # 3. Symlinks: exuno, and agentsync for what was written before the rename
     local bin_dir
     bin_dir=$(resolve_bin_dir)
-    local symlink_path="$bin_dir/$BIN_NAME"
+    link_installed "$bin_dir/$BIN_NAME"
+    link_installed "$bin_dir/$LEGACY_NAME"
 
-    # Remove old symlink if exists
-    rm -f "$symlink_path" 2>/dev/null || true
-
-    if ln -sf "$INSTALLED" "$symlink_path" 2>/dev/null; then
-        echo "  Linked $(_cyan "$symlink_path") → $(_dim "$INSTALLED")"
-    else
-        # Try with sudo
-        echo "  Need sudo to create symlink in $bin_dir..."
-        sudo ln -sf "$INSTALLED" "$symlink_path"
-        echo "  Linked $(_cyan "$symlink_path") → $(_dim "$INSTALLED")"
+    # 4. An install an older release left in ~/.agentsync
+    local legacy_left=false
+    if [[ -d "$LEGACY_INSTALL_DIR" ]] && [[ "$LEGACY_INSTALL_DIR" != "$INSTALL_DIR" ]]; then
+        if [[ -f "$LEGACY_INSTALL_DIR/.update_cache" ]] && [[ ! -e "$INSTALL_DIR/.update_cache" ]]; then
+            mv "$LEGACY_INSTALL_DIR/.update_cache" "$INSTALL_DIR/.update_cache"
+        fi
+        legacy_left=true
     fi
 
-    # 4. Shell config: AGENTSYNC_HOME for a source install, PATH for ~/.local/bin
+    # 5. Shell config: AGENTSYNC_HOME for a source install, PATH for ~/.local/bin
     local shell_config=""
     if [[ -f "$HOME/.zshrc" ]]; then
         shell_config="$HOME/.zshrc"
@@ -300,7 +322,7 @@ main() {
         if [[ "$INSTALLED" == *"/bin/agentsync.sh" ]] && ! grep -qF "AGENTSYNC_HOME" "$shell_config" 2>/dev/null; then
             {
                 echo ""
-                echo "# AgentSync"
+                echo "# Exuno"
                 echo "export AGENTSYNC_HOME=\"$INSTALL_DIR\""
             } >> "$shell_config"
             echo "  Added AGENTSYNC_HOME to $(_dim "$shell_config")"
@@ -314,11 +336,11 @@ main() {
         fi
     fi
 
-    # 5. Done!
+    # 6. Done!
     echo ""
-    echo "  $(_green "Installed successfully!") agentsync v$tag"
+    echo "  $(_green "Installed successfully!") exuno v$tag"
     echo ""
-    echo "  Run $(_cyan "agentsync help") to get started."
+    echo "  Run $(_cyan "exuno help") to get started."
     echo ""
 
     if [[ -n "$shell_config" ]] && { [[ "$needs_path_update" == "true" ]] || [[ "$INSTALLED" == *"/bin/agentsync.sh" ]]; }; then
@@ -327,14 +349,20 @@ main() {
         echo ""
     fi
 
+    if [[ "$legacy_left" == "true" ]]; then
+        echo "  The previous install in $LEGACY_INSTALL_DIR is no longer used. Remove it with:"
+        _dim "    rm -rf $LEGACY_INSTALL_DIR"; echo ""
+        echo ""
+    fi
+
     echo "  Quick start:"
     echo "    cd your-project"
-    echo "    $(_cyan "agentsync init")"
-    echo "    $(_cyan "agentsync sync")"
+    echo "    $(_cyan "exuno init")"
+    echo "    $(_cyan "exuno sync")"
     echo ""
 
     echo "  To uninstall:"
-    _dim "    rm -rf $INSTALL_DIR && rm -f $symlink_path"; echo ""
+    _dim "    rm -rf $INSTALL_DIR && rm -f $bin_dir/$BIN_NAME $bin_dir/$LEGACY_NAME"; echo ""
     echo ""
 }
 
