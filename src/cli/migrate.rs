@@ -873,7 +873,7 @@ fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<
     run.say(&format!("  {}:\n", style.bold("Renamed to Exuno")))?;
     for leftover in renames {
         let line = leftover.describe(&root);
-        if leftover.blocked_by.is_some() || leftover.kind == Kind::HookBlock {
+        if !leftover.is_automatic() {
             run.say(&format!("{}          {line}\n", style.yellow("  keep")))?;
         } else if apply {
             leftovers::apply(&root, leftover)?;

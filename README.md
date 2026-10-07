@@ -158,7 +158,7 @@ Exuno was called AgentSync up to 0.44. Everything keeps working until 1.0: the `
 
 ```bash
 exuno migrate --legacy        # dry-run: lists every file, key, and skill still named agentsync
-exuno migrate --apply --yes   # renames them and records format r3
+exuno migrate --apply --yes   # renames them, re-pins a pin older than 0.45.0, and records format r3
 exuno setup-hooks             # rewrites git hooks that still run the agentsync block
 ```
 

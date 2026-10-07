@@ -319,10 +319,10 @@ impl Doctor<'_> {
         let style = self.style;
         for leftover in leftovers::scan(root) {
             let line = leftover.describe(root);
-            if leftover.blocked_by.is_some() || leftover.kind == leftovers::Kind::HookBlock {
-                self.warn(&line)?;
-            } else {
+            if leftover.is_automatic() {
                 self.warn(&format!("{line} — run {}", style.cyan("exuno migrate")))?;
+            } else {
+                self.warn(&line)?;
             }
         }
         Ok(())

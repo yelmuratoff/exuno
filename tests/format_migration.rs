@@ -257,6 +257,45 @@ fn format_r3_previews_every_agentsync_leftover_without_touching_it() {
 }
 
 #[test]
+fn format_r3_apply_repins_a_project_pinned_before_the_rename() {
+    let project = seed_r2_agentsync_project();
+    let config = project.read(".ai/agent_sync.yaml");
+    let pin_line = config
+        .lines()
+        .find(|line| line.starts_with("agentsync_version:"))
+        .unwrap();
+    project.write(
+        ".ai/agent_sync.yaml",
+        &config.replace(pin_line, "agentsync_version: \"0.44.2\""),
+    );
+    project.write(
+        ".github/workflows/agentsync-check.yml",
+        "      - name: Install AgentSync 0.44.2\n        run: curl -fsSL x | AGENTSYNC_VERSION=0.44.2 bash\n      - run: agentsync check\n",
+    );
+    let engine = env!("CARGO_PKG_VERSION");
+
+    project
+        .exuno()
+        .args(["migrate", "--apply", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "renamed       pin → {engine} in .ai/exuno.yaml — releases before 0.45.0 cannot read these names\n"
+        )));
+    assert!(
+        project
+            .read(".ai/exuno.yaml")
+            .contains(&format!("\nexuno_version: \"{engine}\"\n"))
+    );
+    assert_eq!(
+        project.read(".github/workflows/exuno-check.yml"),
+        format!(
+            "      - name: Install Exuno {engine}\n        run: curl -fsSL x | EXUNO_VERSION={engine} bash\n      - run: exuno check\n"
+        )
+    );
+}
+
+#[test]
 fn format_r3_apply_renames_every_leftover_and_sync_ships_one_engine_skill() {
     let project = seed_r2_agentsync_project();
     project

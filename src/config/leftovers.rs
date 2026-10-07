@@ -1,9 +1,11 @@
-//! What a project still names `agentsync`, and the rename to `exuno` for each.
+//! What a project still names `agentsync`, or pins to a release that reads
+//! only those names, and the rename to `exuno` for each.
 
 use std::path::{Path, PathBuf};
 
 use crate::Error;
 use crate::config::{names, yaml_edit};
+use crate::engine::skill_tree::MAX_CATEGORY_DEPTH;
 use crate::paths::DiskText;
 
 use names::{
@@ -13,12 +15,16 @@ use names::{
 
 const METADATA_KEYS: [&str; 3] = ["use-when", "not-for", "requirements"];
 const HOOKS: [&str; 3] = ["pre-commit", "post-merge", "post-checkout"];
+const FIRST_RELEASE: (u64, u64, u64) = (0, 45, 0);
+const CI_PIN: &str = "EXUNO_VERSION=";
+const CI_INSTALL_STEP: &str = "Install Exuno ";
 
 /// The kind of thing that still carries the old name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     ConfigFile,
     VersionKey,
+    OldPin,
     SkillMetadata,
     SkillDir,
     CiWorkflow,
@@ -43,6 +49,12 @@ impl Leftover {
         }
     }
 
+    /// Whether `apply` fixes it: a blocked rename and a git hook block are the
+    /// user's to fix.
+    pub fn is_automatic(&self) -> bool {
+        self.blocked_by.is_none() && self.kind != Kind::HookBlock
+    }
+
     /// The rename as one line, paths relative to `root`.
     pub fn describe(&self, root: &Path) -> String {
         let shown = |path: &Path| {
@@ -60,6 +72,10 @@ impl Leftover {
         match self.kind {
             Kind::ConfigFile => format!("{path} → {CONFIG}"),
             Kind::VersionKey => format!("{LEGACY_KEY} → {KEY} in {path}"),
+            Kind::OldPin => format!(
+                "pin → {} in {path} — releases before 0.45.0 cannot read these names",
+                crate::engine_version()
+            ),
             Kind::SkillMetadata => {
                 format!("metadata.{LEGACY_SKILL}-* → metadata.{SKILL}-* in {path}")
             }
@@ -87,15 +103,20 @@ pub fn scan(root: &Path) -> Vec<Leftover> {
         }
     }
     if let Some(resolved) = resolved_config(root)
-        && read(&resolved).is_some_and(|text| pins_legacy_key(&text))
+        && let Some(text) = read(&resolved)
+        && pins_legacy_key(&text)
     {
         let edited = if moving { config } else { resolved };
-        found.push(Leftover::new(Kind::VersionKey, edited, None));
+        found.push(Leftover::new(Kind::VersionKey, edited.clone(), None));
+        if predates_rename(&names::pinned_version(&text)) {
+            found.push(Leftover::new(Kind::OldPin, edited, None));
+        }
     }
     let mut skill_files = Vec::new();
     let mut skill_dirs = Vec::new();
     walk_skills(
         &root.join(".ai/src/skills"),
+        0,
         &mut skill_files,
         &mut skill_dirs,
     );
@@ -125,9 +146,9 @@ pub fn scan(root: &Path) -> Vec<Leftover> {
     found
 }
 
-/// Renames one leftover; a blocked one and a git hook block are left alone.
+/// Renames one leftover; one that is not automatic is left alone.
 pub fn apply(root: &Path, leftover: &Leftover) -> Result<(), Error> {
-    if leftover.blocked_by.is_some() {
+    if !leftover.is_automatic() {
         return Ok(());
     }
     match leftover.kind {
@@ -143,24 +164,29 @@ pub fn apply(root: &Path, leftover: &Leftover) -> Result<(), Error> {
             let text = read_or_fail(&config)?;
             write(&config, &without_legacy_key(&text))
         }
+        Kind::OldPin => {
+            let Some(config) = resolved_config(root) else {
+                return Ok(());
+            };
+            let text = read_or_fail(&config)?;
+            write(&config, &with_current_pin(&text))
+        }
         Kind::SkillMetadata => {
             let text = read_or_fail(&leftover.path)?;
             write(&leftover.path, &with_new_metadata(&text))
         }
         Kind::SkillDir => {
-            let target = renamed_dir(&leftover.path);
-            rename(&leftover.path, &target)?;
-            let skill_md = target.join("SKILL.md");
-            match read(&skill_md) {
-                Some(text) => write(&skill_md, &with_new_skill_name(&text)),
-                None => Ok(()),
+            let skill_md = leftover.path.join("SKILL.md");
+            if let Some(text) = read(&skill_md) {
+                write(&skill_md, &with_new_skill_name(&text))?;
             }
+            rename(&leftover.path, &renamed_dir(&leftover.path))
         }
         Kind::CiWorkflow => {
-            let text = read_or_fail(&leftover.path)?;
             let ci = root.join(CI_WORKFLOW);
-            write(&ci, &with_new_ci_names(&text))?;
-            std::fs::remove_file(&leftover.path).map_err(|e| Error::io(&leftover.path, e))
+            rename(&leftover.path, &ci)?;
+            let text = read_or_fail(&ci)?;
+            write(&ci, &with_current_ci_pin(&with_new_ci_names(&text)))
         }
         Kind::HookBlock => Ok(()),
     }
@@ -220,11 +246,67 @@ fn with_new_metadata(text: &str) -> String {
         .collect()
 }
 
-fn with_new_skill_name(text: &str) -> String {
+fn predates_rename(pin: &str) -> bool {
+    let pin = pin.trim_matches(['"', '\'']).trim_start_matches('v');
+    let mut parts = pin.split('.').map(|part| part.parse::<u64>().ok());
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(Some(major)), Some(Some(minor)), Some(Some(patch))) => {
+            (major, minor, patch) < FIRST_RELEASE
+        }
+        _ => false,
+    }
+}
+
+fn with_current_pin(text: &str) -> String {
+    let engine = crate::engine_version();
     text.split_inclusive('\n')
         .map(|line| {
-            if line.trim_end() == format!("name: {LEGACY_SKILL}") {
-                line.replacen(LEGACY_SKILL, SKILL, 1)
+            match names::VERSION_KEYS
+                .iter()
+                .find(|key| line.starts_with(&format!("{key}:")))
+            {
+                Some(key) => format!("{key}: \"{engine}\"{}", line_end(line)),
+                None => line.to_string(),
+            }
+        })
+        .collect()
+}
+
+fn with_current_ci_pin(text: &str) -> String {
+    let engine = crate::engine_version();
+    let mut old: Vec<&str> = text
+        .match_indices(CI_PIN)
+        .filter_map(|(at, _)| text[at + CI_PIN.len()..].split_whitespace().next())
+        .filter(|pin| predates_rename(pin))
+        .collect();
+    old.dedup();
+    old.iter().fold(text.to_string(), |text, pin| {
+        text.replace(&format!("{CI_PIN}{pin}"), &format!("{CI_PIN}{engine}"))
+            .replace(
+                &format!("{CI_INSTALL_STEP}{pin}"),
+                &format!("{CI_INSTALL_STEP}{engine}"),
+            )
+    })
+}
+
+fn line_end(line: &str) -> &str {
+    &line[line.trim_end().len()..]
+}
+
+fn with_new_skill_name(text: &str) -> String {
+    let mut fences = 0;
+    text.split_inclusive('\n')
+        .map(|line| {
+            if line.trim_end() == "---" && fences < 2 {
+                fences += 1;
+                return line.to_string();
+            }
+            let value = line
+                .trim_end()
+                .strip_prefix("name:")
+                .map(|value| value.trim().trim_matches(['"', '\'']));
+            if fences == 1 && value == Some(LEGACY_SKILL) {
+                format!("name: {SKILL}{}", line_end(line))
             } else {
                 line.to_string()
             }
@@ -233,32 +315,64 @@ fn with_new_skill_name(text: &str) -> String {
 }
 
 fn with_new_ci_names(text: &str) -> String {
-    text.replace("agentsync check", "exuno check")
-        .replace("agentsync sync", "exuno sync")
-        .replace("AGENTSYNC_VERSION=", "EXUNO_VERSION=")
-        .replace("yelmuratoff/agent_sync/", "yelmuratoff/exuno/")
-        .replace("AgentSync", "Exuno")
+    [
+        ("agentsync check", "exuno check"),
+        ("agentsync sync", "exuno sync"),
+        ("AGENTSYNC_VERSION=", CI_PIN),
+        ("yelmuratoff/agent_sync/", "yelmuratoff/exuno/"),
+        ("AgentSync", "Exuno"),
+    ]
+    .iter()
+    .fold(text.to_string(), |text, (from, to)| {
+        replace_word(&text, from, to)
+    })
 }
 
-/// Every `SKILL.md` below `dir`, and every directory named for the legacy
-/// engine skill, both sorted; symlinks are not followed.
-fn walk_skills(dir: &Path, files: &mut Vec<PathBuf>, dirs: &mut Vec<PathBuf>) {
+fn replace_word(text: &str, from: &str, to: &str) -> String {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
+    let starts_word = from.chars().next().is_some_and(is_word);
+    let ends_word = from.chars().next_back().is_some_and(is_word);
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (at, _) in text.match_indices(from) {
+        let end = at + from.len();
+        let joined_before = starts_word && text[..at].chars().next_back().is_some_and(is_word);
+        let joined_after = ends_word && text[end..].chars().next().is_some_and(is_word);
+        if !joined_before && !joined_after {
+            out.push_str(&text[last..at]);
+            out.push_str(to);
+            last = end;
+        }
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// Walks categories only, as `skill_tree::discover` does, so a skill's own
+/// directories are never renamed.
+fn walk_skills(dir: &Path, depth: usize, files: &mut Vec<PathBuf>, dirs: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     let mut entries: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
     entries.sort();
     for path in entries {
-        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+        let is_dir = std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_dir());
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        if meta.is_dir() {
-            if path.file_name().is_some_and(|name| name == LEGACY_SKILL) {
-                dirs.push(path.clone());
-            }
-            walk_skills(&path, files, dirs);
-        } else if meta.is_file() && path.file_name().is_some_and(|name| name == "SKILL.md") {
-            files.push(path);
+        if !is_dir || name.starts_with('.') {
+            continue;
+        }
+        let skill_md = path.join("SKILL.md");
+        let is_skill = skill_md.is_file();
+        if is_skill {
+            files.push(skill_md);
+        }
+        if name == LEGACY_SKILL {
+            dirs.push(path);
+        } else if !is_skill && depth < MAX_CATEGORY_DEPTH {
+            walk_skills(&path, depth + 1, files, dirs);
         }
     }
 }
@@ -360,6 +474,7 @@ mod tests {
             [
                 Kind::ConfigFile,
                 Kind::VersionKey,
+                Kind::OldPin,
                 Kind::SkillMetadata,
                 Kind::SkillMetadata,
                 Kind::SkillDir,
@@ -371,9 +486,10 @@ mod tests {
         assert_eq!(found[1].path, root.join(".ai/exuno.yaml"));
 
         apply_all(root);
+        let engine = crate::engine_version();
         assert_eq!(
             read(root, ".ai/exuno.yaml"),
-            "exuno_version: \"0.44.2\"\nformat: 2\n"
+            format!("exuno_version: \"{engine}\"\nformat: 2\n")
         );
         assert!(!root.join(".ai/agent_sync.yaml").exists());
         assert_eq!(
@@ -387,7 +503,9 @@ mod tests {
         );
         assert_eq!(
             read(root, ".github/workflows/exuno-check.yml"),
-            "name: Exuno\n      - name: Install Exuno 0.44.2\n        run: curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | EXUNO_VERSION=0.44.2 bash\n        run: exuno check\n"
+            format!(
+                "name: Exuno\n      - name: Install Exuno {engine}\n        run: curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | EXUNO_VERSION={engine} bash\n        run: exuno check\n"
+            )
         );
         assert!(read(root, ".git/hooks/post-merge").contains("AGENTSYNC AUTO SYNC"));
         assert_eq!(kinds(&scan(root)), [Kind::HookBlock]);
@@ -431,6 +549,127 @@ mod tests {
             "tools:\n  enabled: [claude]\n"
         );
         assert!(root.join(".ai/src/skills/agentsync/SKILL.md").is_file());
+    }
+
+    #[test]
+    fn a_skill_is_not_searched_for_legacy_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            ".ai/src/skills/review/SKILL.md",
+            "---\nname: review\n---\n",
+        );
+        write(root, ".ai/src/skills/review/refs/agentsync/x.md", "x\n");
+        write(
+            root,
+            ".ai/src/skills/agentsync/SKILL.md",
+            "---\nname: agentsync\n---\n",
+        );
+        write(root, ".ai/src/skills/agentsync/agentsync/y.md", "y\n");
+        write(root, ".ai/src/skills/meta/agentsync/references/z.md", "z\n");
+
+        let found = scan(root);
+        let dirs: Vec<&Path> = found
+            .iter()
+            .map(|leftover| leftover.path.as_path())
+            .collect();
+        assert_eq!(
+            dirs,
+            [
+                root.join(".ai/src/skills/agentsync").as_path(),
+                root.join(".ai/src/skills/meta/agentsync").as_path(),
+            ]
+        );
+        apply_all(root);
+        assert!(
+            root.join(".ai/src/skills/review/refs/agentsync/x.md")
+                .is_file()
+        );
+        assert!(root.join(".ai/src/skills/exuno/agentsync/y.md").is_file());
+        assert!(
+            root.join(".ai/src/skills/meta/exuno/references/z.md")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn a_pin_older_than_the_rename_moves_to_the_running_engine() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            ".ai/agent_sync.yaml",
+            "agentsync_version: \"0.44.2\"\n",
+        );
+        write(
+            root,
+            ".github/workflows/agentsync-check.yml",
+            "      - name: Install AgentSync 0.44.2\n        run: curl -fsSL x | AGENTSYNC_VERSION=0.44.2 bash\n",
+        );
+        assert!(kinds(&scan(root)).contains(&Kind::OldPin));
+
+        apply_all(root);
+        let engine = crate::engine_version();
+        assert_eq!(
+            read(root, ".ai/exuno.yaml"),
+            format!("exuno_version: \"{engine}\"\n")
+        );
+        assert_eq!(
+            read(root, ".github/workflows/exuno-check.yml"),
+            format!(
+                "      - name: Install Exuno {engine}\n        run: curl -fsSL x | EXUNO_VERSION={engine} bash\n"
+            )
+        );
+        assert!(scan(root).is_empty());
+    }
+
+    #[test]
+    fn a_pin_from_the_rename_on_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            dir.path(),
+            ".ai/agent_sync.yaml",
+            "agentsync_version: \"0.45.0\"\n",
+        );
+        assert!(!kinds(&scan(dir.path())).contains(&Kind::OldPin));
+        apply_all(dir.path());
+        assert_eq!(
+            read(dir.path(), ".ai/exuno.yaml"),
+            "exuno_version: \"0.45.0\"\n"
+        );
+    }
+
+    #[test]
+    fn the_ci_rewrite_leaves_other_words_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            ".github/workflows/agentsync-check.yml",
+            "name: AgentSync\n        run: agentsync check\n        run: myagentsync check && notify AgentSyncBot acme/AgentSync-dashboard\n",
+        );
+        apply_all(root);
+        assert_eq!(
+            read(root, ".github/workflows/exuno-check.yml"),
+            "name: Exuno\n        run: exuno check\n        run: myagentsync check && notify AgentSyncBot acme/AgentSync-dashboard\n"
+        );
+    }
+
+    #[test]
+    fn only_the_frontmatter_name_is_renamed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            ".ai/src/skills/agentsync/SKILL.md",
+            "---\nname: \"agentsync\"\n---\nExample:\n\nname: agentsync\n",
+        );
+        apply_all(root);
+        assert_eq!(
+            read(root, ".ai/src/skills/exuno/SKILL.md"),
+            "---\nname: exuno\n---\nExample:\n\nname: agentsync\n"
+        );
     }
 
     #[test]

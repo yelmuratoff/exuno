@@ -6,7 +6,7 @@
 
 - **Rename:** AgentSync is now Exuno — the `exuno` command, the `yelmuratoff/exuno` repository, and installs in `~/.exuno`; the `agentsync` command, `AGENTSYNC_*` variables, `.ai/agent_sync.yaml`, `agentsync_version`, and `metadata.agentsync-*` keys keep working until 1.0.
 - **New projects:** `init` and `enable` write `.ai/exuno.yaml` with `exuno_version`, which AgentSync 0.44 and earlier cannot read.
-- **Project format r3:** every command reminds a project below r3, and `exuno migrate --apply` renames what still carries the old name.
+- **Project format r3:** every command reminds a project below r3, and `exuno migrate --apply` renames what still carries the old name and re-pins a project, and its CI gate, pinned before 0.45.0.
 - **Bundled skill:** ships as `exuno`; a project copy under `skills/agentsync/` stops replacing it until `exuno migrate` moves it.
 
 ### Added
