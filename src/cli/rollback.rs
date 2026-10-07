@@ -680,9 +680,7 @@ mod tests {
         );
         assert_eq!(
             String::from_utf8(err).unwrap(),
-            format!(
-                "Error: EXUNO_CONFIG_PATH is set but file not found: {root}/missing.yaml\n"
-            )
+            format!("Error: EXUNO_CONFIG_PATH is set but file not found: {root}/missing.yaml\n")
         );
     }
 }
