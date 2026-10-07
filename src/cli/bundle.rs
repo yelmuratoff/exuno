@@ -21,7 +21,6 @@ const DIR_TARGETS: [&str; 8] = [
 const CONFIG: &str = names::CONFIG;
 const CONFIG_LEGACY: &str = "agent_sync.yaml";
 
-/// The first config `dir` resolves, relative to `dir`.
 fn present_config(dir: &Path) -> Option<&'static str> {
     names::CONFIG_CANDIDATES
         .into_iter()

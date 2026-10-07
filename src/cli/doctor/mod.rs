@@ -315,7 +315,6 @@ impl Doctor<'_> {
         Ok(true)
     }
 
-    /// One warning per thing that still carries the `agentsync` name.
     fn check_leftovers(&mut self, root: &Path) -> Result<(), Error> {
         let style = self.style;
         for leftover in leftovers::scan(root) {

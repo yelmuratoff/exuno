@@ -30,7 +30,6 @@ fn pins(key: &str, line: &str) -> bool {
     line.starts_with(&format!("{key}:"))
 }
 
-/// The version key a config already pins with, new spelling first.
 fn present_key(text: &str) -> Option<&'static str> {
     names::VERSION_KEYS
         .into_iter()
