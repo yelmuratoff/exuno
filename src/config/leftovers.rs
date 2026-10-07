@@ -15,7 +15,8 @@ use names::{
 
 const METADATA_KEYS: [&str; 3] = ["use-when", "not-for", "requirements"];
 const HOOKS: [&str; 3] = ["pre-commit", "post-merge", "post-checkout"];
-const FIRST_RELEASE: &str = "0.45.0";
+/// The first release that reads the exuno names.
+pub const FIRST_RELEASE: &str = "0.45.0";
 const CI_PIN: &str = "EXUNO_VERSION=";
 const CI_INSTALL_STEP: &str = "Install Exuno ";
 

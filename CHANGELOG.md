@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Migrate:** moving the config to `.ai/exuno.yaml` now warns that releases before 0.45.0 cannot read it, so the team updates before the move is committed.
+
 ## 0.45.0
 
 ### Breaking

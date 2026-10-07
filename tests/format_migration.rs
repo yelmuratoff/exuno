@@ -250,7 +250,10 @@ fn format_r3_previews_every_agentsync_leftover_without_touching_it() {
         .stdout(predicate::str::contains(
             "would rename  .github/workflows/agentsync-check.yml → .github/workflows/exuno-check.yml\n",
         ))
-        .stdout(predicate::str::contains("r2 → r3"));
+        .stdout(predicate::str::contains("r2 → r3"))
+        .stdout(predicate::str::contains(
+            "  Releases before 0.45.0 cannot read .ai/exuno.yaml: update every machine and CI to 0.45.0 before you commit this.\n",
+        ));
     assert!(project.exists(".ai/agent_sync.yaml"));
     assert!(project.exists(".ai/src/skills/agentsync/SKILL.md"));
     assert!(project.exists(".github/workflows/agentsync-check.yml"));
