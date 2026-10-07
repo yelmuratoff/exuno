@@ -73,8 +73,8 @@ pub fn format_notice(project_dir: &Path, style: &Style) -> String {
     }
     out.push_str(&format!(
         "  Preview it with {}, apply with {}\n\n",
-        style.cyan("agentsync migrate"),
-        style.cyan("agentsync migrate --apply")
+        style.cyan("exuno migrate"),
+        style.cyan("exuno migrate --apply")
     ));
     out
 }
@@ -102,7 +102,7 @@ pub fn update_banner(cache: &str, version: &str, style: &Style) -> String {
         style.yellow("Update available"),
         style.dim(&format!("v{version}")),
         style.green(&format!("v{latest}")),
-        style.cyan("agentsync update")
+        style.cyan("exuno update")
     )
 }
 
@@ -177,7 +177,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             format_notice(dir.path(), &Style::plain()),
-            "\n  This project's agent config is a migration behind (format r1 → r2)\n    r2  The agentsync skill is engine-owned now. A copy under .ai/src/skills/agentsync/ shadows it, so engine upgrades never reach your agents.\n  Preview it with agentsync migrate, apply with agentsync migrate --apply\n\n"
+            "\n  This project's agent config is a migration behind (format r1 → r2)\n    r2  The agentsync skill is engine-owned now. A copy under .ai/src/skills/agentsync/ shadows it, so engine upgrades never reach your agents.\n  Preview it with exuno migrate, apply with exuno migrate --apply\n\n"
         );
         std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "format: 2\n").unwrap();
         assert_eq!(format_notice(dir.path(), &Style::plain()), "");
@@ -191,7 +191,7 @@ mod tests {
         assert_eq!(update_banner("0.35.2\n", "0.36.0", &style), "");
         assert_eq!(
             update_banner("  0.37.0\nignored\n", "0.36.0", &style),
-            "\n  ╭──────────────────────────────────────────────────────╮\n  │  Update available: v0.36.0 → v0.37.0              \n  │  Run: agentsync update                                \n  ╰──────────────────────────────────────────────────────╯\n\n"
+            "\n  ╭──────────────────────────────────────────────────────╮\n  │  Update available: v0.36.0 → v0.37.0              \n  │  Run: exuno update                                \n  ╰──────────────────────────────────────────────────────╯\n\n"
         );
         assert!(
             update_banner("0.37.0\n", "0.36.0", &Style::colored()).contains(

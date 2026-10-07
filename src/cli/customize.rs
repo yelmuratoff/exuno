@@ -1,4 +1,4 @@
-//! `agentsync customize`: `cmd_customize` of `lib/helpers/customize.sh`, which
+//! `exuno customize`: `cmd_customize` of `lib/helpers/customize.sh`, which
 //! scaffolds a tool override or copies a shipped payload into the override directory.
 
 use crate::paths::DiskText;
@@ -38,7 +38,7 @@ pub const HELP: Help = Help {
             entries: &[
                 (
                     "--full",
-                    "Copy the entire base template into the override. Use when you\nwant to see every available field at once; trim what you don't\nneed with agentsync simplify",
+                    "Copy the entire base template into the override. Use when you\nwant to see every available field at once; trim what you don't\nneed with exuno simplify",
                 ),
                 (
                     "-y, --yes",
@@ -50,8 +50,8 @@ pub const HELP: Help = Help {
         Section {
             title: "SEE ALSO",
             entries: &[
-                ("agentsync show <slug>", "Effective config for a tool"),
-                ("agentsync diff <slug>", "User vs base diff"),
+                ("exuno show <slug>", "Effective config for a tool"),
+                ("exuno diff <slug>", "User vs base diff"),
             ],
         },
     ],
@@ -203,7 +203,7 @@ impl Customize<'_> {
                 format!(
                     "{}: {shown}\n\nEdit it directly, or remove it to start over.\nSee effective config: {}\n",
                     style.yellow("Override already exists"),
-                    style.cyan(&format!("agentsync show {slug}"))
+                    style.cyan(&format!("exuno show {slug}"))
                 )
                 .as_bytes(),
             )?;
@@ -225,10 +225,10 @@ impl Customize<'_> {
             )?;
             return Ok(0);
         }
-        let mut stub = format!("# {display} — custom override for AgentSync.\n");
+        let mut stub = format!("# {display} — custom override for Exuno.\n");
         if base.is_some() {
             stub.push_str(&format!(
-                "#\n# Only fields you write here are \"owned\" by you.\n# Everything else inherits from the base template and receives updates.\n#\n# See base fields:          agentsync show {slug} --base\n# See effective config:     agentsync show {slug}\n# See your vs base diff:    agentsync diff {slug}\n"
+                "#\n# Only fields you write here are \"owned\" by you.\n# Everything else inherits from the base template and receives updates.\n#\n# See base fields:          exuno show {slug} --base\n# See effective config:     exuno show {slug}\n# See your vs base diff:    exuno diff {slug}\n"
             ));
         } else {
             stub.push_str("#\n# This is a custom tool — no base template exists.\n# Define the full config here, then add to tools.enabled in agent_sync.yaml.\n");
@@ -240,7 +240,7 @@ impl Customize<'_> {
             format!(
                 "\n{} {shown}\n\nAdd only fields you want to change. Everything else inherits from base.\nSee overridable fields: {}\n\n",
                 style.green("Created empty override:"),
-                style.cyan(&format!("agentsync show {slug} --base"))
+                style.cyan(&format!("exuno show {slug} --base"))
             )
             .as_bytes(),
         )?;
@@ -265,7 +265,7 @@ impl Customize<'_> {
                 format!(
                     "{}: No base {resource} template for '{slug}'.\n\nEither '{slug}' is unknown, or this tool doesn't ship a {resource} template.\nRun {} to see available tools.\n",
                     style.red("Error"),
-                    style.cyan("agentsync list")
+                    style.cyan("exuno list")
                 )
                 .as_bytes(),
             )?;
@@ -279,8 +279,8 @@ impl Customize<'_> {
                 format!(
                     "{}: {shown}\n\nEdit it directly, or remove it to start over.\nSee effective source:  {}\nSee your vs base diff: {}\n",
                     style.yellow("Override already exists"),
-                    style.cyan(&format!("agentsync show {slug} {resource}")),
-                    style.cyan(&format!("agentsync diff {slug} {resource}"))
+                    style.cyan(&format!("exuno show {slug} {resource}")),
+                    style.cyan(&format!("exuno diff {slug} {resource}"))
                 )
                 .as_bytes(),
             )?;
@@ -302,7 +302,7 @@ impl Customize<'_> {
                 "\n{} {shown}\n\n{}\n\nEdit this file to customize. Remove it to fall back to the base template.\nSee diff vs base: {}\n\n",
                 style.green(&format!("Created {resource} override:")),
                 style.dim(&format!("  source (base): {}", base.shown())),
-                style.cyan(&format!("agentsync diff {slug} {resource}"))
+                style.cyan(&format!("exuno diff {slug} {resource}"))
             )
             .as_bytes(),
         )?;
@@ -435,18 +435,18 @@ mod tests {
         assert_eq!(
             created.out,
             format!(
-                "\nCreated empty override: {root}/.ai/src/tools/claude.yaml\n\nAdd only fields you want to change. Everything else inherits from base.\nSee overridable fields: agentsync show claude --base\n\n"
+                "\nCreated empty override: {root}/.ai/src/tools/claude.yaml\n\nAdd only fields you want to change. Everything else inherits from base.\nSee overridable fields: exuno show claude --base\n\n"
             )
         );
         assert!(
             std::fs::read_to_string(format!("{root}/.ai/src/tools/claude.yaml"))
                 .unwrap()
-                .starts_with("# Claude Code — custom override for AgentSync.\n#\n# Only fields")
+                .starts_with("# Claude Code — custom override for Exuno.\n#\n# Only fields")
         );
         assert_eq!(
             call(&root, &["claude"]).out,
             format!(
-                "Override already exists: {root}/.ai/src/tools/claude.yaml\n\nEdit it directly, or remove it to start over.\nSee effective config: agentsync show claude\n"
+                "Override already exists: {root}/.ai/src/tools/claude.yaml\n\nEdit it directly, or remove it to start over.\nSee effective config: exuno show claude\n"
             )
         );
 
@@ -466,13 +466,13 @@ mod tests {
         assert_eq!(usage.status, 1);
         assert_eq!(
             usage.err,
-            "Error: agentsync customize <slug> [<resource>] [--full] [--yes]\n  <resource>: tool hooks mcp settings (default: tool)\n"
+            "Error: exuno customize <slug> [<resource>] [--full] [--yes]\n  <resource>: tool hooks mcp settings (default: tool)\n"
         );
         let help = call(&root, &["--help"]);
         assert_eq!((help.status, help.err.as_str()), (0, ""));
         assert_eq!(
             help.out,
-            "\n  agentsync customize — scaffold a per-tool override\n\n  USAGE\n    agentsync customize <slug> [<resource>] [--full] [--yes]\n\n  DESCRIPTION\n    Scaffold a per-tool override at .ai/src/tools/<slug>.yaml so you can\n    change fields without forking the whole base template. Empty by default:\n    write only the keys you want to win over base; everything else inherits.\n\n  ARGUMENTS\n    <slug>       Tool to override\n    <resource>   Payload override scaffold: tool, hooks, mcp, settings\n                 (default: tool, the YAML override itself)\n\n  OPTIONS\n    --full       Copy the entire base template into the override. Use when you\n                 want to see every available field at once; trim what you don't\n                 need with agentsync simplify\n    -y, --yes    Overwrite an existing override without prompting\n    -h, --help   Show this help\n\n  SEE ALSO\n    agentsync show <slug>   Effective config for a tool\n    agentsync diff <slug>   User vs base diff\n\n  EXAMPLES\n    agentsync customize cursor\n    agentsync customize cursor --full\n    agentsync customize claude hooks --yes\n\n"
+            "\n  exuno customize — scaffold a per-tool override\n\n  USAGE\n    exuno customize <slug> [<resource>] [--full] [--yes]\n\n  DESCRIPTION\n    Scaffold a per-tool override at .ai/src/tools/<slug>.yaml so you can\n    change fields without forking the whole base template. Empty by default:\n    write only the keys you want to win over base; everything else inherits.\n\n  ARGUMENTS\n    <slug>       Tool to override\n    <resource>   Payload override scaffold: tool, hooks, mcp, settings\n                 (default: tool, the YAML override itself)\n\n  OPTIONS\n    --full       Copy the entire base template into the override. Use when you\n                 want to see every available field at once; trim what you don't\n                 need with exuno simplify\n    -y, --yes    Overwrite an existing override without prompting\n    -h, --help   Show this help\n\n  SEE ALSO\n    exuno show <slug>   Effective config for a tool\n    exuno diff <slug>   User vs base diff\n\n  EXAMPLES\n    exuno customize cursor\n    exuno customize cursor --full\n    exuno customize claude hooks --yes\n\n"
         );
     }
 
@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(
             moved.out,
             format!(
-                "Migrated legacy override: .ai/src/mcp/claude.json → .ai/src/tools/claude/mcp.json\nOverride already exists: {root}/.ai/src/tools/claude/mcp.json\n\nEdit it directly, or remove it to start over.\nSee effective source:  agentsync show claude mcp\nSee your vs base diff: agentsync diff claude mcp\n"
+                "Migrated legacy override: .ai/src/mcp/claude.json → .ai/src/tools/claude/mcp.json\nOverride already exists: {root}/.ai/src/tools/claude/mcp.json\n\nEdit it directly, or remove it to start over.\nSee effective source:  exuno show claude mcp\nSee your vs base diff: exuno diff claude mcp\n"
             )
         );
         assert_eq!(

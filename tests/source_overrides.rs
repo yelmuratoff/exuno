@@ -218,7 +218,7 @@ fn isolated_check_reads_the_version_pin_from_an_external_config() {
         .arg("check")
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("pins agentsync 0.0.0"))
+        .stderr(predicate::str::contains("pins exuno 0.0.0"))
         .stdout(predicate::str::contains("Sync script failed during check").not());
 }
 

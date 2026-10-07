@@ -197,7 +197,7 @@ fn switching_from_keys_to_file_needs_force() {
         .stderr(predicate::str::contains(
             ".codex/config.toml is owned by key; owning the whole file drops what OpenAI Codex wrote there",
         ))
-        .stderr(predicate::str::contains("agentsync sync --force"));
+        .stderr(predicate::str::contains("exuno sync --force"));
     assert_eq!(project.read(CONFIG), with_app_state);
     project
         .exuno()

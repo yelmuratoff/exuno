@@ -1,4 +1,4 @@
-//! `tests/init_flow.bats`: `agentsync init` as the one setup command — pick
+//! `tests/init_flow.bats`: `exuno init` as the one setup command — pick
 //! the outputs mode, keep the project's existing tool config, write the CI
 //! gate, and run the first sync.
 

@@ -1,7 +1,7 @@
 //! `tests/rollback_preflight.bats`: foreign changes must block the whole
 //! rollback, even with `--yes`. Every project in this file shares the same
 //! setup: `claude` and `codex` initialised with every target but `skills`
-//! disabled, so `.claude/skills`/`.agents/skills` is the one AgentSync-managed
+//! disabled, so `.claude/skills`/`.agents/skills` is the one Exuno-managed
 //! tree and `.codex/config.toml`/`.claude/settings.json` stay native files
 //! that are still protected targets (their dest is collected regardless of
 //! `enabled`).
@@ -457,7 +457,7 @@ fn rolling_back_an_older_backup_after_a_newer_sync_points_at_the_newer_backups()
             "Error: Rollback conflict: .claude/skills/added changed after the operation recorded in backup {first}; no files were changed."
         )))
         .stderr(predicate::str::contains(
-            "Newer AgentSync operations may have changed this target. Roll back the newer backups first, or re-run with --force to restore anyway.",
+            "Newer Exuno operations may have changed this target. Roll back the newer backups first, or re-run with --force to restore anyway.",
         ));
     project
         .exuno()

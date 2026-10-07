@@ -154,7 +154,7 @@ pub fn legacy_warning(project: &Project, path: &Path, style: &Style) -> String {
     let rel = text.strip_prefix(&root).unwrap_or(&text);
     format!(
         "!  Legacy payload override layout detected: {rel}\n   Move to .ai/src/tools/<tool>/<resource>.<ext> (canonical since 0.11).\n   Migrate with: {}\n",
-        style.cyan("agentsync migrate --legacy")
+        style.cyan("exuno migrate --legacy")
     )
 }
 
@@ -362,7 +362,7 @@ mod tests {
         );
         assert_eq!(
             legacy_warning(&project, &legacy, &Style::plain()),
-            "!  Legacy payload override layout detected: .ai/src/hooks/cursor.json\n   Move to .ai/src/tools/<tool>/<resource>.<ext> (canonical since 0.11).\n   Migrate with: agentsync migrate --legacy\n"
+            "!  Legacy payload override layout detected: .ai/src/hooks/cursor.json\n   Move to .ai/src/tools/<tool>/<resource>.<ext> (canonical since 0.11).\n   Migrate with: exuno migrate --legacy\n"
         );
         write(&root, ".ai/src/tools/cursor/hooks.json", "{}\n");
         assert_eq!(

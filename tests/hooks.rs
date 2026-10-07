@@ -176,7 +176,7 @@ fn setup_hooks_local_mode_rewrites_an_outdated_block_in_place() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Updated AgentSync hook in post-checkout.\n",
+            "Updated Exuno hook in post-checkout.\n",
         ));
     let hook = project.read(".git/hooks/post-checkout");
     assert!(!hook.contains("lib/system/sync.sh"), "{hook}");
@@ -190,7 +190,7 @@ fn setup_hooks_local_mode_rewrites_an_outdated_block_in_place() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "AgentSync hook already present in post-checkout.\n",
+            "Exuno hook already present in post-checkout.\n",
         ));
     assert_eq!(project.read(".git/hooks/post-checkout"), hook);
 }
@@ -209,7 +209,7 @@ fn setup_hooks_rewrites_an_exuno_block_in_place() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Updated AgentSync hook in post-checkout.\n",
+            "Updated Exuno hook in post-checkout.\n",
         ));
     let hook = project.read(".git/hooks/post-checkout");
     assert!(!hook.contains("\nold\n"), "{hook}");

@@ -1,4 +1,4 @@
-//! `tests/release.bats`: `agentsync release` — bumps VERSION, Cargo.toml, and
+//! `tests/release.bats`: `exuno release` — bumps VERSION, Cargo.toml, and
 //! Cargo.lock together, commits, tags, and (unless `--no-push`) pushes. Every
 //! case runs against its own temp checkout; nothing here touches the real
 //! repository or pushes anywhere but a throwaway bare remote.
@@ -251,7 +251,7 @@ fn release_fails_when_cargo_lock_has_no_agentsync_entry_and_writes_nothing() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "Cannot find the agentsync crate version in Cargo.lock",
+            "Cannot find the exuno crate version in Cargo.lock",
         ))
         .stdout(predicate::str::contains("Continue?").not());
     assert_eq!(project.read("VERSION"), format!("{}\n", seed_version()));
@@ -270,7 +270,7 @@ fn release_fails_without_cargo_toml() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "Must be run from the AgentSync repository.",
+            "Must be run from the Exuno repository.",
         ));
 }
 

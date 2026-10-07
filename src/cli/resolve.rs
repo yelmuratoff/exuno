@@ -1,4 +1,4 @@
-//! `agentsync resolve`: `cmd_resolve` of `lib/helpers/resolve_cmd.sh`, which
+//! `exuno resolve`: `cmd_resolve` of `lib/helpers/resolve_cmd.sh`, which
 //! walks every overridden field on a terminal and lets the base value win.
 
 use std::io::Write;
@@ -18,8 +18,8 @@ pub const HELP: Help = Help {
     synopsis: &["resolve [<slug>]"],
     description: &[
         "Walks every field in .ai/src/tools/<slug>.yaml that differs from the\nshipped base and asks, one field at a time, whether to [k]eep the\noverride, [a]dopt the base value (the field is removed from the\noverride file), or [s]kip it for now. With a slug, only that tool is\nreviewed.",
-        "A field the last agentsync update flagged, because upstream changed\nits base value while the override was in place, is marked with ⚡. A\nfull walk clears the flags.",
-        "Without a terminal the command is read-only and says so; use\nagentsync diff for a plain listing. Run agentsync sync afterwards to\napply what was adopted.",
+        "A field the last exuno update flagged, because upstream changed\nits base value while the override was in place, is marked with ⚡. A\nfull walk clears the flags.",
+        "Without a terminal the command is read-only and says so; use\nexuno diff for a plain listing. Run exuno sync afterwards to\napply what was adopted.",
     ],
     sections: &[
         Section {
@@ -40,8 +40,8 @@ pub const HELP: Help = Help {
         Section {
             title: "SEE ALSO",
             entries: &[
-                ("agentsync diff", "List every override against its base"),
-                ("agentsync update", "Where the ⚡ flags come from"),
+                ("exuno diff", "List every override against its base"),
+                ("exuno update", "Where the ⚡ flags come from"),
             ],
         },
     ],
@@ -88,7 +88,7 @@ pub fn resolve(
             format!(
                 "\n{}\n  Run from an interactive shell to review overrides one by one.\n  Use {} for a full list.\n\n",
                 style.bold("  Resolve (read-only — not a TTY)"),
-                style.cyan("agentsync diff")
+                style.cyan("exuno diff")
             )
             .as_bytes(),
         )?;
@@ -103,7 +103,7 @@ pub fn resolve(
                     "⚡ {} field(s) flagged by the last",
                     pending.len()
                 )),
-                style.cyan("agentsync update"),
+                style.cyan("exuno update"),
                 style.dim("Upstream changed base values while you had overrides. Flagged entries"),
                 style.dim("are marked with"),
                 style.yellow("⚡"),
@@ -139,7 +139,7 @@ pub fn resolve(
         format!(
             "\n{}\n  Run {} to apply any changes.\n\n",
             style.green("Done."),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         )
         .as_bytes(),
     )?;
@@ -282,7 +282,7 @@ mod tests {
             HELP.render(&Style::plain())
         );
         assert!(HELP.render(&Style::plain()).starts_with(
-            "\n  agentsync resolve — interactively reconcile overrides with base values\n\n  USAGE\n    agentsync resolve [<slug>]\n"
+            "\n  exuno resolve — interactively reconcile overrides with base values\n\n  USAGE\n    exuno resolve [<slug>]\n"
         ));
     }
 
@@ -310,7 +310,7 @@ mod tests {
         std::fs::write(format!("{root}/.ai/src/tools/cursor.yaml"), "name: Mine\n").unwrap();
         assert_eq!(
             call(&root, &["nope"], false, &[]).1,
-            "\n  Resolve (read-only — not a TTY)\n  Run from an interactive shell to review overrides one by one.\n  Use agentsync diff for a full list.\n\n"
+            "\n  Resolve (read-only — not a TTY)\n  Run from an interactive shell to review overrides one by one.\n  Use exuno diff for a full list.\n\n"
         );
     }
 
@@ -332,7 +332,7 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(
             out,
-            "\n  ⚡ 1 field(s) flagged by the last agentsync update\n  Upstream changed base values while you had overrides. Flagged entries\n  are marked with ⚡ below.\n\n  Mine\n  override: .ai/src/tools/cursor.yaml\n  base:     lib/templates/tools/cursor.yaml\n\n    ◆ name\n        user: Mine\n        base: Cursor\n        [k]eep / [a]dopt base / [s]kip         → kept user value\n\n    ⚡ targets.rules.dest\n        user: .mine\n        base: .cursor/rules\n        [k]eep / [a]dopt base / [s]kip         → adopted base value\n\n\nDone.\n  Run agentsync sync to apply any changes.\n\n"
+            "\n  ⚡ 1 field(s) flagged by the last exuno update\n  Upstream changed base values while you had overrides. Flagged entries\n  are marked with ⚡ below.\n\n  Mine\n  override: .ai/src/tools/cursor.yaml\n  base:     lib/templates/tools/cursor.yaml\n\n    ◆ name\n        user: Mine\n        base: Cursor\n        [k]eep / [a]dopt base / [s]kip         → kept user value\n\n    ⚡ targets.rules.dest\n        user: .mine\n        base: .cursor/rules\n        [k]eep / [a]dopt base / [s]kip         → adopted base value\n\n\nDone.\n  Run exuno sync to apply any changes.\n\n"
         );
         assert_eq!(
             std::fs::read_to_string(&file).unwrap(),

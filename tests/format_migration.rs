@@ -81,7 +81,7 @@ fn format_doctor_warns_when_the_project_is_behind() {
         .arg("doctor")
         .assert()
         .stdout(predicate::str::contains("behind the engine"))
-        .stdout(predicate::str::contains("agentsync migrate"));
+        .stdout(predicate::str::contains("exuno migrate"));
 }
 
 #[test]

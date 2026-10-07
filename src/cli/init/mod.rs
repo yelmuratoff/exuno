@@ -1,4 +1,4 @@
-//! `agentsync init`: `cmd_init` of `lib/helpers/init.sh`, which scaffolds
+//! `exuno init`: `cmd_init` of `lib/helpers/init.sh`, which scaffolds
 //! `.ai/` inside a backup transaction, adopts the tool config a project already
 //! has, writes the CI gate, and runs the first sync.
 
@@ -117,7 +117,7 @@ pub fn init(
         run.say(&format!(
             "{}: .ai/src/ already exists in {target}\nSkipping init to avoid overwriting your content.\n\nRun {} to synchronize.\n",
             style.yellow("Warning"),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         ))?;
         return Ok(0);
     }
@@ -206,7 +206,7 @@ fn resolve_target(run: &mut Run, options: &Options) -> Result<Result<String, u8>
     }
     if let Some(project_root) = paths::ai_dir_enclosing_root(&target) {
         run.tell(&format!(
-            "{}: Cannot init inside the .ai/ directory: {target}\nRun agentsync init from the project root (the parent of .ai/):\n  cd \"{project_root}\" && agentsync init\n",
+            "{}: Cannot init inside the .ai/ directory: {target}\nRun exuno init from the project root (the parent of .ai/):\n  cd \"{project_root}\" && exuno init\n",
             style.red("Error")
         ))?;
         return Ok(Err(2));
@@ -312,7 +312,7 @@ fn ask_choices(
     let style = run.style;
     run.say(&format!(
         "\n{} — {}\n\n",
-        style.bold("AgentSync init"),
+        style.bold("Exuno init"),
         style.dim(target)
     ))?;
     let available = catalog::base_tools();
@@ -388,10 +388,7 @@ fn ask_follow_ups(run: &mut Run, target: &str, choices: &mut Choices) -> Result<
         && choices.outputs == "committed"
         && Path::new(target).join(".github").is_dir()
     {
-        if (run.env.confirm)(
-            "Add a GitHub Actions gate that runs 'agentsync check'?",
-            true,
-        ) {
+        if (run.env.confirm)("Add a GitHub Actions gate that runs 'exuno check'?", true) {
             choices.ci = "github".to_string();
         }
         run.say("\n")?;
@@ -406,7 +403,7 @@ fn transact(run: &mut Run, project: &Project, plan: &InitPlan) -> Result<Option<
     let target = plan.target.as_str();
     run.say(&format!(
         "{} in {}\n\n",
-        style.bold("Initializing AgentSync"),
+        style.bold("Initializing Exuno"),
         style.cyan(target)
     ))?;
     let targets = backup_targets(run, project, target, &plan.choices.tools)?;
@@ -522,7 +519,7 @@ fn first_sync(run: &mut Run, plan: &InitPlan) -> Result<u8, Error> {
         run.tell(&format!(
             "{}: first sync failed — fix the cause and run {}.\n",
             style.yellow("Warning"),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         ))?;
         return Ok(0);
     }
@@ -542,7 +539,7 @@ fn prune(run: &mut Run, target: &str, retention: backup::Retention) -> Result<()
         report_backup_error(run, &e)?;
         let style = run.style;
         run.tell(&format!(
-            "{}: Could not prune old AgentSync backups.\n",
+            "{}: Could not prune old Exuno backups.\n",
             style.yellow("Warning")
         ))?;
     }
@@ -679,9 +676,9 @@ mod tests {
         found
     }
 
-    const PLAN_NONE: &str = "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules, skills, commands, subagents\n  Tools:    (none — opt in later via 'agentsync enable')\n\n";
+    const PLAN_NONE: &str = "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules, skills, commands, subagents\n  Tools:    (none — opt in later via 'exuno enable')\n\n";
     const SUMMARY_FULL: &str = "\n   Created .ai/agent_sync.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/skills/         — 7 skill(s)\n   Created .ai/src/commands/       — 2 command(s)\n   Created .ai/src/agents/         — 1 subagent(s)\n";
-    const NEXT_NO_TOOLS: &str = "\n   No tools enabled. Run 'agentsync enable <slug>' to opt in.\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run agentsync generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run agentsync list        — browse all available tools\n  4. Run agentsync enable <slug> — opt in to tools you use\n  5. Run agentsync sync        — distribute to enabled tools\n\nCustomize:\n  • agentsync add mcp <server>            — configure shared MCP servers\n  • agentsync customize <tool> <resource> — override settings/hooks per tool\n\n";
+    const NEXT_NO_TOOLS: &str = "\n   No tools enabled. Run 'exuno enable <slug>' to opt in.\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run exuno generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run exuno list        — browse all available tools\n  4. Run exuno enable <slug> — opt in to tools you use\n  5. Run exuno sync        — distribute to enabled tools\n\nCustomize:\n  • exuno add mcp <server>            — configure shared MCP servers\n  • exuno customize <tool> <resource> — override settings/hooks per tool\n\n";
 
     pub(super) fn backup_line(root: &str) -> String {
         let snapshot = backups(root).pop().expect("one snapshot");
@@ -700,7 +697,7 @@ mod tests {
         assert_eq!(
             run.out,
             format!(
-                "{}Initializing AgentSync in {root}\n\n{SUMMARY_FULL}{NEXT_NO_TOOLS}{}",
+                "{}Initializing Exuno in {root}\n\n{SUMMARY_FULL}{NEXT_NO_TOOLS}{}",
                 PLAN_NONE.replace("{root}", &root),
                 backup_line(&root)
             )
@@ -712,7 +709,7 @@ mod tests {
         assert!(files.contains(&".ai/src/skills/humanizer/scripts/strip-ai-chars.sh".to_string()));
         assert!(!Path::new(&root).join(".ai/src/tools").exists());
         let config = std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap();
-        assert!(config.starts_with("# AgentSync — Project Configuration\n# All keys are optional — remove any that you leave at the default.\n\nagentsync_version: \"9.9.9\"\nformat: 2\n\n# Tools:"));
+        assert!(config.starts_with("# Exuno — Project Configuration\n# All keys are optional — remove any that you leave at the default.\n\nagentsync_version: \"9.9.9\"\nformat: 2\n\n# Tools:"));
         assert!(config.contains("\ntools:\n  enabled: []\n\n# Source paths"));
         assert!(config.ends_with("outputs: committed\n\n# .gitignore management (false leaves the managed block untouched).\ngitignore:\n  update: true\n"));
         assert_eq!(
@@ -740,7 +737,7 @@ mod tests {
             (
                 0,
                 format!(
-                    "Warning: .ai/src/ already exists in {root}\nSkipping init to avoid overwriting your content.\n\nRun agentsync sync to synchronize.\n"
+                    "Warning: .ai/src/ already exists in {root}\nSkipping init to avoid overwriting your content.\n\nRun exuno sync to synchronize.\n"
                 )
             )
         );
@@ -753,7 +750,7 @@ mod tests {
         assert_eq!(run.synced, std::slice::from_ref(&root));
         assert!(
             run.out
-                .contains("  5. Re-run agentsync sync     — after every change to .ai/src/\n")
+                .contains("  5. Re-run exuno sync     — after every change to .ai/src/\n")
         );
         assert!(run.out.ends_with(&format!("{}Running the first sync\n\nCommit .ai/ and the generated files — teammates then need only git pull.\n\n", backup_line(&root))));
 
@@ -774,7 +771,7 @@ mod tests {
             (failed.status, failed.err.as_str()),
             (
                 0,
-                "Warning: first sync failed — fix the cause and run agentsync sync.\n"
+                "Warning: first sync failed — fix the cause and run exuno sync.\n"
             )
         );
         assert!(failed.out.ends_with("Running the first sync\n\n"));
@@ -788,7 +785,7 @@ mod tests {
         assert!(
             skipped
                 .out
-                .contains("  5. Run agentsync sync        — distribute to enabled tools\n")
+                .contains("  5. Run exuno sync        — distribute to enabled tools\n")
         );
     }
 
@@ -800,7 +797,7 @@ mod tests {
         assert_eq!(
             run.out,
             format!(
-                "{}Initializing AgentSync in {root}\n\n",
+                "{}Initializing Exuno in {root}\n\n",
                 PLAN_NONE.replace("{root}", &root)
             )
         );
@@ -880,11 +877,11 @@ mod tests {
             ]
         );
         assert!(run.out.starts_with(&format!(
-            "\nAgentSync init — {root}\n\n\n\nGenerated files (CLAUDE.md, .claude/, .cursor/, …) can be committed, so\nteammates get current rules from git pull and never run agentsync.\n\nFound 2 existing tool config file(s) — the first sync regenerates these paths:\n   .claude/rules/legacy.md\n   CLAUDE.md\n\nPlan:\n  Target:   {root}/.ai/\n  Content:  agents, rules\n  Tools:    claude, cursor (interactive)\n  settings: claude.json\n  hooks:    cursor.json\n\n\nInitializing AgentSync in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n"
+            "\nExuno init — {root}\n\n\n\nGenerated files (CLAUDE.md, .claude/, .cursor/, …) can be committed, so\nteammates get current rules from git pull and never run agentsync.\n\nFound 2 existing tool config file(s) — the first sync regenerates these paths:\n   .claude/rules/legacy.md\n   CLAUDE.md\n\nPlan:\n  Target:   {root}/.ai/\n  Content:  agents, rules\n  Tools:    claude, cursor (interactive)\n  settings: claude.json\n  hooks:    cursor.json\n\n\nInitializing Exuno in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n"
         )));
         assert!(
             run.out
-                .contains("(outputs: local — every clone runs agentsync sync)")
+                .contains("(outputs: local — every clone runs exuno sync)")
         );
         assert!(
             run.out
@@ -910,7 +907,7 @@ mod tests {
             ci.asked,
             [
                 "Commit generated files?",
-                "Add a GitHub Actions gate that runs 'agentsync check'?",
+                "Add a GitHub Actions gate that runs 'exuno check'?",
                 "Proceed?"
             ]
         );
@@ -960,7 +957,7 @@ mod tests {
             (cancelled.status, cancelled.err.as_str()),
             (130, "Cancelled.\n")
         );
-        assert_eq!(cancelled.out, format!("\nAgentSync init — {root}\n\n"));
+        assert_eq!(cancelled.out, format!("\nExuno init — {root}\n\n"));
 
         let dry = call(
             &root,
@@ -973,7 +970,7 @@ mod tests {
             },
         );
         assert_eq!(dry.status, 0);
-        assert!(dry.out.ends_with("  Content:  rules\n  Tools:    (none — opt in later via 'agentsync enable')\n\nDry run — nothing was written.\n"));
+        assert!(dry.out.ends_with("  Content:  rules\n  Tools:    (none — opt in later via 'exuno enable')\n\nDry run — nothing was written.\n"));
         assert_eq!(dry.asked, ["Commit generated files?"]);
 
         let flagged = call(

@@ -143,7 +143,7 @@ impl Run<'_, '_> {
                 _ => {
                     // Recorded at the new template hash so the skip is remembered.
                     self.manifest.record(&entry.rel, &entry.hash);
-                    let note = "skipped (remembered — agentsync refresh --review to revisit).";
+                    let note = "skipped (remembered — exuno refresh --review to revisit).";
                     self.say(&format!("    {}\n", style.dim(note)))?;
                     tally.skipped += 1;
                 }

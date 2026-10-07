@@ -242,9 +242,9 @@ mod tests {
     #[test]
     fn a_command_is_cyan_only_when_the_log_colours() {
         assert_eq!(
-            Log::capturing(true).command("agentsync sync"),
-            "\x1b[0;36magentsync sync\x1b[0m"
+            Log::capturing(true).command("exuno sync"),
+            "\x1b[0;36mexuno sync\x1b[0m"
         );
-        assert_eq!(Log::default().command("agentsync sync"), "agentsync sync");
+        assert_eq!(Log::default().command("exuno sync"), "exuno sync");
     }
 }

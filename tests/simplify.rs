@@ -1,4 +1,4 @@
-//! `tests/simplify.bats`: `agentsync simplify` — dropping override fields
+//! `tests/simplify.bats`: `exuno simplify` — dropping override fields
 //! that match the base, deleting byte-identical payload overrides, and the
 //! dry-run/--apply/-y interactions. Deeper coverage of the redundant-field
 //! diffing and payload comparison logic lives in the

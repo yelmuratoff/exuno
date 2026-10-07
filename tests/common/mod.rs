@@ -26,7 +26,7 @@ impl Project {
         project
     }
 
-    /// `seed_project`: an empty repository after `agentsync init <args>`.
+    /// `seed_project`: an empty repository after `exuno init <args>`.
     pub fn seeded(init_args: &[&str]) -> Self {
         let project = Self::empty();
         project

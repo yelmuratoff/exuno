@@ -1,4 +1,4 @@
-//! `tests/add.bats`: `agentsync add <kind> <name>` and `agentsync add mcp`.
+//! `tests/add.bats`: `exuno add <kind> <name>` and `exuno add mcp`.
 
 mod common;
 
@@ -160,7 +160,7 @@ fn add_prints_next_step_hint() {
         .args(["add", "rule", "testing"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("agentsync sync"));
+        .stdout(predicate::str::contains("exuno sync"));
 }
 
 // ── Rejections ───────────────────────────────────────────────────────────────
@@ -667,7 +667,7 @@ fn add_mcp_names_a_flag_that_is_missing_its_value() {
         .code(1)
         .stderr(predicate::str::contains("--url requires a value."))
         .stderr(predicate::str::contains(
-            "\n  USAGE\n    agentsync add <kind> <name> [--category <path>] [--force]\n    agentsync add mcp <server>",
+            "\n  USAGE\n    exuno add <kind> <name> [--category <path>] [--force]\n    exuno add mcp <server>",
         ));
     assert!(!project.exists(".ai/src/mcp.json"));
 }

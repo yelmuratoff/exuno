@@ -33,7 +33,7 @@ pub const HELP: Help = Help {
             ),
             (
                 "--outputs <mode>",
-                "Where generated tool files live. committed\n(default) keeps them and .ai/.sync-manifest in git\nso teammates need only git pull; local gitignores\nboth and every clone runs agentsync sync",
+                "Where generated tool files live. committed\n(default) keeps them and .ai/.sync-manifest in git\nso teammates need only git pull; local gitignores\nboth and every clone runs exuno sync",
             ),
             (
                 "--existing <action>",
@@ -41,9 +41,9 @@ pub const HELP: Help = Help {
             ),
             (
                 "--ci <provider>",
-                "Write a CI gate that runs agentsync check. Only\ngithub is supported; an existing workflow is kept",
+                "Write a CI gate that runs exuno check. Only\ngithub is supported; an existing workflow is kept",
             ),
-            ("--no-sync", "Skip the first agentsync sync at the end"),
+            ("--no-sync", "Skip the first exuno sync at the end"),
             (
                 "--no-templates",
                 "Create selected content paths without copying\nshipped starter files. AGENTS.md is empty when\nagents is selected",
@@ -143,7 +143,7 @@ pub(super) fn parse_args(args: &[String], run: &mut Run) -> Result<Result<Option
                 run.tell(&format!(
                     "{}: Unknown flag: {flag}\nRun {} for usage.\n",
                     style.red("Error"),
-                    style.cyan("agentsync init --help")
+                    style.cyan("exuno init --help")
                 ))?;
                 return Ok(Err(1));
             }
@@ -212,7 +212,7 @@ mod tests {
         assert_eq!(help.err, "");
         assert_eq!(
             help.out,
-            "\n  agentsync init — scaffold .ai/ in a project\n\n  USAGE\n    agentsync init [<dir>] [OPTIONS]\n\n  DESCRIPTION\n    Minimal by default: only tools you opt in to get per-tool payload\n    scaffolding (settings/mcp/hooks).\n\n    Before writing, init snapshots its .ai/ paths and the selected tools'\n    existing destinations under .ai/backups/ so a partial setup can be\n    restored safely.\n\n    In a terminal, init opens an interactive wizard that lets you pick tools\n    and content sections. In non-TTY environments (CI, scripts), it runs\n    silently with auto-detected defaults. Pass --yes or any of --tools,\n    --content, --no-detect, or --no-templates to skip the wizard.\n\n  OPTIONS\n    --tools <csv>         Enable these tools (e.g. claude,cursor). Unions\n                          with auto-detection unless --no-detect is passed\n    --content <csv>       Which source sections to scaffold. Valid tokens:\n                          agents, rules, skills, commands, subagents\n                          (default: all of them)\n    --no-detect           Skip filesystem marker auto-detection (tools only)\n    --outputs <mode>      Where generated tool files live. committed\n                          (default) keeps them and .ai/.sync-manifest in git\n                          so teammates need only git pull; local gitignores\n                          both and every clone runs agentsync sync\n    --existing <action>   What to do with tool config the project already\n                          has: adopt (default) copies it into .ai/src/ so the\n                          first sync reproduces it; replace regenerates from\n                          the shipped templates\n    --ci <provider>       Write a CI gate that runs agentsync check. Only\n                          github is supported; an existing workflow is kept\n    --no-sync             Skip the first agentsync sync at the end\n    --no-templates        Create selected content paths without copying\n                          shipped starter files. AGENTS.md is empty when\n                          agents is selected\n    -y, --yes             Skip all prompts, accept defaults\n    --dry-run             Show what would be created without writing anything\n    -h, --help            Show this help\n\n  EXAMPLES\n    agentsync init                              # interactive wizard (TTY)\n    agentsync init --yes                        # auto-detect + defaults, no prompt\n    agentsync init --tools claude               # Claude only, no detection union\n    agentsync init --tools claude,cursor --content agents,rules\n    agentsync init --no-detect                  # no tool auto-detection; pick tools later\n    agentsync init --no-templates --no-detect   # empty .ai/src/ layout, no starters\n    agentsync init --dry-run                    # preview without writing\n\n"
+            "\n  exuno init — scaffold .ai/ in a project\n\n  USAGE\n    exuno init [<dir>] [OPTIONS]\n\n  DESCRIPTION\n    Minimal by default: only tools you opt in to get per-tool payload\n    scaffolding (settings/mcp/hooks).\n\n    Before writing, init snapshots its .ai/ paths and the selected tools'\n    existing destinations under .ai/backups/ so a partial setup can be\n    restored safely.\n\n    In a terminal, init opens an interactive wizard that lets you pick tools\n    and content sections. In non-TTY environments (CI, scripts), it runs\n    silently with auto-detected defaults. Pass --yes or any of --tools,\n    --content, --no-detect, or --no-templates to skip the wizard.\n\n  OPTIONS\n    --tools <csv>         Enable these tools (e.g. claude,cursor). Unions\n                          with auto-detection unless --no-detect is passed\n    --content <csv>       Which source sections to scaffold. Valid tokens:\n                          agents, rules, skills, commands, subagents\n                          (default: all of them)\n    --no-detect           Skip filesystem marker auto-detection (tools only)\n    --outputs <mode>      Where generated tool files live. committed\n                          (default) keeps them and .ai/.sync-manifest in git\n                          so teammates need only git pull; local gitignores\n                          both and every clone runs exuno sync\n    --existing <action>   What to do with tool config the project already\n                          has: adopt (default) copies it into .ai/src/ so the\n                          first sync reproduces it; replace regenerates from\n                          the shipped templates\n    --ci <provider>       Write a CI gate that runs exuno check. Only\n                          github is supported; an existing workflow is kept\n    --no-sync             Skip the first exuno sync at the end\n    --no-templates        Create selected content paths without copying\n                          shipped starter files. AGENTS.md is empty when\n                          agents is selected\n    -y, --yes             Skip all prompts, accept defaults\n    --dry-run             Show what would be created without writing anything\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno init                              # interactive wizard (TTY)\n    exuno init --yes                        # auto-detect + defaults, no prompt\n    exuno init --tools claude               # Claude only, no detection union\n    exuno init --tools claude,cursor --content agents,rules\n    exuno init --no-detect                  # no tool auto-detection; pick tools later\n    exuno init --no-templates --no-detect   # empty .ai/src/ layout, no starters\n    exuno init --dry-run                    # preview without writing\n\n"
         );
     }
 
@@ -239,7 +239,7 @@ mod tests {
             (
                 &["--bogus"],
                 1,
-                "Error: Unknown flag: --bogus\nRun agentsync init --help for usage.\n",
+                "Error: Unknown flag: --bogus\nRun exuno init --help for usage.\n",
             ),
             (&["a", "b"], 1, "Error: Unexpected argument: b\n"),
             (&["--tools"], 1, "Error: --tools requires a value\n"),
@@ -291,7 +291,7 @@ mod tests {
             (
                 2,
                 format!(
-                    "Error: Cannot init inside the .ai/ directory: {root}/.ai\nRun agentsync init from the project root (the parent of .ai/):\n  cd \"{root}\" && agentsync init\n"
+                    "Error: Cannot init inside the .ai/ directory: {root}/.ai\nRun exuno init from the project root (the parent of .ai/):\n  cd \"{root}\" && exuno init\n"
                 )
             )
         );

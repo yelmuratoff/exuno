@@ -1,4 +1,4 @@
-//! `tests/bundle.bats`: `agentsync export` and `agentsync import` — a bundle
+//! `tests/bundle.bats`: `exuno export` and `exuno import` — a bundle
 //! round trip, a directory source, and a GitHub archive served by a curl
 //! stand-in on `PATH`.
 
@@ -105,7 +105,7 @@ fn export_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync export — bundle source files into a shareable archive\n\n  USAGE\n    agentsync export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   ",
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   ",
         ))
         .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));
 }
@@ -118,7 +118,7 @@ fn import_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync import — import config from GitHub, archive, or directory\n\n  USAGE\n    agentsync import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    -b, --branch <name>   "))
         .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));

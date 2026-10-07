@@ -1,5 +1,5 @@
 //! `tests/base_skills.bats`: engine-owned skills. Content documenting
-//! AgentSync itself is resolved from the install dir at sync time, so
+//! Exuno itself is resolved from the install dir at sync time, so
 //! upgrading the engine updates it in every project. A project copy still
 //! wins, and `base_skills: false` opts out.
 

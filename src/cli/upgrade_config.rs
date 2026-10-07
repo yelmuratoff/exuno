@@ -1,4 +1,4 @@
-//! `agentsync upgrade-config`: `cmd_upgrade_config` of `lib/helpers/init.sh`,
+//! `exuno upgrade-config`: `cmd_upgrade_config` of `lib/helpers/init.sh`,
 //! which pins `agentsync_version` to the running engine.
 
 use crate::paths::DiskText;
@@ -17,7 +17,7 @@ pub const HELP: Help = Help {
     tagline: "re-pin agentsync_version to the running engine",
     synopsis: &["upgrade-config"],
     description: &[
-        "Re-pins agentsync_version in agent_sync.yaml to the running engine, after\nan agentsync update. Re-sync and commit the outputs afterwards.",
+        "Re-pins agentsync_version in agent_sync.yaml to the running engine, after\nan exuno update. Re-sync and commit the outputs afterwards.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -104,7 +104,7 @@ pub fn run(
                 "{}: No agent_sync.yaml found in {}\nRun {} first.\n",
                 style.red("Error"),
                 project.root.disk_text(),
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             )
             .as_bytes(),
         )?;
@@ -144,7 +144,7 @@ mod tests {
         let args = ["--help".to_string()];
         let status = run(&args, &discover, "9.9.9", &style, &mut out, &mut err).unwrap();
         assert_eq!(status, 0);
-        let help = "\n  agentsync upgrade-config — re-pin agentsync_version to the running engine\n\n  USAGE\n    agentsync upgrade-config\n\n  DESCRIPTION\n    Re-pins agentsync_version in agent_sync.yaml to the running engine, after\n    an agentsync update. Re-sync and commit the outputs afterwards.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync upgrade-config\n\n";
+        let help = "\n  exuno upgrade-config — re-pin agentsync_version to the running engine\n\n  USAGE\n    exuno upgrade-config\n\n  DESCRIPTION\n    Re-pins agentsync_version in agent_sync.yaml to the running engine, after\n    an exuno update. Re-sync and commit the outputs afterwards.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno upgrade-config\n\n";
         assert_eq!(String::from_utf8(out).unwrap(), help);
         let args = ["--bogus".to_string()];
         let status = run(&args, &discover, "9.9.9", &style, &mut Vec::new(), &mut err).unwrap();
@@ -181,8 +181,8 @@ mod tests {
     fn the_pin_is_inserted_after_leading_comments_or_every_line_is_rewritten() {
         let cases: [(&str, &str, bool); 5] = [
             (
-                "# AgentSync — Project Configuration\ntools:\n  enabled:\n    - claude\n\n",
-                "# AgentSync — Project Configuration\nagentsync_version: \"9.9.9\"\n\ntools:\n  enabled:\n    - claude\n\n",
+                "# Exuno — Project Configuration\ntools:\n  enabled:\n    - claude\n\n",
+                "# Exuno — Project Configuration\nagentsync_version: \"9.9.9\"\n\ntools:\n  enabled:\n    - claude\n\n",
                 true,
             ),
             (

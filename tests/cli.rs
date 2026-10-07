@@ -53,7 +53,7 @@ fn list_works_without_a_project_config() {
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains("  AgentSync Tools\n"))
+        .stdout(predicate::str::contains("  Exuno Tools\n"))
         .stdout(predicate::str::contains("Claude Code"))
         .stdout(predicate::str::contains("  0 of 15 enabled\n"))
         .stdout(predicate::str::contains("Enable a tool:"));
@@ -67,7 +67,7 @@ fn ls_is_an_alias_for_list() {
         .arg("ls")
         .assert()
         .success()
-        .stdout(predicate::str::contains("  AgentSync Tools\n"));
+        .stdout(predicate::str::contains("  Exuno Tools\n"));
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn list_and_version_ignore_extra_arguments_like_bash() {
         .args(["list", "--bogus"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("  AgentSync Tools\n"));
+        .stdout(predicate::str::contains("  Exuno Tools\n"));
     exuno()
         .args(["version", "extra"])
         .assert()
@@ -144,7 +144,7 @@ fn sync_options_are_checked_before_anything_runs() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::starts_with(
-            "[ERROR] Unknown option: --bogus\n\n  agentsync sync — sync .ai/src/ to every enabled tool\n\n  USAGE\n    agentsync sync [OPTIONS]\n",
+            "[ERROR] Unknown option: --bogus\n\n  exuno sync — sync .ai/src/ to every enabled tool\n\n  USAGE\n    exuno sync [OPTIONS]\n",
         ));
     sync_in(&dir)
         .args(["--", "--dry-run"])
@@ -326,7 +326,7 @@ fn help_shows_usage() {
         .arg("help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("AgentSync"))
+        .stdout(predicate::str::contains("Exuno"))
         .stdout(predicate::str::contains("COMMANDS"))
         .stdout(predicate::str::contains("init"))
         .stdout(predicate::str::contains("sync"))
@@ -404,7 +404,7 @@ fn every_command_with_its_own_usage_answers_help_without_running() {
             .assert()
             .success()
             .stdout(predicate::str::starts_with(format!(
-                "\n  agentsync {command} — "
+                "\n  exuno {command} — "
             )))
             .stderr("");
     }

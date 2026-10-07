@@ -1,4 +1,4 @@
-//! `tests/migrate.bats`: `agentsync migrate` — the upgrade-prompt path and
+//! `tests/migrate.bats`: `exuno migrate` — the upgrade-prompt path and
 //! `--legacy` flat-layout retirement. Deeper coverage of the legacy-move
 //! planning, MCP consolidation, and engine-owned skill retirement logic
 //! lives in the `#[cfg(all(test, unix))]` unit tests at the bottom of
@@ -40,9 +40,9 @@ fn migrate_outputs_a_grounded_upgrade_prompt() {
         .arg("migrate")
         .assert()
         .success()
-        .stdout(predicate::str::contains("AgentSync migration context"))
+        .stdout(predicate::str::contains("Exuno migration context"))
         .stdout(predicate::str::contains(
-            "Project-pinned AgentSync version: 0.7.0",
+            "Project-pinned Exuno version: 0.7.0",
         ))
         .stdout(predicate::str::contains("CHANGELOG.md"))
         .stdout(predicate::str::contains("latest stable AgentSync release"))
@@ -86,7 +86,7 @@ fn migrate_copies_the_full_prompt_with_an_available_clipboard_tool() {
 
     let captured = std::fs::read_to_string(&clipboard_capture).unwrap();
     assert!(!captured.is_empty());
-    assert!(captured.contains("AgentSync migration context"));
+    assert!(captured.contains("Exuno migration context"));
     assert!(captured.contains("latest stable AgentSync release"));
 }
 
@@ -102,7 +102,7 @@ fn migrate_uses_an_explicit_fallback_when_the_project_version_is_absent() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Project-pinned AgentSync version: not detected",
+            "Project-pinned Exuno version: not detected",
         ));
 }
 
@@ -250,7 +250,7 @@ fn doctor_hint_points_at_migrate_apply_when_legacy_files_exist() {
         .exuno()
         .arg("doctor")
         .assert()
-        .stdout(predicate::str::contains("agentsync migrate --apply"));
+        .stdout(predicate::str::contains("exuno migrate --apply"));
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn migrate_legacy_help_documents_the_legacy_route() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "\n  USAGE\n    agentsync migrate\n    agentsync migrate --legacy [--apply] [--yes]\n",
+            "\n  USAGE\n    exuno migrate\n    exuno migrate --legacy [--apply] [--yes]\n",
         ))
         .stdout(predicate::str::contains("moves legacy flat-layout"));
 }

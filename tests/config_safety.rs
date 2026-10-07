@@ -53,7 +53,7 @@ fn a_missing_config_refuses_write_sync_before_cleanup_defaults_can_run() {
         .stderr(predicate::str::contains(
             "No project configuration found and no tool is enabled",
         ))
-        .stderr(predicate::str::contains("agentsync enable <tool>"));
+        .stderr(predicate::str::contains("exuno enable <tool>"));
     assert!(project.exists(".claude/skills/config-safety-sentinel.md"));
 }
 

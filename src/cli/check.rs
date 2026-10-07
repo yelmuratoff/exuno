@@ -1,4 +1,4 @@
-//! `agentsync check`: render what `sync --force` would write and compare every
+//! `exuno check`: render what `sync --force` would write and compare every
 //! managed output with the project, with the messages and exit codes of
 //! `lib/check.sh`. Nothing is copied and nothing is written.
 
@@ -27,9 +27,9 @@ pub const HELP: Help = Help {
     tagline: "verify outputs are in sync with source",
     synopsis: &["check"],
     description: &[
-        "Renders what agentsync sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, and outputs no longer\ngenerated. Nothing on disk is written.",
+        "Renders what exuno sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, and outputs no longer\ngenerated. Nothing on disk is written.",
         "The report goes to stdout so a hook or CI step can read it; the exit\nstatus carries the verdict, following grep's shape.",
-        "Honours AGENTSYNC_CONFIG_PATH for the project config and\nAGENTSYNC_REPO_ROOT for the project root, as agentsync sync does.",
+        "Honours AGENTSYNC_CONFIG_PATH for the project config and\nAGENTSYNC_REPO_ROOT for the project root, as exuno sync does.",
     ],
     sections: &[
         Section {
@@ -45,10 +45,7 @@ pub const HELP: Help = Help {
         },
         Section {
             title: "SEE ALSO",
-            entries: &[(
-                "agentsync sync",
-                "Write the outputs the check compares against",
-            )],
+            entries: &[("exuno sync", "Write the outputs the check compares against")],
         },
     ],
     examples: &["check"],
@@ -114,7 +111,7 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
         report.status = 1;
         return Ok(report);
     }
-    report.out("Checking AgentSync configuration synchronization...");
+    report.out("Checking Exuno configuration synchronization...");
 
     let manifest = manifest_paths(root)?;
     let ws = match seed_workspace(root, &manifest, config_path.as_deref(), config.as_deref()) {
@@ -178,17 +175,17 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     }
 
     if differences.is_empty() {
-        report.out("✓ AgentSync configurations are safe and synced.");
+        report.out("✓ Exuno configurations are safe and synced.");
         return Ok(report);
     }
     report.out("");
-    report.out("!  AgentSync configurations are out of sync with source.");
+    report.out("!  Exuno configurations are out of sync with source.");
     report.out("Differences detected (showing up to 20):");
     for line in differences.iter().take(20) {
         report.out(line);
     }
     report.out("");
-    report.out("Please run: agentsync sync");
+    report.out("Please run: exuno sync");
     report.status = 1;
     Ok(report)
 }
@@ -390,7 +387,7 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, HELP.render(&Style::plain()));
         assert!(out.starts_with(
-            "\n  agentsync check — verify outputs are in sync with source\n\n  USAGE\n    agentsync check\n"
+            "\n  exuno check — verify outputs are in sync with source\n\n  USAGE\n    exuno check\n"
         ));
     }
 
@@ -399,9 +396,9 @@ mod tests {
         let (_dir, root) = project();
         let report = check(&root, &Env::default()).unwrap();
         assert_eq!(report.status, 1);
-        assert!(report.stdout.starts_with("Checking AgentSync configuration synchronization...\n\n!  AgentSync configurations are out of sync with source.\nDifferences detected (showing up to 20):\n"));
+        assert!(report.stdout.starts_with("Checking Exuno configuration synchronization...\n\n!  Exuno configurations are out of sync with source.\nDifferences detected (showing up to 20):\n"));
         assert!(report.stdout.contains("Missing: CLAUDE.md\n"));
-        assert!(report.stdout.ends_with("\nPlease run: agentsync sync\n"));
+        assert!(report.stdout.ends_with("\nPlease run: exuno sync\n"));
     }
 
     #[test]
@@ -447,7 +444,7 @@ mod tests {
         let clean = check(&root, &Env::default()).unwrap();
         assert_eq!(
             clean.stdout,
-            "Checking AgentSync configuration synchronization...\n✓ AgentSync configurations are safe and synced.\n"
+            "Checking Exuno configuration synchronization...\n✓ Exuno configurations are safe and synced.\n"
         );
         assert_eq!(clean.status, 0);
 
@@ -478,7 +475,7 @@ mod tests {
         assert!(
             report
                 .stderr
-                .starts_with("✗ This project pins agentsync 0.0.1 but you are running ")
+                .starts_with("✗ This project pins exuno 0.0.1 but you are running ")
         );
     }
 
@@ -488,7 +485,7 @@ mod tests {
         std::fs::remove_file(Path::new(&root).join(".ai/src/AGENTS.md")).unwrap();
         let report = check(&root, &Env::default()).unwrap();
         assert_eq!(report.status, 1);
-        assert!(report.stdout.starts_with("Checking AgentSync configuration synchronization...\n✗ Sync script failed during check\nSync output (last 40 lines):\n[ERROR] Source agents file not found: "));
+        assert!(report.stdout.starts_with("Checking Exuno configuration synchronization...\n✗ Sync script failed during check\nSync output (last 40 lines):\n[ERROR] Source agents file not found: "));
     }
 
     #[test]
@@ -499,7 +496,7 @@ mod tests {
         assert_eq!(
             report,
             Report {
-                stdout: "Checking AgentSync configuration synchronization...\n✗ Failed to prepare temporary workspace for check\n".into(),
+                stdout: "Checking Exuno configuration synchronization...\n✗ Failed to prepare temporary workspace for check\n".into(),
                 stderr: "Incomplete copy — missing: .ai\n".into(),
                 status: 1,
             }
@@ -568,7 +565,7 @@ mod tests {
         assert_eq!(
             report.stderr,
             format!(
-                "✗ This project pins agentsync 0.0.1 but you are running {engine} — version_pin.mode 'strict' requires local outputs to use the pinned version.\n  • Match the pin:  agentsync update 0.0.1\n  • Or move it:     agentsync upgrade-config   (re-pins to {engine}; re-sync and commit the outputs)\n"
+                "✗ This project pins exuno 0.0.1 but you are running {engine} — version_pin.mode 'strict' requires local outputs to use the pinned version.\n  • Match the pin:  exuno update 0.0.1\n  • Or move it:     exuno upgrade-config   (re-pins to {engine}; re-sync and commit the outputs)\n"
             )
         );
 
@@ -598,7 +595,7 @@ mod tests {
         assert!(
             report
                 .stderr
-                .starts_with("✗ This project pins agentsync 0.0.1 but you are running ")
+                .starts_with("✗ This project pins exuno 0.0.1 but you are running ")
         );
         assert!(
             report

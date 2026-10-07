@@ -224,7 +224,7 @@ fn use_previews_then_creates_a_per_tool_source_without_syncing() {
         .args(["mcp", "use", "alpha", "--tool", "claude", "--library", "catalog", "--apply"])
         .assert()
         .success()
-        .stdout("Created .ai/src/tools/claude/mcp.json from alpha@default for claude\nReview the source, then run agentsync sync to update client files.\n");
+        .stdout("Created .ai/src/tools/claude/mcp.json from alpha@default for claude\nReview the source, then run exuno sync to update client files.\n");
     assert_eq!(
         project.read(".ai/src/tools/claude/mcp.json"),
         "{\"mcpServers\":{\"alpha\":{\"args\":[],\"command\":\"never-run\"}}}\n"
@@ -925,7 +925,7 @@ fn use_discards_a_snapshot_when_the_new_source_cannot_be_written() {
         .args(["rollback", "--list"])
         .assert()
         .success()
-        .stdout("No AgentSync backups found.\n");
+        .stdout("No Exuno backups found.\n");
 }
 
 // Windows symlink creation can require Developer Mode or elevated privileges.

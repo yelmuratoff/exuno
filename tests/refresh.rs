@@ -1,4 +1,4 @@
-//! `tests/refresh.bats`: `agentsync refresh` (three-way diff via
+//! `tests/refresh.bats`: `exuno refresh` (three-way diff via
 //! `.ai/.template-manifest`) on a project scaffolded with every content
 //! category.
 
@@ -52,7 +52,7 @@ fn refresh_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync refresh — pull new template files into an existing .ai/src/\n\n  USAGE\n    agentsync refresh [OPTIONS]\n\n  DESCRIPTION\n",
+            "\n  exuno refresh — pull new template files into an existing .ai/src/\n\n  USAGE\n    exuno refresh [OPTIONS]\n\n  DESCRIPTION\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    --only <csv>          "))
         .stdout(predicate::str::contains("--include-agents-md"))

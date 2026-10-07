@@ -343,7 +343,7 @@ mod tests {
         assert!(run.err.contains("\n-EDIT\n"));
         assert!(run.err.ends_with(&format!("\n{conflict}")));
         assert!(run.out.ends_with(
-            "    restored.\n    declined (will not be offered again — use --include-deleted to revisit).\n    updated.\n\n  Done. Added: 1 · Auto-updated: 0 · Updated: 1 · Skipped: 1 · Unchanged: 15\n\n  Next: agentsync sync to distribute the updates to enabled tools.\n\n"
+            "    restored.\n    declined (will not be offered again — use --include-deleted to revisit).\n    updated.\n\n  Done. Added: 1 · Auto-updated: 0 · Updated: 1 · Skipped: 1 · Unchanged: 15\n\n  Next: exuno sync to distribute the updates to enabled tools.\n\n"
         ));
         assert!(base.join("commands/review.md").is_file());
         assert!(!base.join("rules/comments.md").exists());

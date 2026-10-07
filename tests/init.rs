@@ -1,4 +1,4 @@
-//! `tests/init.bats`: `agentsync init`.
+//! `tests/init.bats`: `exuno init`.
 
 mod common;
 
@@ -248,7 +248,7 @@ fn init_output_mentions_enable_command() {
         .arg("init")
         .assert()
         .success()
-        .stdout(predicate::str::contains("agentsync enable"));
+        .stdout(predicate::str::contains("exuno enable"));
 }
 
 #[test]
@@ -259,8 +259,8 @@ fn init_next_steps_lists_mcp_and_customize_hints() {
         .args(["init", "--no-detect"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("agentsync add mcp"))
-        .stdout(predicate::str::contains("agentsync customize"));
+        .stdout(predicate::str::contains("exuno add mcp"))
+        .stdout(predicate::str::contains("exuno customize"));
 }
 
 #[test]

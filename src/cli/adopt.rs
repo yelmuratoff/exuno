@@ -1,4 +1,4 @@
-//! `agentsync adopt`: `cmd_adopt` of `lib/helpers/adopt.sh`, which promotes a
+//! `exuno adopt`: `cmd_adopt` of `lib/helpers/adopt.sh`, which promotes a
 //! manual edit in a generated file back into its source.
 
 use crate::paths::DiskText;
@@ -198,7 +198,7 @@ impl<'a> Resolver<'a> {
             }
         }
         Ok(Err(format!(
-            "{dest_rel} is not a recognised AgentSync output (no enabled tool produces it)."
+            "{dest_rel} is not a recognised Exuno output (no enabled tool produces it)."
         )))
     }
 
@@ -562,7 +562,7 @@ pub fn adopt(
             format!(
                 "{}: no .ai/.sync-manifest yet — run {} first, or adopt one file at a time.\n",
                 style.red("Error"),
-                style.cyan("agentsync sync")
+                style.cyan("exuno sync")
             )
             .as_bytes(),
         )?;
@@ -682,7 +682,7 @@ pub(crate) struct KeyedAdoption {
 fn whole_file_refusal(found: &Adoption, manifest: Option<&Manifest>) -> Option<String> {
     manifest?.entry(&found.dest_rel)?.owned.as_ref()?;
     Some(format!(
-        "{} is recorded as owned by key, and a whole-file copy would pull the app's keys into the source; set targets.{}.ownership: keys, or run agentsync sync --force to own the whole file",
+        "{} is recorded as owned by key, and a whole-file copy would pull the app's keys into the source; set targets.{}.ownership: keys, or run exuno sync --force to own the whole file",
         found.dest_rel, found.resource
     ))
 }
@@ -696,7 +696,7 @@ fn keyed_adoption(
     let entry = manifest.and_then(|m| m.entry(&found.dest_rel));
     let Some(recorded) = entry.and_then(|entry| entry.owned.as_ref()) else {
         return Ok(Err(format!(
-            "{} is owned by key and has no owned-key record yet; run agentsync sync first",
+            "{} is owned by key and has no owned-key record yet; run exuno sync first",
             found.dest_rel
         )));
     };
@@ -731,7 +731,7 @@ fn keyed_adoption(
     let source = Path::new(&found.source_abs);
     if !source.is_file() {
         return Ok(Err(format!(
-            "{} does not exist, and a file of only the changed keys would drop the rest; run agentsync customize {} {} first",
+            "{} does not exist, and a file of only the changed keys would drop the rest; run exuno customize {} {} first",
             found.source_rel, found.tool, found.resource
         )));
     }
@@ -808,7 +808,7 @@ fn verify_hint(style: &Style) -> String {
     format!(
         "{} {} {}\n",
         style.dim("Run"),
-        style.cyan("agentsync sync"),
+        style.cyan("exuno sync"),
         style.dim("to verify everything is consistent.")
     )
 }
@@ -849,7 +849,7 @@ fn adopt_one(
         && !manifest.paths().contains(&found.dest_rel)
     {
         return run.cannot(&format!(
-            "{} is not tracked in the manifest.\n  AgentSync only adopts files it produced. Run sync first to register the file.",
+            "{} is not tracked in the manifest.\n  Exuno only adopts files it produced. Run sync first to register the file.",
             found.dest_rel
         ));
     }
@@ -1289,7 +1289,7 @@ mod tests {
         assert_eq!(
             resolve("README.md"),
             Err(
-                "README.md is not a recognised AgentSync output (no enabled tool produces it)."
+                "README.md is not a recognised Exuno output (no enabled tool produces it)."
                     .to_string()
             )
         );
@@ -1353,7 +1353,7 @@ mod tests {
             (
                 0,
                 format!(
-                    "{plan}\n✓ Wrote .ai/src/AGENTS.md\n✓ Updated .ai/.sync-manifest\n\nRun agentsync sync to verify everything is consistent.\n"
+                    "{plan}\n✓ Wrote .ai/src/AGENTS.md\n✓ Updated .ai/.sync-manifest\n\nRun exuno sync to verify everything is consistent.\n"
                 ),
                 String::new()
             )
@@ -1407,7 +1407,7 @@ mod tests {
         assert_eq!(
             call(&root, &["-a", "-y"], false, false).1,
             format!(
-                "{plan}\n✓ adopted .ai/src/skills/foo/SKILL.md\n\n✓ Adopted 1 file(s) into .ai/src/ and refreshed .ai/.sync-manifest\n\nRun agentsync sync to verify everything is consistent.\n"
+                "{plan}\n✓ adopted .ai/src/skills/foo/SKILL.md\n\n✓ Adopted 1 file(s) into .ai/src/ and refreshed .ai/.sync-manifest\n\nRun exuno sync to verify everything is consistent.\n"
             )
         );
         assert_eq!(
@@ -1423,7 +1423,7 @@ mod tests {
             call(&root, &["--help"], false, false),
             (
                 0,
-                "\n  agentsync adopt — promote a manual edit back into .ai/src/\n\n  USAGE\n    agentsync adopt <dest-file> [OPTIONS]\n    agentsync adopt --all [OPTIONS]\n\n  DESCRIPTION\n    Promote a manual edit in a destination file back into .ai/src/ as the\n    new canonical content. Refuses transformed targets (merged rules,\n    inlined skills, format-converted commands/subagents).\n\n    With --all, adopt every drifted (manually-edited) tracked output at\n    once, skipping refused targets and same-source conflicts.\n\n  OPTIONS\n    -a, --all    Adopt every drifted output (no <dest-file>)\n    --dry-run    Show the plan without writing\n    -y, --yes    Skip confirmation (required outside a TTY)\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync adopt CLAUDE.md\n    agentsync adopt .claude/rules/core.md --dry-run\n    agentsync adopt --all --yes\n\n".to_string(),
+                "\n  exuno adopt — promote a manual edit back into .ai/src/\n\n  USAGE\n    exuno adopt <dest-file> [OPTIONS]\n    exuno adopt --all [OPTIONS]\n\n  DESCRIPTION\n    Promote a manual edit in a destination file back into .ai/src/ as the\n    new canonical content. Refuses transformed targets (merged rules,\n    inlined skills, format-converted commands/subagents).\n\n    With --all, adopt every drifted (manually-edited) tracked output at\n    once, skipping refused targets and same-source conflicts.\n\n  OPTIONS\n    -a, --all    Adopt every drifted output (no <dest-file>)\n    --dry-run    Show the plan without writing\n    -y, --yes    Skip confirmation (required outside a TTY)\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno adopt CLAUDE.md\n    exuno adopt .claude/rules/core.md --dry-run\n    exuno adopt --all --yes\n\n".to_string(),
                 String::new()
             )
         );
@@ -1465,7 +1465,7 @@ mod tests {
             refused(&["--all"]),
             (
                 1,
-                "Error: no .ai/.sync-manifest yet — run agentsync sync first, or adopt one file at a time.\n"
+                "Error: no .ai/.sync-manifest yet — run exuno sync first, or adopt one file at a time.\n"
                     .to_string()
             )
         );

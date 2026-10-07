@@ -28,11 +28,11 @@ pub fn mode(config: &str) -> Result<Mode, String> {
 pub fn mismatch_error(pinned: &str, engine: &str, committed: bool) -> String {
     if committed {
         format!(
-            "This project pins agentsync {pinned} but you are running {engine} — committed outputs must come from one version everywhere."
+            "This project pins exuno {pinned} but you are running {engine} — committed outputs must come from one version everywhere."
         )
     } else {
         format!(
-            "This project pins agentsync {pinned} but you are running {engine} — version_pin.mode 'strict' requires local outputs to use the pinned version."
+            "This project pins exuno {pinned} but you are running {engine} — version_pin.mode 'strict' requires local outputs to use the pinned version."
         )
     }
 }
@@ -43,11 +43,11 @@ pub fn hint(pinned: &str, engine: &str, command: impl Fn(&str) -> String) -> [St
     [
         format!(
             "  • Match the pin:  {}",
-            command(&format!("agentsync update {pinned}"))
+            command(&format!("exuno update {pinned}"))
         ),
         format!(
             "  • Or move it:     {}   (re-pins to {engine}; re-sync and commit the outputs)",
-            command("agentsync upgrade-config")
+            command("exuno upgrade-config")
         ),
     ]
 }
@@ -92,17 +92,17 @@ mod tests {
     fn the_messages_are_the_bash_sentences() {
         assert_eq!(
             mismatch_error("0.1.0", "0.36.0", false),
-            "This project pins agentsync 0.1.0 but you are running 0.36.0 — version_pin.mode 'strict' requires local outputs to use the pinned version."
+            "This project pins exuno 0.1.0 but you are running 0.36.0 — version_pin.mode 'strict' requires local outputs to use the pinned version."
         );
         assert_eq!(
             mismatch_error("0.1.0", "0.36.0", true),
-            "This project pins agentsync 0.1.0 but you are running 0.36.0 — committed outputs must come from one version everywhere."
+            "This project pins exuno 0.1.0 but you are running 0.36.0 — committed outputs must come from one version everywhere."
         );
         assert_eq!(
             hint("0.1.0", "0.36.0", str::to_string),
             [
-                "  • Match the pin:  agentsync update 0.1.0".to_string(),
-                "  • Or move it:     agentsync upgrade-config   (re-pins to 0.36.0; re-sync and commit the outputs)".to_string(),
+                "  • Match the pin:  exuno update 0.1.0".to_string(),
+                "  • Or move it:     exuno upgrade-config   (re-pins to 0.36.0; re-sync and commit the outputs)".to_string(),
             ]
         );
     }
@@ -112,8 +112,8 @@ mod tests {
         assert_eq!(
             hint("0.1.0", "0.36.0", |cmd| format!("<{cmd}>")),
             [
-                "  • Match the pin:  <agentsync update 0.1.0>".to_string(),
-                "  • Or move it:     <agentsync upgrade-config>   (re-pins to 0.36.0; re-sync and commit the outputs)".to_string(),
+                "  • Match the pin:  <exuno update 0.1.0>".to_string(),
+                "  • Or move it:     <exuno upgrade-config>   (re-pins to 0.36.0; re-sync and commit the outputs)".to_string(),
             ]
         );
     }

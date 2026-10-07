@@ -138,7 +138,7 @@ fn yaml_quote(s: &str) -> String {
 /// The text `snapshot_write_pending_resolutions` writes.
 pub fn pending_resolutions(today: &str, from: &str, to: &str, conflicts: &[Conflict]) -> String {
     let mut out = format!(
-        "# AgentSync — pending upstream resolutions from `agentsync update`.\n# Run `agentsync resolve` to walk these fields interactively.\n# Remove this file once you've reviewed every entry.\n\nschema: 1\ngenerated_on: \"{today}\"\nfrom_version: \"{from}\"\nto_version: \"{to}\"\nconflicts:\n"
+        "# Exuno — pending upstream resolutions from `exuno update`.\n# Run `exuno resolve` to walk these fields interactively.\n# Remove this file once you've reviewed every entry.\n\nschema: 1\ngenerated_on: \"{today}\"\nfrom_version: \"{from}\"\nto_version: \"{to}\"\nconflicts:\n"
     );
     for conflict in conflicts {
         out.push_str(&format!(
@@ -347,7 +347,7 @@ mod tests {
         ];
         assert_eq!(
             pending_resolutions("2026-09-18", "0.7.0", "0.8.0", &conflicts),
-            "# AgentSync — pending upstream resolutions from `agentsync update`.\n# Run `agentsync resolve` to walk these fields interactively.\n# Remove this file once you've reviewed every entry.\n\nschema: 1\ngenerated_on: \"2026-09-18\"\nfrom_version: \"0.7.0\"\nto_version: \"0.8.0\"\nconflicts:\n  - tool: \"claude\"\n    field: \"targets.rules.dest\"\n    base_before: \".claude/rules\"\n    base_after: \".claude/rules-v2\"\n    your_override: \".claude/my-rules\"\n  - tool: \"claude\"\n    field: \"targets.rules.header\"\n    base_before: \"one\"\n    base_after: \"quoted \\\"hi\\\"\"\n    your_override: \"back\\\\slash\\tand\\nmore\"\n"
+            "# Exuno — pending upstream resolutions from `exuno update`.\n# Run `exuno resolve` to walk these fields interactively.\n# Remove this file once you've reviewed every entry.\n\nschema: 1\ngenerated_on: \"2026-09-18\"\nfrom_version: \"0.7.0\"\nto_version: \"0.8.0\"\nconflicts:\n  - tool: \"claude\"\n    field: \"targets.rules.dest\"\n    base_before: \".claude/rules\"\n    base_after: \".claude/rules-v2\"\n    your_override: \".claude/my-rules\"\n  - tool: \"claude\"\n    field: \"targets.rules.header\"\n    base_before: \"one\"\n    base_after: \"quoted \\\"hi\\\"\"\n    your_override: \"back\\\\slash\\tand\\nmore\"\n"
         );
         assert!(pending_resolutions("2026-09-18", "a", "b", &[]).ends_with("conflicts:\n  []\n"));
         let dir = tempfile::tempdir().unwrap();

@@ -1,4 +1,4 @@
-//! `agentsync skills catalog`: an explicit, read-only view of skill cards.
+//! `exuno skills catalog`: an explicit, read-only view of skill cards.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -160,7 +160,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         Some("list") => Action::List,
         Some("show") => Action::Show,
         _ => {
-            return Err("Usage: agentsync skills catalog <list|show> --catalog <file>".to_string());
+            return Err("Usage: exuno skills catalog <list|show> --catalog <file>".to_string());
         }
     };
 
@@ -285,7 +285,7 @@ mod tests {
         assert!(
             String::from_utf8(out)
                 .unwrap()
-                .contains("agentsync skills catalog list")
+                .contains("exuno skills catalog list")
         );
         assert!(err.is_empty());
     }

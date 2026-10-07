@@ -68,7 +68,7 @@ fn help_is_available_before_project_discovery_or_any_write() {
     assert!(
         String::from_utf8(output.stdout)
             .unwrap()
-            .contains("agentsync skills catalog list")
+            .contains("exuno skills catalog list")
     );
     assert!(!project.exists(".ai"));
     assert!(!project.exists(".update_cache"));

@@ -1,4 +1,4 @@
-//! `agentsync sync --workspace`: `cmd_workspace_fanout` of `bin/agentsync.sh`,
+//! `exuno sync --workspace`: `cmd_workspace_fanout` of `bin/agentsync.sh`,
 //! one sync per project below the working directory, deepest first.
 
 use crate::cli::sync::{self, Env};
@@ -30,14 +30,14 @@ pub fn run(
             Stream::Err,
             &format!(
                 "Run {} to create one, or run from a workspace root.",
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             ),
         );
         return 1;
     }
 
     emit(Stream::Err, "");
-    emit(Stream::Err, &style.bold("  AgentSync workspace sync"));
+    emit(Stream::Err, &style.bold("  Exuno workspace sync"));
     emit(
         Stream::Err,
         &style.dim(&format!(

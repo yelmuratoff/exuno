@@ -1,4 +1,4 @@
-//! `agentsync shell-init`: `cmd_shell_init` of `lib/helpers/shell_init.sh`,
+//! `exuno shell-init`: `cmd_shell_init` of `lib/helpers/shell_init.sh`,
 //! which prints the shell hook that runs `sync --if-stale` on entering a
 //! project. Stdout carries nothing but the snippet, so `>> ~/.zshrc` stays clean.
 
@@ -15,16 +15,16 @@ pub const HELP: Help = Help {
     tagline: "print the shell hook that syncs on entering a project",
     synopsis: &["shell-init [zsh|bash]"],
     description: &[
-        "Prints a shell snippet that runs agentsync sync --if-stale for the\ncurrent .ai/ project when you enter its root directory, so generated\noutputs stay fresh without syncing parent projects from descendants.",
-        "Recommended: add one of the INSTALL lines to your rc file. Eval'ing it\nregenerates the hook each session, so upgrades and fixes apply without\nre-editing. Or freeze a copy with agentsync shell-init zsh >> ~/.zshrc,\nbut then re-run it after each upgrade to pick up changes.",
+        "Prints a shell snippet that runs exuno sync --if-stale for the\ncurrent .ai/ project when you enter its root directory, so generated\noutputs stay fresh without syncing parent projects from descendants.",
+        "Recommended: add one of the INSTALL lines to your rc file. Eval'ing it\nregenerates the hook each session, so upgrades and fixes apply without\nre-editing. Or freeze a copy with exuno shell-init zsh >> ~/.zshrc,\nbut then re-run it after each upgrade to pick up changes.",
         "The shell is auto-detected from $SHELL when omitted.",
     ],
     sections: &[
         Section {
             title: "INSTALL",
             entries: &[
-                ("eval \"$(agentsync shell-init zsh)\"", "in ~/.zshrc"),
-                ("eval \"$(agentsync shell-init bash)\"", "in ~/.bashrc"),
+                ("eval \"$(exuno shell-init zsh)\"", "in ~/.zshrc"),
+                ("eval \"$(exuno shell-init bash)\"", "in ~/.bashrc"),
             ],
         },
         Section {
@@ -137,8 +137,8 @@ pub fn shell_init(
                 err,
                 format!(
                     "  Pass one explicitly: {} or {}\n",
-                    style.cyan("agentsync shell-init zsh"),
-                    style.cyan("agentsync shell-init bash")
+                    style.cyan("exuno shell-init zsh"),
+                    style.cyan("exuno shell-init bash")
                 )
                 .as_bytes(),
             )?;
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(
             out,
-            "\n  agentsync shell-init — print the shell hook that syncs on entering a project\n\n  USAGE\n    agentsync shell-init [zsh|bash]\n\n  DESCRIPTION\n    Prints a shell snippet that runs agentsync sync --if-stale for the\n    current .ai/ project when you enter its root directory, so generated\n    outputs stay fresh without syncing parent projects from descendants.\n\n    Recommended: add one of the INSTALL lines to your rc file. Eval'ing it\n    regenerates the hook each session, so upgrades and fixes apply without\n    re-editing. Or freeze a copy with agentsync shell-init zsh >> ~/.zshrc,\n    but then re-run it after each upgrade to pick up changes.\n\n    The shell is auto-detected from $SHELL when omitted.\n\n  INSTALL\n    eval \"$(agentsync shell-init zsh)\"    in ~/.zshrc\n    eval \"$(agentsync shell-init bash)\"   in ~/.bashrc\n\n  OPTIONS\n    -h, --help   Show this help\n\n  ENVIRONMENT\n    AGENTSYNC_NO_AUTO_SYNC=1   Disable the hook without removing the snippet\n\n  EXAMPLES\n    agentsync shell-init\n    agentsync shell-init zsh\n    agentsync shell-init bash >> ~/.bashrc\n\n"
+            "\n  exuno shell-init — print the shell hook that syncs on entering a project\n\n  USAGE\n    exuno shell-init [zsh|bash]\n\n  DESCRIPTION\n    Prints a shell snippet that runs exuno sync --if-stale for the\n    current .ai/ project when you enter its root directory, so generated\n    outputs stay fresh without syncing parent projects from descendants.\n\n    Recommended: add one of the INSTALL lines to your rc file. Eval'ing it\n    regenerates the hook each session, so upgrades and fixes apply without\n    re-editing. Or freeze a copy with exuno shell-init zsh >> ~/.zshrc,\n    but then re-run it after each upgrade to pick up changes.\n\n    The shell is auto-detected from $SHELL when omitted.\n\n  INSTALL\n    eval \"$(exuno shell-init zsh)\"    in ~/.zshrc\n    eval \"$(exuno shell-init bash)\"   in ~/.bashrc\n\n  OPTIONS\n    -h, --help   Show this help\n\n  ENVIRONMENT\n    AGENTSYNC_NO_AUTO_SYNC=1   Disable the hook without removing the snippet\n\n  EXAMPLES\n    exuno shell-init\n    exuno shell-init zsh\n    exuno shell-init bash >> ~/.bashrc\n\n"
         );
     }
 
@@ -214,7 +214,7 @@ mod tests {
             assert_eq!((status, out.as_str()), (2, ""));
             assert_eq!(
                 err,
-                "[ERROR] Could not detect your shell from $SHELL.\n  Pass one explicitly: agentsync shell-init zsh or agentsync shell-init bash\n"
+                "[ERROR] Could not detect your shell from $SHELL.\n  Pass one explicitly: exuno shell-init zsh or exuno shell-init bash\n"
             );
         }
         let (_, _, err) = run(&["fish"], None, true);

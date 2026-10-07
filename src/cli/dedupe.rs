@@ -1,4 +1,4 @@
-//! `agentsync dedupe`: `cmd_dedupe` of `lib/helpers/dedupe.sh`, which deletes
+//! `exuno dedupe`: `cmd_dedupe` of `lib/helpers/dedupe.sh`, which deletes
 //! source files a parent `.ai/src/` already holds byte for byte.
 
 use crate::paths::DiskText;
@@ -87,7 +87,7 @@ pub fn dedupe<'a>(
     };
     put(
         run.out,
-        format!("\n{}\n", style.bold("  AgentSync Dedupe")).as_bytes(),
+        format!("\n{}\n", style.bold("  Exuno Dedupe")).as_bytes(),
     )?;
     if parsed.workspace {
         return run_workspace(&mut run, place.cwd);
@@ -724,7 +724,7 @@ mod help_tests {
     fn help_has_the_shared_shape() {
         assert_eq!(
             HELP.render(&Style::plain()),
-            "\n  agentsync dedupe — remove source files that duplicate a parent .ai/src/\n\n  USAGE\n    agentsync dedupe [OPTIONS]\n\n  DESCRIPTION\n    For each path that exists in both your .ai/src/ and the parent, the\n    file's hash decides what is offered (see BEHAVIOR).\n\n    Identical-hash deletions also prune empty parent directories so empty\n    skill folders don't linger after their SKILL.md is removed.\n\n  OPTIONS\n    --against <path>   Compare against an explicit .ai/src/ (or a project\n                       root containing one). Default: nearest parent\n                       .ai/src/ walking up from cwd, bounded by the git\n                       repository boundary.\n    --workspace        Run dedupe in every .ai/ below cwd, bottom-up\n                       alphabetical; each child is deduped against its\n                       own nearest parent.\n    -y, --yes          Non-interactive: delete every identical-hash file\n                       (and add to template_overrides.declined when the\n                       file is template-derived). Divergent files are\n                       always left alone — pass --yes does not auto-pick\n                       a side. Required when stdin is not a TTY.\n    -h, --help         Show this help\n\n  BEHAVIOR\n    identical hash, template-derived   offer delete + declined entry\n    identical hash, manual file        offer delete only\n    different hash                     show diff, skip by default\n\n  EXAMPLES\n    agentsync dedupe\n    agentsync dedupe --against ../\n    agentsync dedupe --workspace\n    agentsync dedupe --yes\n\n"
+            "\n  exuno dedupe — remove source files that duplicate a parent .ai/src/\n\n  USAGE\n    exuno dedupe [OPTIONS]\n\n  DESCRIPTION\n    For each path that exists in both your .ai/src/ and the parent, the\n    file's hash decides what is offered (see BEHAVIOR).\n\n    Identical-hash deletions also prune empty parent directories so empty\n    skill folders don't linger after their SKILL.md is removed.\n\n  OPTIONS\n    --against <path>   Compare against an explicit .ai/src/ (or a project\n                       root containing one). Default: nearest parent\n                       .ai/src/ walking up from cwd, bounded by the git\n                       repository boundary.\n    --workspace        Run dedupe in every .ai/ below cwd, bottom-up\n                       alphabetical; each child is deduped against its\n                       own nearest parent.\n    -y, --yes          Non-interactive: delete every identical-hash file\n                       (and add to template_overrides.declined when the\n                       file is template-derived). Divergent files are\n                       always left alone — pass --yes does not auto-pick\n                       a side. Required when stdin is not a TTY.\n    -h, --help         Show this help\n\n  BEHAVIOR\n    identical hash, template-derived   offer delete + declined entry\n    identical hash, manual file        offer delete only\n    different hash                     show diff, skip by default\n\n  EXAMPLES\n    exuno dedupe\n    exuno dedupe --against ../\n    exuno dedupe --workspace\n    exuno dedupe --yes\n\n"
         );
     }
 }
@@ -817,7 +817,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Dedupe\n  Parent: {}/.ai/src\n  Identical: 4  Divergent: 1\n\n  − rules/comments.md (deleted)\n  − rules/shared.md (deleted)\n  − skills/foo/SKILL.md (deleted)\n  − skills/foo/ref/a.md (deleted)\n  ~ rules/diverge.md (divergent — skipped under --yes; review interactively)\n\n  Done. Deleted: 4 · Kept: 0 · Skipped: 1\n",
+                "\n  Exuno Dedupe\n  Parent: {}/.ai/src\n  Identical: 4  Divergent: 1\n\n  − rules/comments.md (deleted)\n  − rules/shared.md (deleted)\n  − skills/foo/SKILL.md (deleted)\n  − skills/foo/ref/a.md (deleted)\n  ~ rules/diverge.md (divergent — skipped under --yes; review interactively)\n\n  Done. Deleted: 4 · Kept: 0 · Skipped: 1\n",
                 fx.parent
             )
         );
@@ -861,7 +861,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Dedupe\n  Parent: {}/.ai/src\n  Identical: 2  Divergent: 2\n\n    deleted + declined.\n    kept.\n    skipped.\n\n  Cancelled. Decisions already made are kept.\n  Done. Deleted: 1 · Kept: 1 · Skipped: 1\n",
+                "\n  Exuno Dedupe\n  Parent: {}/.ai/src\n  Identical: 2  Divergent: 2\n\n    deleted + declined.\n    kept.\n    skipped.\n\n  Cancelled. Decisions already made are kept.\n  Done. Deleted: 1 · Kept: 1 · Skipped: 1\n",
                 fx.parent
             )
         );
@@ -922,14 +922,14 @@ mod tests {
             call(&fx, &["--against", &missing, "-y"], None),
             (
                 1,
-                "\n  AgentSync Dedupe\n".to_string(),
+                "\n  Exuno Dedupe\n".to_string(),
                 format!("Error: --against path does not exist: {missing}\n")
             )
         );
         assert_eq!(
             call(&fx, &["-y"], None).1,
             format!(
-                "\n  AgentSync Dedupe\n  · no parent .ai/src/ found for {}\n",
+                "\n  Exuno Dedupe\n  · no parent .ai/src/ found for {}\n",
                 fx.child
             )
         );
@@ -937,7 +937,7 @@ mod tests {
         assert_eq!(
             call(&fx, &["-y"], None).1,
             format!(
-                "\n  AgentSync Dedupe\n  ✓ nothing shared with parent {}/.ai/src\n",
+                "\n  Exuno Dedupe\n  ✓ nothing shared with parent {}/.ai/src\n",
                 fx.parent
             )
         );

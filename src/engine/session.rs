@@ -171,7 +171,7 @@ impl Session {
             .err(format!("!  Legacy payload override layout detected: {rel}"));
         self.log
             .err("   Move to .ai/src/tools/<tool>/<resource>.<ext> (canonical since 0.11).".into());
-        let migrate = self.log.command("agentsync migrate --legacy");
+        let migrate = self.log.command("exuno migrate --legacy");
         self.log.err(format!("   Migrate with: {migrate}"));
     }
 }

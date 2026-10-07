@@ -1,4 +1,4 @@
-//! `agentsync export` and `agentsync import`: `cmd_export` of
+//! `exuno export` and `exuno import`: `cmd_export` of
 //! `lib/helpers/export.sh` and `cmd_import` of `lib/helpers/import.sh`, which
 //! bundle a project's sources into a `tar.gz` and bring a bundle, a directory,
 //! or a GitHub archive back in. Archives go through the `tar` and `curl`
@@ -229,7 +229,7 @@ pub fn export(
             format!(
                 "{}: No .ai/ directory found in {root}\nRun {} first.\n",
                 style.red("Error"),
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             )
             .as_bytes(),
         )?;
@@ -240,7 +240,7 @@ pub fn export(
     }
     put(
         out,
-        format!("\n{}\n\n", style.bold("  AgentSync Export")).as_bytes(),
+        format!("\n{}\n\n", style.bold("  Exuno Export")).as_bytes(),
     )?;
 
     let (items, labels): (Vec<String>, Vec<String>) =
@@ -303,7 +303,7 @@ fn exported_text(style: &Style, root: &str, output: &str) -> String {
         style.green("Exported!"),
         style.cyan(output),
         human_size(size),
-        style.cyan("agentsync import"),
+        style.cyan("exuno import"),
         style.dim(base_name)
     )
 }
@@ -1031,7 +1031,7 @@ pub fn import(
     };
     put(
         out,
-        format!("\n{}\n\n", style.bold("  AgentSync Import")).as_bytes(),
+        format!("\n{}\n\n", style.bold("  Exuno Import")).as_bytes(),
     )?;
     out.flush().map_err(|e| Error::io("<stdout>", e))?;
     let scratch = Scratch::create("agentsync-import")?;
@@ -1055,7 +1055,7 @@ pub fn import(
             format!(
                 "  {}: No .ai/src/ (or .ai/) directory found in source.\n  The source must contain a structure created by {}.\n",
                 style.red("Error"),
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             )
             .as_bytes(),
         )?;
@@ -1094,7 +1094,7 @@ pub fn import(
             plan.diff.counts.new,
             plan.diff.counts.updated,
             style.cyan(&plan.dest_base_rel),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         )
         .as_bytes(),
     )
@@ -1109,7 +1109,7 @@ mod tests {
     fn export_help_has_the_shared_shape() {
         assert_eq!(
             EXPORT_HELP.render(&Style::plain()),
-            "\n  agentsync export — bundle source files into a shareable archive\n\n  USAGE\n    agentsync export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./agentsync-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    agentsync export\n    agentsync export -o my-config.tar.gz\n    agentsync export --dry-run\n\n"
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./agentsync-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --dry-run\n\n"
         );
     }
 
@@ -1117,7 +1117,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  agentsync import — import config from GitHub, archive, or directory\n\n  USAGE\n    agentsync import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/agentsync-bundle.tar.gz\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    agentsync import https://github.com/user/repo\n    agentsync import https://github.com/user/repo/tree/develop\n    agentsync import agentsync-bundle.tar.gz\n    agentsync import ../other-project/\n    agentsync import https://github.com/user/repo --only rules,skills\n    agentsync import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/agentsync-bundle.tar.gz\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import agentsync-bundle.tar.gz\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
@@ -1283,7 +1283,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • agent_sync.yaml\n\n  Dry run — no files written.\n  Would create: {root}/agentsync-bundle.tar.gz\n\n"
+                "\n  Exuno Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • agent_sync.yaml\n\n  Dry run — no files written.\n  Would create: {root}/agentsync-bundle.tar.gz\n\n"
             )
         );
         let (status, out, err) = run_export(&root, &["--bogus"]);
@@ -1306,7 +1306,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            format!("Error: No .ai/ directory found in {empty_root}\nRun agentsync init first.\n")
+            format!("Error: No .ai/ directory found in {empty_root}\nRun exuno init first.\n")
         );
     }
 
@@ -1340,7 +1340,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Import\n\n  Reading from {source_root}...\n  Source: Directory: {source_root}\n\n  Changes:\n    + AGENTS.md (new)\n    ↳ rules (1 new)\n    ↳ skills (1 new)\n    ↳ commands (1 new)\n\n  Summary: 4 new, 0 updated, 0 unchanged\n\n  Imported! 4 new, 0 updated files.\n\n  Next steps:\n    1. Review imported files in .ai/src\n    2. Run agentsync sync to distribute to all tools\n\n"
+                "\n  Exuno Import\n\n  Reading from {source_root}...\n  Source: Directory: {source_root}\n\n  Changes:\n    + AGENTS.md (new)\n    ↳ rules (1 new)\n    ↳ skills (1 new)\n    ↳ commands (1 new)\n\n  Summary: 4 new, 0 updated, 0 unchanged\n\n  Imported! 4 new, 0 updated files.\n\n  Next steps:\n    1. Review imported files in .ai/src\n    2. Run exuno sync to distribute to all tools\n\n"
             )
         );
         assert_eq!(
@@ -1370,7 +1370,7 @@ mod tests {
             "  Changes:\n    ↳ rules (1 new, 1 updated)\n\n  Summary: 1 new, 1 updated, 0 unchanged\n\n  Dry run — no files written.\n\n"
         ));
         let (status, out, err) = run_import(&target_root, &["nothing.txt"]);
-        assert_eq!((status, out.as_str()), (1, "\n  AgentSync Import\n\n"));
+        assert_eq!((status, out.as_str()), (1, "\n  Exuno Import\n\n"));
         assert_eq!(
             err,
             "  Error: Cannot recognize source: nothing.txt\n  Expected: GitHub URL, .tar.gz file, or directory path.\n"

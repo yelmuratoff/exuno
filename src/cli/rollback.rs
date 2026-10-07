@@ -1,4 +1,4 @@
-//! `agentsync rollback`: `cmd_rollback` of `lib/helpers/backup.sh`. A safety
+//! `exuno rollback`: `cmd_rollback` of `lib/helpers/backup.sh`. A safety
 //! snapshot is taken first, and a restore that fails or is interrupted puts
 //! it back.
 
@@ -15,7 +15,7 @@ pub const HELP: Help = Help {
     tagline: "restore targets from a backup",
     synopsis: &["rollback [<backup-id>] [OPTIONS]"],
     description: &[
-        "Restore AgentSync-managed targets from a backup. Without an ID, restores\nthe latest complete snapshot. A safety snapshot is created before every\nrestore, so the rollback itself can be undone.",
+        "Restore Exuno-managed targets from a backup. Without an ID, restores\nthe latest complete snapshot. A safety snapshot is created before every\nrestore, so the rollback itself can be undone.",
         "Rollback refuses, naming the first changed path, when a target differs\nfrom the state recorded after the backup's operation finished.",
     ],
     sections: &[Section {
@@ -166,7 +166,7 @@ fn list_backups(root: &str, with_id: bool, out: &mut dyn Write, err: &mut dyn Wr
         Err(e) => return report(err, e),
     };
     if rows.is_empty() {
-        let _ = writeln!(out, "No AgentSync backups found.");
+        let _ = writeln!(out, "No Exuno backups found.");
         return 0;
     }
     let _ = writeln!(out, "Backup ID\tOperation\tCreated (UTC)");
@@ -214,7 +214,7 @@ fn select_snapshot(root: &str, backup_id: Option<&str>, err: &mut dyn Write) -> 
         None => match backup::latest(root) {
             Ok(Some(snapshot)) => Ok(snapshot),
             Ok(None) => {
-                let _ = writeln!(err, "Error: No complete AgentSync backup found");
+                let _ = writeln!(err, "Error: No complete Exuno backup found");
                 Err(1)
             }
             Err(e) => Err(report(err, e)),
@@ -384,7 +384,7 @@ impl Rollback<'_> {
             self.retention,
         ) {
             report(self.err, e);
-            let _ = writeln!(self.err, "Warning: Could not prune old AgentSync backups.");
+            let _ = writeln!(self.err, "Warning: Could not prune old Exuno backups.");
         }
         let _ = writeln!(self.out, "Restored backup {}.", self.id);
         let _ = writeln!(self.out, "Undo backup: {}", paths::leaf(safety));
@@ -435,7 +435,7 @@ fn report_conflict(err: &mut dyn Write, id: &str, path: &str, is_latest: bool) {
     } else {
         writeln!(
             err,
-            "Newer AgentSync operations may have changed this target. Roll back the newer backups first, or re-run with --force to restore anyway."
+            "Newer Exuno operations may have changed this target. Roll back the newer backups first, or re-run with --force to restore anyway."
         )
     };
 }
@@ -585,7 +585,7 @@ mod tests {
         let unknown = rollback(&root, &["--nope"], true);
         assert_eq!(unknown.status, 1);
         assert!(unknown.err.starts_with(
-            "Error: Unknown rollback option: --nope\n\n  agentsync rollback — restore targets from a backup\n\n  USAGE\n"
+            "Error: Unknown rollback option: --nope\n\n  exuno rollback — restore targets from a backup\n\n  USAGE\n"
         ));
         assert_eq!(
             rollback(&root, &["a", "b"], true).err,
@@ -601,17 +601,17 @@ mod tests {
         );
         assert_eq!(
             rollback(&root, &["--list"], true).out,
-            "No AgentSync backups found.\n"
+            "No Exuno backups found.\n"
         );
         assert_eq!(
             rollback(&root, &["--yes"], true).err,
-            "Error: No complete AgentSync backup found\n"
+            "Error: No complete Exuno backup found\n"
         );
         let help = rollback(&root, &["--help", "--nope"], true);
         assert_eq!((help.status, help.err.as_str()), (0, ""));
         assert_eq!(
             help.out,
-            "\n  agentsync rollback — restore targets from a backup\n\n  USAGE\n    agentsync rollback [<backup-id>] [OPTIONS]\n\n  DESCRIPTION\n    Restore AgentSync-managed targets from a backup. Without an ID, restores\n    the latest complete snapshot. A safety snapshot is created before every\n    restore, so the rollback itself can be undone.\n\n    Rollback refuses, naming the first changed path, when a target differs\n    from the state recorded after the backup's operation finished.\n\n  OPTIONS\n    --list       List complete backups\n    --dry-run    Show the restore plan and any conflict without changing files\n    --force      Restore even when targets changed after the backup's operation\n    -y, --yes    Skip the confirmation prompt\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync rollback --list\n    agentsync rollback\n    agentsync rollback 20260921T120000Z-sync-4242 --dry-run\n    agentsync rollback --force --yes\n\n"
+            "\n  exuno rollback — restore targets from a backup\n\n  USAGE\n    exuno rollback [<backup-id>] [OPTIONS]\n\n  DESCRIPTION\n    Restore Exuno-managed targets from a backup. Without an ID, restores\n    the latest complete snapshot. A safety snapshot is created before every\n    restore, so the rollback itself can be undone.\n\n    Rollback refuses, naming the first changed path, when a target differs\n    from the state recorded after the backup's operation finished.\n\n  OPTIONS\n    --list       List complete backups\n    --dry-run    Show the restore plan and any conflict without changing files\n    --force      Restore even when targets changed after the backup's operation\n    -y, --yes    Skip the confirmation prompt\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno rollback --list\n    exuno rollback\n    exuno rollback 20260921T120000Z-sync-4242 --dry-run\n    exuno rollback --force --yes\n\n"
         );
     }
 

@@ -1,4 +1,4 @@
-//! `tests/sync.bats`: `agentsync sync` across every supported tool, driven
+//! `tests/sync.bats`: `exuno sync` across every supported tool, driven
 //! from one fixture project (a path-scoped rule, an explicit-only command).
 
 mod common;

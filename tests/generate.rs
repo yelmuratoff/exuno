@@ -1,4 +1,4 @@
-//! `tests/generate.bats`: `agentsync generate`.
+//! `tests/generate.bats`: `exuno generate`.
 
 mod common;
 

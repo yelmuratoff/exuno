@@ -1,4 +1,4 @@
-//! `tests/check.bats`: `agentsync check` on a project synced for Claude.
+//! `tests/check.bats`: `exuno check` on a project synced for Claude.
 
 mod common;
 
@@ -226,7 +226,7 @@ fn check_help_is_answered_on_stdout_without_rendering() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync check — verify outputs are in sync with source\n\n  USAGE\n    agentsync check\n",
+            "\n  exuno check — verify outputs are in sync with source\n\n  USAGE\n    exuno check\n",
         ))
         .stdout(predicate::str::contains("\n  EXIT STATUS\n"))
         .stderr("");

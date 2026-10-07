@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(
             no_templates.out,
             format!(
-                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules (no starter templates)\n  Tools:    (none — opt in later via 'agentsync enable')\n\nDry run — nothing was written.\n"
+                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules (no starter templates)\n  Tools:    (none — opt in later via 'exuno enable')\n\nDry run — nothing was written.\n"
             )
         );
         let empty = call(

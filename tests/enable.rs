@@ -1,4 +1,4 @@
-//! `tests/enable.bats`: `agentsync enable` / `disable`.
+//! `tests/enable.bats`: `exuno enable` / `disable`.
 
 mod common;
 
@@ -121,7 +121,7 @@ fn enable_scaffolds_per_tool_payload_dir_by_default_non_tty() {
             ".ai/src/tools/claude/settings.json",
         ))
         // Shared MCP not configured yet -> hint points at add mcp, not a phantom path.
-        .stdout(predicate::str::contains("agentsync add mcp"));
+        .stdout(predicate::str::contains("exuno add mcp"));
     assert!(project.exists(".ai/src/tools/claude/settings.json"));
 }
 
@@ -148,9 +148,7 @@ fn enable_no_scaffold_skips_per_tool_dir_but_still_prints_hints() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Edit settings:").not())
-        .stdout(predicate::str::contains(
-            "agentsync customize claude settings",
-        ));
+        .stdout(predicate::str::contains("exuno customize claude settings"));
     assert!(!project.join(".ai/src/tools/claude").is_dir());
 }
 

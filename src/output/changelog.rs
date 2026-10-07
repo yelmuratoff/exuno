@@ -244,10 +244,7 @@ mod tests {
     #[test]
     fn markdown_markers_are_stripped_like_md_plain() {
         assert_eq!(md_plain("**Bold.** rest"), "Bold. rest");
-        assert_eq!(
-            md_plain("run `agentsync sync` now"),
-            "run agentsync sync now"
-        );
+        assert_eq!(md_plain("run `exuno sync` now"), "run exuno sync now");
         // A terminal has nothing to click: the label carries the meaning, and
         // the target is added only when it says something the label does not.
         assert_eq!(

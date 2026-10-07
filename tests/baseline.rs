@@ -33,8 +33,8 @@ fn baseline_the_warning_names_adopt_and_rollback() {
         .exuno()
         .arg("sync")
         .assert()
-        .stderr(predicate::str::contains("agentsync adopt"))
-        .stderr(predicate::str::contains("agentsync rollback"));
+        .stderr(predicate::str::contains("exuno adopt"))
+        .stderr(predicate::str::contains("exuno rollback"));
 }
 
 #[test]

@@ -77,9 +77,9 @@ fn version_pin_committed_mode_refuses_to_sync_with_a_different_engine() {
     init_committed(&project);
     pin_version(&project, "0.1.0");
     project.exuno().arg("sync").assert().code(1).stderr(
-        predicate::str::contains("pins agentsync 0.1.0")
-            .and(predicate::str::contains("agentsync update 0.1.0"))
-            .and(predicate::str::contains("agentsync upgrade-config")),
+        predicate::str::contains("pins exuno 0.1.0")
+            .and(predicate::str::contains("exuno update 0.1.0"))
+            .and(predicate::str::contains("exuno upgrade-config")),
     );
     assert!(!project.exists("CLAUDE.md"));
 }
@@ -107,13 +107,13 @@ fn version_pin_reads_an_exuno_version_key() {
         .arg("sync")
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+        .stderr(predicate::str::contains("pins exuno 0.1.0"));
     project
         .exuno()
         .arg("check")
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+        .stderr(predicate::str::contains("pins exuno 0.1.0"));
     project
         .exuno()
         .arg("doctor")
@@ -132,7 +132,7 @@ fn version_pin_committed_mode_check_fails_with_the_same_explanation() {
         .arg("check")
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+        .stderr(predicate::str::contains("pins exuno 0.1.0"));
 }
 
 #[test]
@@ -145,7 +145,7 @@ fn version_pin_local_mode_without_version_pin_only_warns_and_still_syncs() {
         .arg("sync")
         .assert()
         .success()
-        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+        .stderr(predicate::str::contains("pins exuno 0.1.0"));
     assert!(project.exists("CLAUDE.md"));
 }
 
@@ -160,7 +160,7 @@ fn version_pin_local_mode_set_to_warn_only_warns_and_still_syncs() {
         .arg("sync")
         .assert()
         .success()
-        .stderr(predicate::str::contains("pins agentsync 0.1.0"));
+        .stderr(predicate::str::contains("pins exuno 0.1.0"));
     assert!(project.exists("CLAUDE.md"));
 }
 
@@ -227,7 +227,7 @@ fn version_pin_local_mode_can_be_made_strict_for_sync() {
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "strict");
     project.exuno().arg("sync").assert().code(1).stderr(
-        predicate::str::contains("pins agentsync 0.1.0")
+        predicate::str::contains("pins exuno 0.1.0")
             .and(predicate::str::contains("version_pin.mode 'strict'"))
             .and(predicate::str::contains("committed outputs must come").not()),
     );
@@ -242,7 +242,7 @@ fn version_pin_local_strict_mode_also_fails_check() {
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "strict");
     project.exuno().arg("check").assert().code(1).stderr(
-        predicate::str::contains("pins agentsync 0.1.0")
+        predicate::str::contains("pins exuno 0.1.0")
             .and(predicate::str::contains("version_pin.mode 'strict'"))
             .and(predicate::str::contains("committed outputs must come").not()),
     );

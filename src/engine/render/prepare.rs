@@ -268,7 +268,7 @@ fn require_agents(s: &mut Session, agents: &str) -> Step {
     s.log
         .error(&format!("Source agents file not found: {agents_abs}"));
     s.log
-        .error("Run 'agentsync init' or set source.agents in agent_sync.yaml");
+        .error("Run 'exuno init' or set source.agents in agent_sync.yaml");
     Err(Stop(1))
 }
 
@@ -285,7 +285,7 @@ pub fn refuse_configless_cleanup(s: &mut Session, run: &Run) -> Step {
         return Ok(());
     }
     s.log.error(
-        "No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'agentsync enable <tool>' to create .ai/agent_sync.yaml, or set AGENTSYNC_CONFIG_PATH.",
+        "No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/agent_sync.yaml, or set AGENTSYNC_CONFIG_PATH.",
     );
     Err(Stop(1))
 }
@@ -352,7 +352,7 @@ pub fn check_version_pin(s: &mut Session, run: &Run) -> Step {
         return Err(Stop(1));
     }
     s.log.warning(&format!(
-        "This project pins agentsync {pinned} but you are running {engine}."
+        "This project pins exuno {pinned} but you are running {engine}."
     ));
     for line in hint {
         s.log.err(line);
@@ -404,7 +404,7 @@ mod tests {
             s.log.tail(2),
             [
                 "[ERROR] Source agents file not found: /proj/.ai/src/AGENTS.md",
-                "[ERROR] Run 'agentsync init' or set source.agents in agent_sync.yaml"
+                "[ERROR] Run 'exuno init' or set source.agents in agent_sync.yaml"
             ]
         );
     }
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(
             s.log.tail(5),
             [
-                "[ERROR] No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'agentsync enable <tool>' to create .ai/agent_sync.yaml, or set AGENTSYNC_CONFIG_PATH."
+                "[ERROR] No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/agent_sync.yaml, or set AGENTSYNC_CONFIG_PATH."
             ]
         );
     }
@@ -538,9 +538,9 @@ mod tests {
         assert_eq!(
             s.log.tail(3),
             [
-                format!("[ERROR] This project pins agentsync 0.0.1 but you are running {engine} — version_pin.mode 'strict' requires local outputs to use the pinned version.").as_str(),
-                "  • Match the pin:  agentsync update 0.0.1",
-                format!("  • Or move it:     agentsync upgrade-config   (re-pins to {engine}; re-sync and commit the outputs)").as_str(),
+                format!("[ERROR] This project pins exuno 0.0.1 but you are running {engine} — version_pin.mode 'strict' requires local outputs to use the pinned version.").as_str(),
+                "  • Match the pin:  exuno update 0.0.1",
+                format!("  • Or move it:     exuno upgrade-config   (re-pins to {engine}; re-sync and commit the outputs)").as_str(),
             ]
         );
 

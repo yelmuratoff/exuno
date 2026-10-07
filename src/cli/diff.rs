@@ -1,4 +1,4 @@
-//! `agentsync diff`: `cmd_diff`, `_diff_payload`, and `_diff_one_tool` of
+//! `exuno diff`: `cmd_diff`, `_diff_payload`, and `_diff_one_tool` of
 //! `lib/helpers/customize.sh`. Payload hunks come from the system `diff -u`.
 
 use crate::paths::DiskText;
@@ -115,7 +115,7 @@ pub fn diff(
         if slug.is_empty() {
             put(
                 err,
-                format!("{}: agentsync diff <slug> <resource>\n", style.red("Error")).as_bytes(),
+                format!("{}: exuno diff <slug> <resource>\n", style.red("Error")).as_bytes(),
             )?;
             return Ok(1);
         }
@@ -303,7 +303,7 @@ fn diff_payload(
                 style.dim("    Identical — override is a byte-for-byte copy of base."),
                 style.dim(&format!(
                     "    Tip: {} can remove redundant overrides.",
-                    style.cyan("agentsync simplify")
+                    style.cyan("exuno simplify")
                 ))
             )
             .as_bytes(),
@@ -384,7 +384,7 @@ mod tests {
             call(&root, &["-h"]),
             (
                 0,
-                "\n  agentsync diff — show where an override diverges from base\n\n  USAGE\n    agentsync diff [<slug>] [<resource>]\n\n  DESCRIPTION\n    Show fields where your user override diverges from the shipped base\n    template. With no <slug>, walks every customized tool.\n\n  ARGUMENTS\n    <slug>       Tool to diff (default: every customized tool)\n    <resource>   Payload resource: tool, hooks, mcp, settings\n                 (default: tool, the YAML config)\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync diff\n    agentsync diff cursor\n    agentsync diff cursor hooks\n\n".to_string(),
+                "\n  exuno diff — show where an override diverges from base\n\n  USAGE\n    exuno diff [<slug>] [<resource>]\n\n  DESCRIPTION\n    Show fields where your user override diverges from the shipped base\n    template. With no <slug>, walks every customized tool.\n\n  ARGUMENTS\n    <slug>       Tool to diff (default: every customized tool)\n    <resource>   Payload resource: tool, hooks, mcp, settings\n                 (default: tool, the YAML config)\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno diff\n    exuno diff cursor\n    exuno diff cursor hooks\n\n".to_string(),
                 String::new()
             )
         );
@@ -429,7 +429,7 @@ mod tests {
         assert_eq!(
             call(&root, &["cursor", "hooks"]).1,
             format!(
-                "\n  Cursor — hooks diff\n    override: {root}/.ai/src/tools/cursor/hooks.json\n    base:     /<agentsync>/lib/templates/hooks/cursor.json\n\n    Identical — override is a byte-for-byte copy of base.\n    Tip: agentsync simplify can remove redundant overrides.\n"
+                "\n  Cursor — hooks diff\n    override: {root}/.ai/src/tools/cursor/hooks.json\n    base:     /<agentsync>/lib/templates/hooks/cursor.json\n\n    Identical — override is a byte-for-byte copy of base.\n    Tip: exuno simplify can remove redundant overrides.\n"
             )
         );
         assert_eq!(

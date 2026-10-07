@@ -1,4 +1,4 @@
-//! `agentsync generate`: `cmd_generate` of `lib/helpers/generate.sh`, which
+//! `exuno generate`: `cmd_generate` of `lib/helpers/generate.sh`, which
 //! prints the shipped prompt with an optional project description, and asks
 //! for one on a terminal.
 
@@ -86,7 +86,7 @@ fn output_prompt(
             format!(
                 "  {} {} {}\n\n",
                 style.dim("Tip: run"),
-                style.cyan(&format!("agentsync generate | {clipboard}")),
+                style.cyan(&format!("exuno generate | {clipboard}")),
                 style.dim("to copy to clipboard.")
             )
             .as_bytes(),
@@ -121,7 +121,7 @@ pub fn generate(
         err,
         format!(
             "\n{}\n\n  Choose what to generate:\n\n    {} Base prompt only\n       Ready-to-paste prompt without project details.\n\n    {} Prompt + project description\n       You describe your stack, and it gets included in the prompt.\n\n",
-            style.bold("  AgentSync Generate"),
+            style.bold("  Exuno Generate"),
             style.cyan("1)"),
             style.cyan("2)")
         )
@@ -241,7 +241,7 @@ mod tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\n  agentsync generate — print an AI prompt that generates project-specific config\n\n  USAGE\n    agentsync generate [<project description>...]\n\n  DESCRIPTION\n    Prints an AI prompt that generates project-specific rules, skills,\n    commands, and agents for .ai/src/, and copies it to the clipboard when\n    one is available.\n\n    Words after the command become the project description at the top of the\n    prompt. In a terminal with no description, a short menu asks for one.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync generate\n    agentsync generate React + TypeScript + Next.js project with Prisma ORM\n    agentsync generate > prompt.md\n\n"
+            "\n  exuno generate — print an AI prompt that generates project-specific config\n\n  USAGE\n    exuno generate [<project description>...]\n\n  DESCRIPTION\n    Prints an AI prompt that generates project-specific rules, skills,\n    commands, and agents for .ai/src/, and copies it to the clipboard when\n    one is available.\n\n    Words after the command become the project description at the top of the\n    prompt. In a terminal with no description, a short menu asks for one.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno generate\n    exuno generate React + TypeScript + Next.js project with Prisma ORM\n    exuno generate > prompt.md\n\n"
         );
     }
 
@@ -252,7 +252,7 @@ mod tests {
         assert!(out.starts_with("## My Project\n\nReact\n\n---\n\n"));
         assert_eq!(
             err,
-            "\n  ─── prompt below ───────────────────────────────────────────\n\n\n  ─── end of prompt ──────────────────────────────────────────\n\n  Tip: run agentsync generate | pbcopy to copy to clipboard.\n\n"
+            "\n  ─── prompt below ───────────────────────────────────────────\n\n\n  ─── end of prompt ──────────────────────────────────────────\n\n  Tip: run exuno generate | pbcopy to copy to clipboard.\n\n"
         );
         let (_, _, err) = run(&["React"], false, true, None, &[]);
         assert!(!err.contains("Tip: run"));
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(out, prompt());
         assert!(err.starts_with(
-            "\n  AgentSync Generate\n\n  Choose what to generate:\n\n    1) Base prompt only\n"
+            "\n  Exuno Generate\n\n  Choose what to generate:\n\n    1) Base prompt only\n"
         ));
         assert!(err.contains("  ▸ Choice [1/2]: \n\n  ─── prompt below"));
         let (status, out, err) = run(

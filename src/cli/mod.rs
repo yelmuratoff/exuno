@@ -85,7 +85,7 @@ pub(crate) fn refuse_outside_tools_dir(
 ) -> Result<u8, Error> {
     err.write_all(
         format!(
-            "{}: source.tools resolves outside the project: {}\nAgentSync only reads that catalog; edit its tool overrides where they live.\n",
+            "{}: source.tools resolves outside the project: {}\nExuno only reads that catalog; edit its tool overrides where they live.\n",
             style.red("Error"),
             project.user_tools_dir().disk_text()
         )

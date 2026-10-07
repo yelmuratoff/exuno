@@ -1,4 +1,4 @@
-//! `tests/customize.bats`: `agentsync customize` / `show` / `diff`.
+//! `tests/customize.bats`: `exuno customize` / `show` / `diff`.
 
 mod common;
 
@@ -27,7 +27,7 @@ fn customize_stub_mentions_show_base() {
     assert!(
         project
             .read(".ai/src/tools/claude.yaml")
-            .contains("agentsync show claude --base")
+            .contains("exuno show claude --base")
     );
 }
 

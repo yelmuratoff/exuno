@@ -77,7 +77,7 @@ pub fn template_sources() -> Vec<String> {
     template_files().into_iter().map(|(path, _)| path).collect()
 }
 
-/// `lib/prompts/migrate.md`, the upgrade prompt `agentsync migrate` prints.
+/// `lib/prompts/migrate.md`, the upgrade prompt `exuno migrate` prints.
 pub const MIGRATE_PROMPT: &str = include_str!("../../lib/prompts/migrate.md");
 
 /// The engine-owned skills under `lib/templates/base-src/skills/`, in byte order.

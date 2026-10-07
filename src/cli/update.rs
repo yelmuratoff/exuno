@@ -1,4 +1,4 @@
-//! `agentsync update`: `lib/helpers/update.sh` for a binary install. The
+//! `exuno update`: `lib/helpers/update.sh` for a binary install. The
 //! release archive for this platform comes from GitHub Releases through
 //! `curl`, its sha256 is checked in-process, `tar` unpacks it, the new binary
 //! is asked for its version and its catalog, and then it is moved over the
@@ -25,7 +25,7 @@ pub const HELP: Help = Help {
     tagline: "replace the binary with a GitHub release",
     synopsis: &["update [<version>] [--strict]"],
     description: &[
-        "Downloads the release archive for this platform from GitHub Releases,\nverifies its sha256, and moves the new binary over the running one.\nConflicts between the new catalog and your overrides are queued for\nagentsync resolve.",
+        "Downloads the release archive for this platform from GitHub Releases,\nverifies its sha256, and moves the new binary over the running one.\nConflicts between the new catalog and your overrides are queued for\nexuno resolve.",
     ],
     sections: &[
         Section {
@@ -343,7 +343,7 @@ fn migration_banner(project_dir: &Path, style: &Style) -> String {
         style.cyan(".ai/src/tools/<tool>/<resource>.<ext>"),
         style.dim("."),
         style.dim("Run"),
-        style.cyan("agentsync migrate --apply"),
+        style.cyan("exuno migrate --apply"),
         style.dim("to move them. Legacy paths still read,"),
         style.dim("but will be dropped in 0.12.")
     )
@@ -483,11 +483,11 @@ impl Download<'_, '_> {
         let tag_url = format!("https://api.github.com/repos/{REPO}/git/ref/tags/{tag}");
         match (self.env.fetch)(&tag_url, &probe) {
             Ok(200) => format!(
-                "AgentSync {tag} predates the binary releases, so update cannot install it.\n  {}\n    AGENTSYNC_VERSION={tag} curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash",
+                "Exuno {tag} predates the binary releases, so update cannot install it.\n  {}\n    AGENTSYNC_VERSION={tag} curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash",
                 style.dim("Pin it with the installer instead:")
             ),
             _ => format!(
-                "No AgentSync release is tagged {tag}.\n  {} {}",
+                "No Exuno release is tagged {tag}.\n  {} {}",
                 style.dim("List releases at"),
                 style.cyan(&format!("https://github.com/{REPO}/releases"))
             ),
@@ -649,7 +649,7 @@ fn queued_hint(style: &Style) -> String {
         style.dim("Queued in"),
         style.cyan(".ai/.pending-resolutions.yaml"),
         style.dim(" — run"),
-        style.cyan("agentsync resolve"),
+        style.cyan("exuno resolve"),
         style.dim(" to walk them.")
     )
 }
@@ -662,7 +662,7 @@ fn refresh_hint(project_dir: &Path, style: &Style) -> String {
     format!(
         "  {} {} {}\n\n",
         style.dim("Rule, skill, and command templates in .ai/src/ update separately — run"),
-        style.cyan("agentsync refresh"),
+        style.cyan("exuno refresh"),
         style.dim("to review them.")
     )
 }
@@ -683,7 +683,7 @@ pub fn update(
         out,
         format!(
             "\n{}\n\n  Checking for updates...\n",
-            style.bold("  AgentSync Update")
+            style.bold("  Exuno Update")
         )
         .as_bytes(),
     )?;
@@ -843,7 +843,7 @@ mod tests {
         std::fs::write(dir.path().join(".ai/src/mcp/claude.json"), "{}").unwrap();
         assert_eq!(
             migration_banner(dir.path(), &style),
-            "\n  Legacy payload layout detected\n  Your project has overrides under .ai/src/{hooks,mcp,settings}/. The canonical\n  layout since 0.11 is .ai/src/tools/<tool>/<resource>.<ext>.\n  Run agentsync migrate --apply to move them. Legacy paths still read,\n  but will be dropped in 0.12.\n\n"
+            "\n  Legacy payload layout detected\n  Your project has overrides under .ai/src/{hooks,mcp,settings}/. The canonical\n  layout since 0.11 is .ai/src/tools/<tool>/<resource>.<ext>.\n  Run exuno migrate --apply to move them. Legacy paths still read,\n  but will be dropped in 0.12.\n\n"
         );
     }
 
@@ -964,7 +964,7 @@ mod tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\n  agentsync update — replace the binary with a GitHub release\n\n  USAGE\n    agentsync update [<version>] [--strict]\n\n  DESCRIPTION\n    Downloads the release archive for this platform from GitHub Releases,\n    verifies its sha256, and moves the new binary over the running one.\n    Conflicts between the new catalog and your overrides are queued for\n    agentsync resolve.\n\n  ARGUMENTS\n    <version>   Pin the install to that release tag (e.g. 0.35.0) instead of\n                the latest release — what a project's agentsync_version asks for\n\n  OPTIONS\n    --strict     Exit non-zero if upstream changed a field you have overridden\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync update\n    agentsync update 0.35.0\n    agentsync update --strict\n\n"
+            "\n  exuno update — replace the binary with a GitHub release\n\n  USAGE\n    exuno update [<version>] [--strict]\n\n  DESCRIPTION\n    Downloads the release archive for this platform from GitHub Releases,\n    verifies its sha256, and moves the new binary over the running one.\n    Conflicts between the new catalog and your overrides are queued for\n    exuno resolve.\n\n  ARGUMENTS\n    <version>   Pin the install to that release tag (e.g. 0.35.0) instead of\n                the latest release — what a project's agentsync_version asks for\n\n  OPTIONS\n    --strict     Exit non-zero if upstream changed a field you have overridden\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno update\n    exuno update 0.35.0\n    exuno update --strict\n\n"
         );
         let (status, out, err) = fixture.run(&["--bogus"]);
         assert_eq!(
@@ -972,7 +972,7 @@ mod tests {
             (
                 2,
                 "",
-                "Error: Unknown flag: --bogus\nUsage: agentsync update [<version>] [--strict]\n"
+                "Error: Unknown flag: --bogus\nUsage: exuno update [<version>] [--strict]\n"
             )
         );
         let (status, _, err) = fixture.run(&["1.0.0", "2.0.0"]);
@@ -980,7 +980,7 @@ mod tests {
             (status, err.as_str()),
             (
                 2,
-                "Error: Unexpected argument: 2.0.0\nUsage: agentsync update [<version>] [--strict]\n"
+                "Error: Unexpected argument: 2.0.0\nUsage: exuno update [<version>] [--strict]\n"
             )
         );
     }
@@ -994,7 +994,7 @@ mod tests {
         std::fs::write(dir.path().join(".ai/.template-manifest"), "").unwrap();
         assert_eq!(
             refresh_hint(dir.path(), &style),
-            "  Rule, skill, and command templates in .ai/src/ update separately — run agentsync refresh to review them.\n\n"
+            "  Rule, skill, and command templates in .ai/src/ update separately — run exuno refresh to review them.\n\n"
         );
     }
 
@@ -1012,7 +1012,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Update\n\n  Checking for updates...\n  Updating...\n\n  Updated! v{0} → v9.9.9\n\n  What's new in v9.9.9:\n\n\n  Fixed\n    • Something with code.\n\n",
+                "\n  Exuno Update\n\n  Checking for updates...\n  Updating...\n\n  Updated! v{0} → v9.9.9\n\n  What's new in v9.9.9:\n\n\n  Fixed\n    • Something with code.\n\n",
                 engine_version()
             )
         );
@@ -1038,7 +1038,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Update\n\n  Checking for updates...\n  Already up to date! (v{})\n\n",
+                "\n  Exuno Update\n\n  Checking for updates...\n  Already up to date! (v{})\n\n",
                 engine_version()
             )
         );
@@ -1056,7 +1056,7 @@ mod tests {
         assert!(out.ends_with("  Pinning to v999.0.0...\n"));
         assert_eq!(
             err,
-            "  Error: No AgentSync release is tagged 999.0.0.\n  List releases at https://github.com/yelmuratoff/exuno/releases\n"
+            "  Error: No Exuno release is tagged 999.0.0.\n  List releases at https://github.com/yelmuratoff/exuno/releases\n"
         );
         fixture.served.insert(
             format!("https://api.github.com/repos/{REPO}/git/ref/tags/0.1.0"),
@@ -1066,7 +1066,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            "  Error: AgentSync 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n"
+            "  Error: Exuno 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n"
         );
         fixture.publish("9.9.9");
         let target = target().unwrap();
@@ -1153,7 +1153,7 @@ mod tests {
         let (status, out, err) = fixture.run(&["9.9.9"]);
         assert_eq!(err, "");
         assert_eq!(status, 0);
-        assert!(out.contains("\n  Upstream touched fields you have overridden:\n\n    claude\n      ◆ targets.rules.dest\n          base: .claude/rules → .claude/rules-v2\n          your override: .claude/my-rules\n\n  Queued in .ai/.pending-resolutions.yaml — run agentsync resolve to walk them.\n\n\n"));
+        assert!(out.contains("\n  Upstream touched fields you have overridden:\n\n    claude\n      ◆ targets.rules.dest\n          base: .claude/rules → .claude/rules-v2\n          your override: .claude/my-rules\n\n  Queued in .ai/.pending-resolutions.yaml — run exuno resolve to walk them.\n\n\n"));
         let queue =
             std::fs::read_to_string(fixture.project().join(".ai/.pending-resolutions.yaml"))
                 .unwrap();

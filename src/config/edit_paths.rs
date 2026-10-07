@@ -34,7 +34,7 @@ fn rows(project: &Project, tool: &Tool) -> Vec<Row> {
         } else {
             rows.push(Row::CustomizeHint(
                 resource,
-                format!("agentsync customize {} {resource}", tool.slug),
+                format!("exuno customize {} {resource}", tool.slug),
             ));
         }
     }
@@ -76,7 +76,7 @@ pub fn block(project: &Project, tool: &Tool, style: &Style) -> String {
             Row::SharedHint => format!(
                 "    {:<14} {}\n",
                 "MCP:",
-                style.dim("agentsync add mcp <server>  (shared — not yet configured)")
+                style.dim("exuno add mcp <server>  (shared — not yet configured)")
             ),
         });
     }
@@ -105,7 +105,7 @@ pub fn checklist(project: &Project, tool: &Tool, style: &Style) -> String {
             Row::SharedHint => (
                 style.dim("·"),
                 "mcp",
-                style.dim("agentsync add mcp <server> (shared — not yet configured)"),
+                style.dim("exuno add mcp <server> (shared — not yet configured)"),
             ),
         };
         text.push_str(&format!("          {glyph}  {resource:<10} {render}\n"));
@@ -130,7 +130,7 @@ mod tests {
         let claude = Tool::load(&project, "claude").unwrap();
         assert_eq!(
             block(&project, &claude, &Style::plain()),
-            "\n  Claude Code\n    Settings:      agentsync customize claude settings\n    MCP:           agentsync add mcp <server>  (shared — not yet configured)\n"
+            "\n  Claude Code\n    Settings:      exuno customize claude settings\n    MCP:           exuno add mcp <server>  (shared — not yet configured)\n"
         );
 
         write(dir.path(), ".ai/src/tools/claude/settings.json", "{}");
@@ -144,7 +144,7 @@ mod tests {
         write(dir.path(), ".ai/src/tools/windsurf/mcp.json", "{}");
         assert_eq!(
             block(&project, &windsurf, &Style::plain()),
-            "\n  Devin Desktop\n    Hooks:         agentsync customize windsurf hooks\n    Edit mcp:      .ai/src/tools/windsurf/mcp.json\n"
+            "\n  Devin Desktop\n    Hooks:         exuno customize windsurf hooks\n    Edit mcp:      .ai/src/tools/windsurf/mcp.json\n"
         );
         let amp = Tool::load(&project, "no-such-tool").unwrap();
         assert_eq!(block(&project, &amp, &Style::plain()), "");
@@ -157,7 +157,7 @@ mod tests {
         let claude = Tool::load(&project, "claude").unwrap();
         assert_eq!(
             checklist(&project, &claude, &Style::plain()),
-            "      Claude Code\n          ·  settings   agentsync customize claude settings\n          ·  mcp        agentsync add mcp <server> (shared — not yet configured)\n"
+            "      Claude Code\n          ·  settings   exuno customize claude settings\n          ·  mcp        exuno add mcp <server> (shared — not yet configured)\n"
         );
         write(dir.path(), ".ai/src/tools/claude/settings.json", "{}");
         write(dir.path(), ".ai/src/mcp.json", "{}");

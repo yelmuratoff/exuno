@@ -98,7 +98,7 @@ impl Tree {
     }
 
     /// Category paths whose last segment breaks the lowercase-kebab naming
-    /// `agentsync add --category` enforces, each reported once.
+    /// `exuno add --category` enforces, each reported once.
     pub fn nonstandard_categories(&self) -> Vec<String> {
         let categories = self
             .skills

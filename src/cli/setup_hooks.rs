@@ -1,4 +1,4 @@
-//! `agentsync setup-hooks`: `lib/setup_hooks.sh`, which installs the git hooks
+//! `exuno setup-hooks`: `lib/setup_hooks.sh`, which installs the git hooks
 //! that suit the project's outputs mode, appending one marked block per hook
 //! and leaving whatever the hook already ran.
 
@@ -32,7 +32,7 @@ pub const HELP: Help = Help {
                 ),
                 (
                     "local",
-                    "post-merge and post-checkout run agentsync sync after\npull/checkout",
+                    "post-merge and post-checkout run exuno sync after\npull/checkout",
                 ),
             ],
         },
@@ -41,7 +41,7 @@ pub const HELP: Help = Help {
             entries: &[
                 (
                     "--pre-commit",
-                    "In local mode, also install a pre-commit hook that runs\nagentsync sync --if-stale",
+                    "In local mode, also install a pre-commit hook that runs\nexuno sync --if-stale",
                 ),
                 ("-h, --help", "Show this help"),
             ],
@@ -55,7 +55,7 @@ pub const HELP: Help = Help {
 };
 
 const HOOKS_PATH_ELSEWHERE: &str =
-    "This repository points core.hooksPath at another directory, so AgentSync
+    "This repository points core.hooksPath at another directory, so Exuno
 will not write there:
 
   {hooks}
@@ -188,14 +188,11 @@ fn install_hook(
                     rewritten.extend_from_slice(block.as_bytes());
                     rewritten.extend_from_slice(&existing[end..]);
                     std::fs::write(&hook, rewritten).map_err(|e| Error::io(&hook, e))?;
-                    put(
-                        out,
-                        format!("Updated AgentSync hook in {name}.\n").as_bytes(),
-                    )?;
+                    put(out, format!("Updated Exuno hook in {name}.\n").as_bytes())?;
                 }
                 _ => put(
                     out,
-                    format!("AgentSync hook already present in {name}.\n").as_bytes(),
+                    format!("Exuno hook already present in {name}.\n").as_bytes(),
                 )?,
             }
         }
@@ -360,7 +357,7 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(
             out,
-            "AgentSync hook already present in post-merge.\nConfigured post-merge hook.\nAgentSync hook already present in post-checkout.\nConfigured post-checkout hook.\nConfigured pre-commit hook.\nGit hooks configured for local outputs.\n"
+            "Exuno hook already present in post-merge.\nConfigured post-merge hook.\nExuno hook already present in post-checkout.\nConfigured post-checkout hook.\nConfigured pre-commit hook.\nGit hooks configured for local outputs.\n"
         );
         let pre_commit = std::fs::read_to_string(dir.path().join(".git/hooks/pre-commit")).unwrap();
         assert!(pre_commit.contains("\n    agentsync sync --if-stale || echo"));
@@ -381,7 +378,7 @@ mod tests {
         std::fs::write(&hook, &unterminated).unwrap();
         let (status, out, _) = run(&root, &[]);
         assert_eq!(status, 0);
-        assert!(out.starts_with("AgentSync hook already present in post-merge.\n"));
+        assert!(out.starts_with("Exuno hook already present in post-merge.\n"));
         assert_eq!(std::fs::read_to_string(&hook).unwrap(), unterminated);
     }
 
@@ -428,7 +425,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "This repository points core.hooksPath at another directory, so AgentSync\nwill not write there:\n\n  {root}/.githooks\n\nA hook manager (husky, lefthook, pre-commit) most likely owns it. Add this\nto the hook it manages instead:\n\n  command -v agentsync >/dev/null 2>&1 && agentsync sync --if-stale || true\n\n"
+                "This repository points core.hooksPath at another directory, so Exuno\nwill not write there:\n\n  {root}/.githooks\n\nA hook manager (husky, lefthook, pre-commit) most likely owns it. Add this\nto the hook it manages instead:\n\n  command -v agentsync >/dev/null 2>&1 && agentsync sync --if-stale || true\n\n"
             )
         );
         assert!(!dir.path().join(".githooks/post-merge").exists());
@@ -436,16 +433,16 @@ mod tests {
         assert_eq!(status, 2);
         assert_eq!(
             err,
-            "Error: Unknown option: --bogus\nUsage: agentsync setup-hooks [--pre-commit]\n"
+            "Error: Unknown option: --bogus\nUsage: exuno setup-hooks [--pre-commit]\n"
         );
         let (status, out, err) = run(&root, &["--bogus", "--help"]);
         assert_eq!((status, err.as_str()), (0, ""));
-        assert!(out.contains("agentsync setup-hooks — install the git hooks"));
+        assert!(out.contains("exuno setup-hooks — install the git hooks"));
         let (status, out, _) = run(&root, &["--help"]);
         assert_eq!(status, 0);
         assert_eq!(
             out,
-            "\n  agentsync setup-hooks — install the git hooks that suit the project's outputs mode\n\n  USAGE\n    agentsync setup-hooks [--pre-commit]\n\n  DESCRIPTION\n    Installs the git hooks that suit this project's outputs mode. Each hook\n    gets one marked block appended; whatever the hook already ran stays.\n    Running it again rewrites a block an older release installed.\n\n  MODES\n    committed   pre-commit re-syncs and fails the commit when a generated file\n                changed, so outputs never lag source\n    local       post-merge and post-checkout run agentsync sync after\n                pull/checkout\n\n  OPTIONS\n    --pre-commit   In local mode, also install a pre-commit hook that runs\n                   agentsync sync --if-stale\n    -h, --help     Show this help\n\n  ENVIRONMENT\n    AGENTSYNC_SKIP_HOOKS=1   Make the installed hooks no-ops\n\n  EXAMPLES\n    agentsync setup-hooks\n    agentsync setup-hooks --pre-commit\n\n"
+            "\n  exuno setup-hooks — install the git hooks that suit the project's outputs mode\n\n  USAGE\n    exuno setup-hooks [--pre-commit]\n\n  DESCRIPTION\n    Installs the git hooks that suit this project's outputs mode. Each hook\n    gets one marked block appended; whatever the hook already ran stays.\n    Running it again rewrites a block an older release installed.\n\n  MODES\n    committed   pre-commit re-syncs and fails the commit when a generated file\n                changed, so outputs never lag source\n    local       post-merge and post-checkout run exuno sync after\n                pull/checkout\n\n  OPTIONS\n    --pre-commit   In local mode, also install a pre-commit hook that runs\n                   exuno sync --if-stale\n    -h, --help     Show this help\n\n  ENVIRONMENT\n    AGENTSYNC_SKIP_HOOKS=1   Make the installed hooks no-ops\n\n  EXAMPLES\n    exuno setup-hooks\n    exuno setup-hooks --pre-commit\n\n"
         );
         let missing = format!("{root}/nowhere");
         let (status, _, err) = run(&missing, &[]);

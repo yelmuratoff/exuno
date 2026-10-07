@@ -1,4 +1,4 @@
-//! `agentsync add`: `cmd_add` and `cmd_add_mcp` of `lib/helpers/add.sh`,
+//! `exuno add`: `cmd_add` and `cmd_add_mcp` of `lib/helpers/add.sh`,
 //! which scaffold a rule, skill, command, or subagent from the shipped content
 //! templates and splice one server into the shared `.ai/src/mcp.json`.
 
@@ -20,7 +20,7 @@ pub const HELP: Help = Help {
     ],
     description: &[
         "Scaffold a new entry under .ai/src/ from the shipped content templates,\nor add one server entry to the shared .ai/src/mcp.json.",
-        "Edit the scaffold, then run agentsync sync to propagate.",
+        "Edit the scaffold, then run exuno sync to propagate.",
     ],
     sections: &[
         Section {
@@ -335,7 +335,7 @@ pub fn add(
         format!(
             "\n{} {rel}\n\nEdit the file, then run {} to propagate.\n\n",
             style.green(&format!("Created {kind}:")),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         )
         .as_bytes(),
     )
@@ -793,8 +793,8 @@ fn add_mcp(
         format!(
             "\n{headline} .ai/src/mcp.json\n{} {server}\n\nThis MCP source applies to every enabled tool on next {}.\nAdd a per-tool override with {} if needed.\n\n",
             style.green("Added server:"),
-            style.cyan("agentsync sync"),
-            style.cyan("agentsync customize <tool> mcp")
+            style.cyan("exuno sync"),
+            style.cyan("exuno customize <tool> mcp")
         )
         .as_bytes(),
     )
@@ -1070,7 +1070,7 @@ mod tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\nCreated rule: .ai/src/rules/testing.md\n\nEdit the file, then run agentsync sync to propagate.\n\n"
+            "\nCreated rule: .ai/src/rules/testing.md\n\nEdit the file, then run exuno sync to propagate.\n\n"
         );
         let written = std::fs::read_to_string(dir.path().join(".ai/src/rules/testing.md")).unwrap();
         assert_eq!(
@@ -1090,11 +1090,11 @@ mod tests {
         let (status, _, err) = run(&root, &["rule", "testing", "--force", "extra"]);
         assert_eq!(status, 1);
         assert!(err.starts_with(
-            "Error: Unexpected argument: extra\n\n  agentsync add — scaffold a rule, skill, command, subagent, or MCP server\n\n  USAGE\n"
+            "Error: Unexpected argument: extra\n\n  exuno add — scaffold a rule, skill, command, subagent, or MCP server\n\n  USAGE\n"
         ));
         let (status, _, err) = run(&root, &["rule"]);
         assert_eq!(status, 1);
-        assert!(err.starts_with("Error: missing <name> for rule\n\n  agentsync add — "));
+        assert!(err.starts_with("Error: missing <name> for rule\n\n  exuno add — "));
         let (status, out, _) = run(&root, &["-h"]);
         assert_eq!((status, out), (0, HELP.render(&Style::plain())));
     }
@@ -1103,7 +1103,7 @@ mod tests {
     fn help_renders_both_forms_with_their_kinds_and_mcp_options() {
         assert_eq!(
             HELP.render(&Style::plain()),
-            "\n  agentsync add — scaffold a rule, skill, command, subagent, or MCP server\n\n  USAGE\n    agentsync add <kind> <name> [--category <path>] [--force]\n    agentsync add mcp <server> (--url URL | --command CMD) [MCP OPTIONS] [--force]\n\n  DESCRIPTION\n    Scaffold a new entry under .ai/src/ from the shipped content templates,\n    or add one server entry to the shared .ai/src/mcp.json.\n\n    Edit the scaffold, then run agentsync sync to propagate.\n\n  KINDS\n    rule       Create .ai/src/rules/<name>.md\n    skill      Create .ai/src/skills/[<category>/]<name>/SKILL.md\n    command    Create .ai/src/commands/<name>.md\n    subagent   Create .ai/src/agents/<name>.md\n    mcp        Add an MCP server entry to .ai/src/mcp.json\n\n  MCP OPTIONS\n    --url URL            HTTP server endpoint\n    --command CMD        Command that starts the server\n    --args \"a b c\"       Command arguments, split on whitespace\n    --env K=V[,K=V...]   Environment variables for the server\n\n  OPTIONS\n    --category <path>   Place a skill in a category, e.g. flutter/ui\n    -f, --force         Overwrite an existing file or server entry\n    -h, --help          Show this help\n\n  EXAMPLES\n    agentsync add rule testing\n    agentsync add skill deploy\n    agentsync add skill slivers --category flutter/ui\n    agentsync add mcp linear --url https://mcp.linear.app/sse\n    agentsync add mcp github --command npx --args \"-y @github/mcp-server\"\n\n"
+            "\n  exuno add — scaffold a rule, skill, command, subagent, or MCP server\n\n  USAGE\n    exuno add <kind> <name> [--category <path>] [--force]\n    exuno add mcp <server> (--url URL | --command CMD) [MCP OPTIONS] [--force]\n\n  DESCRIPTION\n    Scaffold a new entry under .ai/src/ from the shipped content templates,\n    or add one server entry to the shared .ai/src/mcp.json.\n\n    Edit the scaffold, then run exuno sync to propagate.\n\n  KINDS\n    rule       Create .ai/src/rules/<name>.md\n    skill      Create .ai/src/skills/[<category>/]<name>/SKILL.md\n    command    Create .ai/src/commands/<name>.md\n    subagent   Create .ai/src/agents/<name>.md\n    mcp        Add an MCP server entry to .ai/src/mcp.json\n\n  MCP OPTIONS\n    --url URL            HTTP server endpoint\n    --command CMD        Command that starts the server\n    --args \"a b c\"       Command arguments, split on whitespace\n    --env K=V[,K=V...]   Environment variables for the server\n\n  OPTIONS\n    --category <path>   Place a skill in a category, e.g. flutter/ui\n    -f, --force         Overwrite an existing file or server entry\n    -h, --help          Show this help\n\n  EXAMPLES\n    exuno add rule testing\n    exuno add skill deploy\n    exuno add skill slivers --category flutter/ui\n    exuno add mcp linear --url https://mcp.linear.app/sse\n    exuno add mcp github --command npx --args \"-y @github/mcp-server\"\n\n"
         );
     }
 
@@ -1119,7 +1119,7 @@ mod tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\nCreated shared MCP source: .ai/src/mcp.json\nAdded server: github\n\nThis MCP source applies to every enabled tool on next agentsync sync.\nAdd a per-tool override with agentsync customize <tool> mcp if needed.\n\n"
+            "\nCreated shared MCP source: .ai/src/mcp.json\nAdded server: github\n\nThis MCP source applies to every enabled tool on next exuno sync.\nAdd a per-tool override with exuno customize <tool> mcp if needed.\n\n"
         );
         let file = dir.path().join(".ai/src/mcp.json");
         assert_eq!(
@@ -1143,7 +1143,7 @@ mod tests {
         );
         let (status, _, err) = run(&root, &["mcp"]);
         assert_eq!(status, 1);
-        assert!(err.starts_with("Error: missing <server> for mcp\n\n  agentsync add — "));
+        assert!(err.starts_with("Error: missing <server> for mcp\n\n  exuno add — "));
         let (status, out, err) = run(&root, &["mcp", "bad", "--command", "c", "--env", "NOEQ"]);
         assert_eq!((status, out.as_str()), (1, ""));
         assert_eq!(err, "Error: --env entry 'NOEQ' must be KEY=VALUE.\n");

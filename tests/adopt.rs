@@ -1,4 +1,4 @@
-//! `tests/adopt.bats`: `agentsync adopt` — promote a manual edit in a
+//! `tests/adopt.bats`: `exuno adopt` — promote a manual edit in a
 //! generated file back into `.ai/src/`, refuse transformed targets, keep the
 //! next sync drift-free.
 
@@ -329,7 +329,7 @@ fn adopt_refuses_path_outside_repo() {
 fn adopt_works_before_the_first_sync_when_nothing_is_tracked_yet() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
-    // No sync yet, no manifest — a project's own CLAUDE.md from before AgentSync.
+    // No sync yet, no manifest — a project's own CLAUDE.md from before Exuno.
     project.write("CLAUDE.md", "# Pre-existing\n");
 
     project
@@ -344,7 +344,7 @@ fn adopt_works_before_the_first_sync_when_nothing_is_tracked_yet() {
 #[test]
 fn adopt_refuses_untracked_file_not_in_manifest() {
     let project = synced_project(&["claude"]);
-    // A file inside a dest dir that AgentSync didn't produce.
+    // A file inside a dest dir that Exuno didn't produce.
     project.write(".claude/rules/extraneous.md", "rogue\n");
 
     project
@@ -780,8 +780,6 @@ fn adopt_refuses_to_create_a_settings_source_from_owned_keys() {
         .args(["adopt", "--yes", CODEX_CONFIG])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "agentsync customize codex settings",
-        ));
+        .stderr(predicate::str::contains("exuno customize codex settings"));
     assert!(!project.exists(CODEX_SETTINGS));
 }

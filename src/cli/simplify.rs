@@ -1,4 +1,4 @@
-//! `agentsync simplify`: `cmd_simplify` of `lib/helpers/simplify.sh`, which
+//! `exuno simplify`: `cmd_simplify` of `lib/helpers/simplify.sh`, which
 //! drops override fields equal to the base and byte-identical payload copies.
 
 use crate::paths::DiskText;
@@ -166,7 +166,7 @@ pub fn simplify(
         format!(
             "\n{}\n  Run {} to verify outputs are unchanged.\n\n",
             style.green("Done."),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         )
     } else {
         format!("\n{}\n\n", style.dim("Dry run — pass --apply to persist."))
@@ -324,11 +324,11 @@ impl Payloads {
             "\n{}\n{}\n\n",
             style.dim(&format!(
                 "  Run {} to preview the migration,",
-                style.cyan("agentsync migrate --legacy")
+                style.cyan("exuno migrate --legacy")
             )),
             style.dim(&format!(
                 "  then {} to move these files.",
-                style.cyan("agentsync migrate --apply")
+                style.cyan("exuno migrate --apply")
             ))
         ));
         text
@@ -555,7 +555,7 @@ mod tests {
             call(&root, &["--help"], false, ""),
             (
                 0,
-                "\n  agentsync simplify — drop override fields that match base\n\n  USAGE\n    agentsync simplify [<tool>] [--apply] [-y]\n\n  DESCRIPTION\n    Removes fields from user overrides when they match the base.\n    Dry-run by default: pass --apply to persist.\n\n  OPTIONS\n    --apply      Write changes to disk (default: preview)\n    -y, --yes    Auto-delete empty override files (no prompt)\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync simplify\n    agentsync simplify cursor --apply\n    agentsync simplify --apply -y\n\n".to_string(),
+                "\n  exuno simplify — drop override fields that match base\n\n  USAGE\n    exuno simplify [<tool>] [--apply] [-y]\n\n  DESCRIPTION\n    Removes fields from user overrides when they match the base.\n    Dry-run by default: pass --apply to persist.\n\n  OPTIONS\n    --apply      Write changes to disk (default: preview)\n    -y, --yes    Auto-delete empty override files (no prompt)\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno simplify\n    exuno simplify cursor --apply\n    exuno simplify --apply -y\n\n".to_string(),
                 String::new()
             )
         );
@@ -584,7 +584,7 @@ mod tests {
         );
 
         let (_, applied, _) = call(&root, &["--apply"], false, "");
-        assert!(applied.contains("  Removed 2 field(s).\n\n\nDone.\n  Run agentsync sync to verify outputs are unchanged.\n\n"));
+        assert!(applied.contains("  Removed 2 field(s).\n\n\nDone.\n  Run exuno sync to verify outputs are unchanged.\n\n"));
         assert_eq!(
             std::fs::read_to_string(&file).unwrap(),
             "enabled: true\n\ntargets:\n  rules:\n    extension: \".mdcustom\"\n  custom:\n    x: 1\n"
@@ -597,7 +597,7 @@ mod tests {
         let file = format!("{root}/.ai/src/tools/cursor.yaml");
         std::fs::write(&file, "name: \"Cursor\"\n").unwrap();
         let (_, kept, _) = call(&root, &["--apply"], false, "");
-        assert!(kept.ends_with("  Removed 1 field(s).\n  Kept empty file — remove manually if desired.\n\n\nDone.\n  Run agentsync sync to verify outputs are unchanged.\n\n"));
+        assert!(kept.ends_with("  Removed 1 field(s).\n  Kept empty file — remove manually if desired.\n\n\nDone.\n  Run exuno sync to verify outputs are unchanged.\n\n"));
         assert!(std::path::Path::new(&file).is_file());
 
         std::fs::write(&file, "name: \"Cursor\"\n").unwrap();

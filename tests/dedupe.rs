@@ -1,4 +1,4 @@
-//! `tests/dedupe.bats`: `agentsync dedupe` — deleting source files a parent
+//! `tests/dedupe.bats`: `exuno dedupe` — deleting source files a parent
 //! `.ai/src/` already holds byte for byte, across walk-up, `--against`,
 //! `--workspace`, and `shared.path`. Deeper coverage of the interactive
 //! delete/keep/view/quit prompt loop and the identical/divergent diffing
@@ -412,7 +412,7 @@ fn dedupe_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync dedupe — remove source files that duplicate a parent .ai/src/\n\n  USAGE\n    agentsync dedupe [OPTIONS]\n",
+            "\n  exuno dedupe — remove source files that duplicate a parent .ai/src/\n\n  USAGE\n    exuno dedupe [OPTIONS]\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    --against <path>   "))
         .stdout(predicate::str::contains("\n    --workspace        "))

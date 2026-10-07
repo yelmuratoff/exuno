@@ -1,4 +1,4 @@
-//! AgentSync engine. `main.rs` is the only place that talks to the
+//! Exuno engine. `main.rs` is the only place that talks to the
 //! process (arguments, exit codes); everything here is callable from tests.
 //!
 //! Module docs name the Bash function each file was ported from. That engine

@@ -208,7 +208,7 @@ fn adopt_existing(run: &mut Run, target: &str, existing: &[String]) -> Result<()
     if !skips.is_empty() {
         run.say(&format!(
             "   {}\n",
-            style.dim("Skipped files are regenerated from .ai/src/ — restore them with 'agentsync rollback' if needed.")
+            style.dim("Skipped files are regenerated from .ai/src/ — restore them with 'exuno rollback' if needed.")
         ))?;
     }
     if adopted > 0 || !skips.is_empty() {
@@ -238,7 +238,7 @@ fn write_ci_workflow(run: &mut Run, target: &str) -> Result<(), Error> {
         );
     staging::write_beside(Path::new(&dest), text.as_bytes())?;
     run.say(&format!(
-        "   Created {} — CI gate (agentsync check)\n",
+        "   Created {} — CI gate (exuno check)\n",
         style.cyan(".github/workflows/agentsync-check.yml")
     ))
 }
@@ -255,14 +255,14 @@ fn project_config_text(version: &str, tools: &[String], outputs: &str) -> String
         text
     };
     format!(
-        "# AgentSync — Project Configuration
+        "# Exuno — Project Configuration
 # All keys are optional — remove any that you leave at the default.
 
 agentsync_version: \"{version}\"
 format: {}
 
 # Tools: which ones to sync for this project.
-# Each name must match a base tool (see `agentsync list`) or a custom override
+# Each name must match a base tool (see `exuno list`) or a custom override
 # file under .ai/src/tools/<name>.yaml.
 tools:
 {enabled}
@@ -287,9 +287,9 @@ post_sync:
 
 # Where generated tool files live.
 #   committed — outputs and .ai/.sync-manifest are committed; teammates get
-#               them from `git pull` and CI runs `agentsync check`.
+#               them from `git pull` and CI runs `exuno check`.
 #   local     — outputs and the manifest are gitignored; every clone runs
-#               `agentsync sync` (see `agentsync setup-hooks`).
+#               `exuno sync` (see `exuno setup-hooks`).
 outputs: {outputs}
 
 # .gitignore management (false leaves the managed block untouched).
@@ -315,7 +315,7 @@ mod tests {
         let run = call(&root, &["--tools", "claude", "--yes", "--no-sync"], quiet());
         assert_eq!(run.status, 0);
         assert!(run.out.contains(&format!(
-            "Initializing AgentSync in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted .claude/settings.json → .ai/src/tools/claude/settings.json\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n\n   Created .ai/agent_sync.yaml"
+            "Initializing Exuno in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted .claude/settings.json → .ai/src/tools/claude/settings.json\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n\n   Created .ai/agent_sync.yaml"
         )));
         assert!(
             run.out
@@ -347,7 +347,7 @@ mod tests {
             &["--tools", "claude,codex", "--yes", "--no-sync"],
             quiet(),
         );
-        assert!(two.out.contains("\n   Adopted AGENTS.md → .ai/src/AGENTS.md\n   Kept as-is CLAUDE.md — another file already became .ai/src/AGENTS.md\n   Skipped files are regenerated from .ai/src/ — restore them with 'agentsync rollback' if needed.\n\n"));
+        assert!(two.out.contains("\n   Adopted AGENTS.md → .ai/src/AGENTS.md\n   Kept as-is CLAUDE.md — another file already became .ai/src/AGENTS.md\n   Skipped files are regenerated from .ai/src/ — restore them with 'exuno rollback' if needed.\n\n"));
         assert_eq!(
             std::fs::read_to_string(Path::new(&root).join(".ai/src/AGENTS.md")).unwrap(),
             "# From AGENTS\n"
@@ -393,7 +393,7 @@ mod tests {
             &["--tools", "claude", "--yes", "--ci", "github", "--no-sync"],
             quiet(),
         );
-        assert!(run.out.contains(&format!("Initializing AgentSync in {root}\n\n   Created .github/workflows/agentsync-check.yml — CI gate (agentsync check)\n\n   Created .ai/agent_sync.yaml")));
+        assert!(run.out.contains(&format!("Initializing Exuno in {root}\n\n   Created .github/workflows/agentsync-check.yml — CI gate (exuno check)\n\n   Created .ai/agent_sync.yaml")));
         let workflow = Path::new(&root).join(".github/workflows/agentsync-check.yml");
         let text = std::fs::read_to_string(&workflow).unwrap();
         assert!(text.contains("AGENTSYNC_VERSION=9.9.9 bash"));

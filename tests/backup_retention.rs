@@ -222,7 +222,7 @@ fn retention_preserve_sync_keeps_snapshots_and_every_staging_kind_despite_low_li
         "before-sync\n"
     );
 
-    // AgentSync's own restore, in addition to the hash-based evidence above.
+    // Exuno's own restore, in addition to the hash-based evidence above.
     project
         .exuno()
         .args(["rollback", &snapshot, "--yes"])

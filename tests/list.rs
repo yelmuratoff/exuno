@@ -1,4 +1,4 @@
-//! `tests/list.bats`: `agentsync list` in an initialised project. The alias
+//! `tests/list.bats`: `exuno list` in an initialised project. The alias
 //! case is `ls_is_an_alias_for_list` in `tests/cli.rs`.
 
 mod common;
@@ -12,7 +12,7 @@ fn list(project: &Project) -> assert_cmd::assert::Assert {
 
 #[test]
 fn list_shows_tools_header() {
-    list(&Project::seeded(&[])).stdout(predicate::str::contains("AgentSync Tools"));
+    list(&Project::seeded(&[])).stdout(predicate::str::contains("Exuno Tools"));
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn list_reports_enabled_tool_count() {
 fn list_works_even_without_ai_directory_uses_base_catalog() {
     let project = Project::seeded(&[]);
     std::fs::remove_dir_all(project.join(".ai")).unwrap();
-    list(&project).stdout(predicate::str::contains("AgentSync Tools"));
+    list(&project).stdout(predicate::str::contains("Exuno Tools"));
 }
 
 #[test]
@@ -69,9 +69,9 @@ fn list_help_is_answered_on_stdout_without_the_table() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync list — show available tools and their status\n\n  USAGE\n    agentsync list\n    agentsync ls\n",
+            "\n  exuno list — show available tools and their status\n\n  USAGE\n    exuno list\n    exuno ls\n",
         ))
         .stdout(predicate::str::contains("\n  LEGEND\n"))
-        .stdout(predicate::str::contains("AgentSync Tools").not())
+        .stdout(predicate::str::contains("Exuno Tools").not())
         .stderr("");
 }

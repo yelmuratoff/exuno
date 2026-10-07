@@ -1,4 +1,4 @@
-//! `tests/doctor.bats`: `agentsync doctor`, plus the two `list`/`init` cases
+//! `tests/doctor.bats`: `exuno doctor`, plus the two `list`/`init` cases
 //! bats colocated in the same file (payload-override column, version pin).
 //! Doctor writes everything to stdout, `main.rs`'s `cli::doctor::doctor` call.
 
@@ -312,7 +312,7 @@ fn doctor_shows_edit_paths_section_for_enabled_tools() {
         .stdout(predicate::str::contains(
             ".ai/src/tools/claude/settings.json",
         ))
-        .stdout(predicate::str::contains("agentsync add mcp"));
+        .stdout(predicate::str::contains("exuno add mcp"));
 }
 
 #[test]
@@ -322,7 +322,7 @@ fn doctor_edit_paths_shows_customize_hint_when_no_override_exists() {
     doctor(&project)
         .success()
         .stdout(predicate::str::contains("Edit paths"))
-        .stdout(predicate::str::contains("agentsync customize cursor hooks"));
+        .stdout(predicate::str::contains("exuno customize cursor hooks"));
 }
 
 #[test]
@@ -391,7 +391,7 @@ fn doctor_accepts_categories_and_warns_on_a_name_two_skills_share() {
 
     project.write(".ai/src/skills/flutter/auth/SKILL.md", skill);
     doctor(&project).stdout(predicate::str::contains(
-        "skill name 'auth' is claimed by skills/backend/auth/, skills/flutter/auth/ — agentsync sync refuses it; rename one",
+        "skill name 'auth' is claimed by skills/backend/auth/, skills/flutter/auth/ — exuno sync refuses it; rename one",
     ));
 }
 
@@ -537,7 +537,7 @@ fn doctor_detects_identical_hash_duplicate_against_parent_ai_src() {
         .stdout(predicate::str::contains(
             "rules/shared.md — duplicate of parent",
         ))
-        .stdout(predicate::str::contains("agentsync dedupe"));
+        .stdout(predicate::str::contains("exuno dedupe"));
 }
 
 #[test]
@@ -677,7 +677,7 @@ fn doctor_help_is_answered_on_stdout_without_a_project() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync doctor — validate setup and surface warnings\n\n  USAGE\n    agentsync doctor\n",
+            "\n  exuno doctor — validate setup and surface warnings\n\n  USAGE\n    exuno doctor\n",
         ))
         .stdout(predicate::str::contains("\n  EXIT STATUS\n"))
         .stderr("");

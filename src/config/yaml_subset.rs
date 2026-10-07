@@ -1,4 +1,4 @@
-//! Reader for the YAML subset AgentSync configs are written in.
+//! Reader for the YAML subset Exuno configs are written in.
 //!
 //! This mirrors `lib/helpers/yaml.sh` rather than parsing YAML: every shipped
 //! and user config was written against that reader's rules (first duplicate

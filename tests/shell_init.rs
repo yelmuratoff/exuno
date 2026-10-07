@@ -263,7 +263,7 @@ fn shell_init_help_prints_usage() {
     shell_init(&Project::empty(), &["--help"])
         .success()
         .stdout(predicate::str::contains(
-            "\n  USAGE\n    agentsync shell-init [zsh|bash]\n",
+            "\n  USAGE\n    exuno shell-init [zsh|bash]\n",
         ));
 }
 
@@ -271,7 +271,5 @@ fn shell_init_help_prints_usage() {
 fn shell_init_help_recommends_the_eval_form() {
     shell_init(&Project::empty(), &["--help"])
         .success()
-        .stdout(predicate::str::contains(
-            "eval \"$(agentsync shell-init zsh)\"",
-        ));
+        .stdout(predicate::str::contains("eval \"$(exuno shell-init zsh)\""));
 }

@@ -1,4 +1,4 @@
-//! `tests/workspace.bats`: `agentsync sync --workspace` and related fan-out
+//! `tests/workspace.bats`: `exuno sync --workspace` and related fan-out
 //! behavior. `cli::workspace::run` writes everything — the found-count, each
 //! per-project `→ rel`, the completion line, and the "No .ai/ directories
 //! found" hint — to stderr, like the sync log it wraps; stdout stays empty

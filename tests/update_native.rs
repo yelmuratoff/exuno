@@ -1,4 +1,4 @@
-//! `tests/update_native.bats`: `agentsync update` on a binary install — the
+//! `tests/update_native.bats`: `exuno update` on a binary install — the
 //! binary run directly, as the installer links it, against a curl stand-in on
 //! `PATH` that serves a fixture release and a real tar archive.
 //!
@@ -302,7 +302,7 @@ fn a_tag_that_is_not_a_release_is_refused() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "No AgentSync release is tagged 999.0.0.",
+            "No Exuno release is tagged 999.0.0.",
         ));
     assert!(install.installed_unchanged());
 }

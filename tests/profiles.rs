@@ -410,7 +410,7 @@ fn profile_remove_keeps_files_agentsync_did_not_generate_in_the_config_home() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "kept .claude-hub/ (it holds files AgentSync did not generate)",
+            "kept .claude-hub/ (it holds files Exuno did not generate)",
         ));
     assert!(!project.exists(".claude-hub/CLAUDE.md"));
     assert_eq!(
