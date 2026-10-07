@@ -26,6 +26,10 @@ pub const HOOK_BLOCKS: [(&str, &str); 2] = [
     ),
 ];
 
+/// Names an engine-owned skill shipped under before its current one; a
+/// project copy under one of them is retired like a copy of the skill itself.
+pub const LEGACY_ENGINE_SKILLS: [&str; 1] = ["agentsync"];
+
 /// Frontmatter key prefixes for a skill's card metadata.
 pub const SKILL_METADATA_PREFIXES: [&str; 2] = ["metadata.exuno-", "metadata.agentsync-"];
 

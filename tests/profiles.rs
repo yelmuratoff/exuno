@@ -174,18 +174,16 @@ fn sync_a_profile_with_its_own_source_keeps_the_engine_skill_and_its_extension()
         "---\nname: work\ndescription: Work\n---\n",
     );
     project.write(
-        ".ai/src/skills/meta/agentsync/SKILL.append.md",
+        ".ai/src/skills/meta/exuno/SKILL.append.md",
         "Local notes.\n",
     );
     project.exuno().arg("sync").assert().success();
 
     for home in [".claude", ".claude-hub"] {
-        let skill = project.read(&format!("{home}/skills/agentsync/SKILL.md"));
-        assert!(skill.starts_with("---\nname: agentsync\n"), "{home}");
+        let skill = project.read(&format!("{home}/skills/exuno/SKILL.md"));
+        assert!(skill.starts_with("---\nname: exuno\n"), "{home}");
         assert!(skill.ends_with("\n\nLocal notes.\n"), "{home}");
-        assert!(project.exists(&format!(
-            "{home}/skills/agentsync/references/maintenance.md"
-        )));
+        assert!(project.exists(&format!("{home}/skills/exuno/references/maintenance.md")));
     }
     assert!(project.exists(".claude-hub/skills/work/SKILL.md"));
     project.exuno().arg("check").assert().success();

@@ -258,7 +258,7 @@ fn child_skills_survive_alongside_the_engine_base_skills() {
 
     exuno_in(&child).arg("sync").assert().success();
     assert!(child.join(".claude/skills/child-skill/SKILL.md").is_file());
-    assert!(child.join(".claude/skills/agentsync/SKILL.md").is_file());
+    assert!(child.join(".claude/skills/exuno/SKILL.md").is_file());
 }
 
 #[test]

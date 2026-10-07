@@ -55,10 +55,8 @@ fn list_reads_bundled_skill_and_folded_description() {
         .assert()
         .success()
         .stdout(predicate::str::contains("deploy\tDeploy the app safely\t"))
-        .stdout(predicate::str::contains("agentsync\t"))
-        .stdout(predicate::str::contains(
-            "bundled:skills/agentsync/SKILL.md",
-        ));
+        .stdout(predicate::str::contains("exuno\t"))
+        .stdout(predicate::str::contains("bundled:skills/exuno/SKILL.md"));
 }
 
 #[test]

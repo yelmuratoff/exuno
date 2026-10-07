@@ -22,7 +22,7 @@ fn seed_pre_format_project() -> Project {
 
     let skill = std::fs::read_to_string(
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            + "/lib/templates/base-src/skills/agentsync/SKILL.md",
+            + "/lib/templates/base-src/skills/exuno/SKILL.md",
     )
     .unwrap();
     std::fs::create_dir_all(project.join(".ai/src/skills/agentsync/references")).unwrap();
@@ -140,7 +140,7 @@ fn format_after_migrating_the_engine_supplies_the_skill_again() {
         .assert()
         .success();
     project.exuno().arg("sync").assert().success();
-    assert!(project.exists(".claude/skills/agentsync/SKILL.md"));
+    assert!(project.exists(".claude/skills/exuno/SKILL.md"));
 }
 
 #[test]

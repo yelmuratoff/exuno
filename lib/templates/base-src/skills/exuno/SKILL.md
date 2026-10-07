@@ -1,5 +1,5 @@
 ---
-name: agentsync
+name: exuno
 description: AgentSync config — AGENTS.md, rules, skills, commands, subagents, settings, hooks, MCP, syncing .ai/src to Claude, Codex, Cursor, OpenCode. Use when editing them or asking why a skill did not load.
 ---
 

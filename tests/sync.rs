@@ -678,7 +678,7 @@ fn sync_kiro_writes_steering_skills_agents_and_mcp() {
             .read(".kiro/steering/scoped-fixture.md")
             .starts_with("---\ninclusion: fileMatch\nfileMatchPattern: ['**/*.dart']\n---\n")
     );
-    assert!(project.exists(".kiro/skills/agentsync/SKILL.md"));
+    assert!(project.exists(".kiro/skills/exuno/SKILL.md"));
     assert!(project.exists(".kiro/skills/command-review/SKILL.md"));
     assert_eq!(
         project.read(".kiro/agents/reviewer.md"),
@@ -879,7 +879,7 @@ fn sync_groups_the_inlined_skill_index_by_category() {
     assert!(index.contains(
         "\n### cloudflare\n\n- `wrangler` — The wrangler fixture skill\n\n### flutter\n\n- `bloc` — The bloc fixture skill\n\n### flutter/ui\n\n- `slivers` — The slivers fixture skill\n"
     ));
-    assert!(index.find("- `agentsync` — ").unwrap() < index.find("### ").unwrap());
+    assert!(index.find("- `exuno` — ").unwrap() < index.find("### ").unwrap());
 }
 
 #[test]

@@ -426,7 +426,7 @@ mod tests {
         let ws = Workspace::new("/proj");
         assert!(ws.is_file("/<agentsync>/lib/templates/settings/claude.json"));
         assert!(ws.is_file("/<agentsync>/lib/config.yaml"));
-        assert!(ws.is_dir("/<agentsync>/lib/templates/base-src/skills/agentsync"));
+        assert!(ws.is_dir("/<agentsync>/lib/templates/base-src/skills/exuno"));
     }
 
     #[cfg(unix)]

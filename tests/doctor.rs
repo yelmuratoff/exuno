@@ -357,15 +357,15 @@ fn doctor_advises_on_empty_skill_directory_no_skill_md() {
 #[test]
 fn doctor_advises_when_a_project_copy_replaces_the_bundled_skill() {
     let project = Project::seeded(&["--no-detect"]);
-    let replaced = "skills/meta/agentsync/ — replaces the bundled skill";
-    project.write(".ai/src/skills/meta/agentsync/SKILL.append.md", "Notes.\n");
+    let replaced = "skills/meta/exuno/ — replaces the bundled skill";
+    project.write(".ai/src/skills/meta/exuno/SKILL.append.md", "Notes.\n");
     doctor(&project)
         .success()
         .stdout(predicate::str::contains(replaced).not());
 
     project.write(
-        ".ai/src/skills/meta/agentsync/SKILL.md",
-        "---\nname: agentsync\ndescription: Mine\n---\n",
+        ".ai/src/skills/meta/exuno/SKILL.md",
+        "---\nname: exuno\ndescription: Mine\n---\n",
     );
     doctor(&project)
         .success()

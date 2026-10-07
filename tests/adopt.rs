@@ -432,8 +432,8 @@ fn adopt_all_promotes_every_drifted_1_to_1_output() {
 #[test]
 fn adopt_all_names_a_source_two_outputs_share_once() {
     let project = synced_project(&["claude", "cursor"]);
-    project.append(".claude/skills/agentsync/SKILL.md", "## Same edit\n");
-    project.append(".cursor/skills/agentsync/SKILL.md", "## Same edit\n");
+    project.append(".claude/skills/exuno/SKILL.md", "## Same edit\n");
+    project.append(".cursor/skills/exuno/SKILL.md", "## Same edit\n");
 
     let output = project
         .exuno()
@@ -448,7 +448,7 @@ fn adopt_all_names_a_source_two_outputs_share_once() {
     assert_eq!(stdout.matches("✓ adopted").count(), 1, "{stdout}");
     assert!(
         project
-            .read(".ai/src/skills/agentsync/SKILL.md")
+            .read(".ai/src/skills/exuno/SKILL.md")
             .contains("Same edit")
     );
 }

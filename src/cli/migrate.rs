@@ -369,7 +369,10 @@ fn scan_base_skills(root: &Path) -> Result<Vec<BaseSkillCopy>, Error> {
     let skills_text = skills.disk_text();
     let tree = skill_tree::discover(&Workspace::on_disk(&skills_text), &skills_text);
     let mut copies = Vec::new();
-    for name in catalog::base_src_skills() {
+    let legacy = names::LEGACY_ENGINE_SKILLS
+        .iter()
+        .map(|name| name.to_string());
+    for name in catalog::base_src_skills().into_iter().chain(legacy) {
         let Some(skill) = tree.find(&name) else {
             continue;
         };
@@ -1122,11 +1125,11 @@ mod tests {
     }
 
     #[test]
-    fn engine_owned_skill_copies_are_retired_unless_edited_and_the_format_is_recorded() {
+    fn legacy_agentsync_skill_copies_are_retired_unless_edited_and_the_format_is_recorded() {
         let skill = |rel: &str| {
             catalog::engine_files()
                 .into_iter()
-                .find(|(path, _)| path == &format!("lib/templates/base-src/skills/agentsync/{rel}"))
+                .find(|(path, _)| path == &format!("lib/templates/base-src/skills/exuno/{rel}"))
                 .map(|(_, bytes)| String::from_utf8(bytes.to_vec()).unwrap())
                 .unwrap()
         };
@@ -1206,7 +1209,7 @@ mod tests {
         let files: Vec<(String, String)> = catalog::engine_files()
             .into_iter()
             .filter_map(|(path, bytes)| {
-                let rel = path.strip_prefix("lib/templates/base-src/skills/agentsync/")?;
+                let rel = path.strip_prefix("lib/templates/base-src/skills/exuno/")?;
                 Some((rel.to_string(), String::from_utf8(bytes.to_vec()).unwrap()))
             })
             .collect();
@@ -1214,7 +1217,7 @@ mod tests {
             .iter()
             .map(|(rel, text)| {
                 (
-                    format!(".ai/src/skills/meta/sub/agentsync/{rel}"),
+                    format!(".ai/src/skills/meta/sub/exuno/{rel}"),
                     text.as_str(),
                 )
             })
@@ -1223,7 +1226,7 @@ mod tests {
             .iter()
             .map(|(rel, text)| {
                 format!(
-                    "skills/agentsync/{rel}\t{}\n",
+                    "skills/exuno/{rel}\t{}\n",
                     crate::transaction::manifest::sha256_hex(text.as_bytes())
                 )
             })
@@ -1240,11 +1243,11 @@ mod tests {
         let (_dir, root) = project(&fixture);
         let dry = call(&root, &["--legacy"], false, false, None);
         assert!(dry.out.contains(
-            "  would remove  .ai/src/skills/meta/sub/agentsync/ (unedited — the engine supplies it)\n"
+            "  would remove  .ai/src/skills/meta/sub/exuno/ (unedited — the engine supplies it)\n"
         ));
         let applied = call(&root, &["--apply"], false, false, None);
         assert!(applied.out.contains(
-            "  removed       .ai/src/skills/meta/sub/agentsync/ (the engine supplies it now)\n"
+            "  removed       .ai/src/skills/meta/sub/exuno/ (the engine supplies it now)\n"
         ));
         assert_eq!(
             tree(&root),
@@ -1262,11 +1265,11 @@ mod tests {
 
         let (_dir, root) = project(&fixture);
         std::fs::write(
-            Path::new(&root).join(".ai/src/skills/meta/sub/agentsync/SKILL.md"),
+            Path::new(&root).join(".ai/src/skills/meta/sub/exuno/SKILL.md"),
             "edited\n",
         )
         .unwrap();
         let kept = call(&root, &["--apply"], false, false, None);
-        assert!(kept.out.contains("  keep          .ai/src/skills/meta/sub/agentsync/ (edited — stays your override; delete it to follow the engine)\n"));
+        assert!(kept.out.contains("  keep          .ai/src/skills/meta/sub/exuno/ (edited — stays your override; delete it to follow the engine)\n"));
     }
 }
