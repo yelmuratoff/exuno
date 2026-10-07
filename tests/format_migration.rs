@@ -239,7 +239,7 @@ fn format_r3_previews_every_agentsync_leftover_without_touching_it() {
             "would rename  .ai/agent_sync.yaml → .ai/exuno.yaml\n",
         ))
         .stdout(predicate::str::contains(
-            "would rename  agentsync_version → exuno_version in .ai/agent_sync.yaml\n",
+            "would rename  agentsync_version → exuno_version in .ai/exuno.yaml\n",
         ))
         .stdout(predicate::str::contains(
             "would rename  metadata.agentsync-* → metadata.exuno-* in .ai/src/skills/deploy/SKILL.md\n",

@@ -79,10 +79,12 @@ impl Leftover {
 pub fn scan(root: &Path) -> Vec<Leftover> {
     let mut found = Vec::new();
     let config = root.join(CONFIG);
+    let mut moving = false;
     for rel in LEGACY_CONFIGS {
         let legacy = root.join(rel);
         if legacy.is_file() {
             let blocked = config.is_file().then(|| config.clone());
+            moving = blocked.is_none();
             found.push(Leftover::new(Kind::ConfigFile, legacy, blocked));
             break;
         }
@@ -90,7 +92,8 @@ pub fn scan(root: &Path) -> Vec<Leftover> {
     if let Some(resolved) = resolved_config(root)
         && read(&resolved).is_some_and(|text| pins_legacy_key(&text))
     {
-        found.push(Leftover::new(Kind::VersionKey, resolved, None));
+        let edited = if moving { config } else { resolved };
+        found.push(Leftover::new(Kind::VersionKey, edited, None));
     }
     let mut skill_files = Vec::new();
     let mut skill_dirs = Vec::new();
@@ -368,6 +371,7 @@ mod tests {
             ]
         );
         assert!(found.iter().all(|leftover| leftover.blocked_by.is_none()));
+        assert_eq!(found[1].path, root.join(".ai/exuno.yaml"));
 
         apply_all(root);
         assert_eq!(
