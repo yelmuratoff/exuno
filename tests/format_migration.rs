@@ -261,6 +261,25 @@ fn format_r3_previews_every_agentsync_leftover_without_touching_it() {
 
 #[cfg(unix)]
 #[test]
+fn migrate_run_as_agentsync_suggests_agentsync_commands() {
+    let project = seed_r2_agentsync_project();
+    let bin = project.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_exuno"), bin.join("agentsync")).unwrap();
+    assert_cmd::Command::new(bin.join("agentsync"))
+        .current_dir(project.path())
+        .env_remove("EXUNO_REPO_ROOT")
+        .env_remove("AGENTSYNC_REPO_ROOT")
+        .args(["migrate", "--legacy"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Dry-run — re-run with agentsync migrate --apply to apply.",
+        ));
+}
+
+#[cfg(unix)]
+#[test]
 fn format_r3_apply_warns_about_the_moved_config_even_when_a_later_rename_fails() {
     if !common::unreadable_dirs_are_possible() {
         return;
