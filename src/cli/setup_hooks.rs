@@ -12,8 +12,8 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::{Error, config::names, config::project_config};
 
-const BLOCK_START: &str = names::HOOK_BLOCKS[1].0;
-const BLOCK_END: &str = names::HOOK_BLOCKS[1].1;
+const BLOCK_START: &str = names::HOOK_BLOCKS[0].0;
+const BLOCK_END: &str = names::HOOK_BLOCKS[0].1;
 
 pub const HELP: Help = Help {
     command: "setup-hooks",
@@ -48,7 +48,7 @@ pub const HELP: Help = Help {
         },
         Section {
             title: "ENVIRONMENT",
-            entries: &[("AGENTSYNC_SKIP_HOOKS=1", "Make the installed hooks no-ops")],
+            entries: &[("EXUNO_SKIP_HOOKS=1", "Make the installed hooks no-ops")],
         },
     ],
     examples: &["setup-hooks", "setup-hooks --pre-commit"],
@@ -63,7 +63,7 @@ will not write there:
 A hook manager (husky, lefthook, pre-commit) most likely owns it. Add this
 to the hook it manages instead:
 
-  command -v agentsync >/dev/null 2>&1 && agentsync sync --if-stale || true
+  command -v exuno >/dev/null 2>&1 && exuno sync --if-stale || true
 
 ";
 
@@ -71,20 +71,24 @@ to the hook it manages instead:
 /// trailing newline.
 fn sync_body(sync_args: &str) -> String {
     format!(
-        "[ -n \"${{AGENTSYNC_SKIP_HOOKS:-}}\" ] && exit 0
-if command -v agentsync >/dev/null 2>&1; then
-    echo \"AgentSync: syncing AI config...\"
-    agentsync {sync_args} || echo \"AgentSync: sync skipped — run 'agentsync sync' to see why.\" >&2
+        "[ -n \"${{EXUNO_SKIP_HOOKS:-}}${{AGENTSYNC_SKIP_HOOKS:-}}\" ] && exit 0
+_exuno=exuno
+command -v exuno >/dev/null 2>&1 || _exuno=agentsync
+if command -v \"$_exuno\" >/dev/null 2>&1; then
+    echo \"Exuno: syncing AI config...\"
+    \"$_exuno\" {sync_args} || echo \"Exuno: sync skipped — run 'exuno sync' to see why.\" >&2
 else
-    echo \"AgentSync: agentsync is not on PATH; skipping. Install it or set AGENTSYNC_SKIP_HOOKS=1.\" >&2
+    echo \"Exuno: exuno is not on PATH; skipping. Install it or set EXUNO_SKIP_HOOKS=1.\" >&2
 fi"
     )
 }
 
 /// `emit_precommit_gate_body`.
-const GATE_BODY: &str = "[ -n \"${AGENTSYNC_SKIP_HOOKS:-}\" ] && exit 0
-if command -v agentsync >/dev/null 2>&1; then
-    agentsync sync --if-stale || echo \"AgentSync: sync skipped — run 'agentsync sync' to see why.\" >&2
+const GATE_BODY: &str = "[ -n \"${EXUNO_SKIP_HOOKS:-}${AGENTSYNC_SKIP_HOOKS:-}\" ] && exit 0
+_exuno=exuno
+command -v exuno >/dev/null 2>&1 || _exuno=agentsync
+if command -v \"$_exuno\" >/dev/null 2>&1; then
+    \"$_exuno\" sync --if-stale || echo \"Exuno: sync skipped — run 'exuno sync' to see why.\" >&2
 fi
 if [ -f \".ai/.sync-manifest\" ]; then
     # Flag a generated file only when the commit would leave it behind: the
@@ -101,13 +105,13 @@ if [ -f \".ai/.sync-manifest\" ]; then
                     print path
             }' \".ai/.sync-manifest\" - || true)
     if [ -n \"$_as_dirty\" ]; then
-        echo \"AgentSync: generated files are out of date in this commit:\" >&2
+        echo \"Exuno: generated files are out of date in this commit:\" >&2
         printf '%s\\n' \"$_as_dirty\" | sed 's/^/      /' >&2
         echo \"\" >&2
         echo \"  They are regenerated from .ai/src/ and belong in the same commit.\" >&2
         echo \"  Stage them (git add -A) and commit again.\" >&2
         echo \"\" >&2
-        echo \"  To commit without them: AGENTSYNC_SKIP_HOOKS=1 git commit ...\" >&2
+        echo \"  To commit without them: EXUNO_SKIP_HOOKS=1 git commit ...\" >&2
         exit 1
     fi
 fi";
@@ -360,13 +364,13 @@ mod tests {
             "Exuno hook already present in post-merge.\nConfigured post-merge hook.\nExuno hook already present in post-checkout.\nConfigured post-checkout hook.\nConfigured pre-commit hook.\nGit hooks configured for local outputs.\n"
         );
         let pre_commit = std::fs::read_to_string(dir.path().join(".git/hooks/pre-commit")).unwrap();
-        assert!(pre_commit.contains("\n    agentsync sync --if-stale || echo"));
+        assert!(pre_commit.contains("\n    \"$_exuno\" sync --if-stale || echo"));
         std::fs::write(&hook, "#!/bin/sh\necho \"existing hook\"\n").unwrap();
         run(&root, &[]);
         assert!(
             std::fs::read_to_string(&hook)
                 .unwrap()
-                .starts_with("#!/bin/sh\necho \"existing hook\"\n\n# >>> AGENTSYNC")
+                .starts_with("#!/bin/sh\necho \"existing hook\"\n\n# >>> EXUNO")
         );
     }
 
@@ -425,7 +429,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "This repository points core.hooksPath at another directory, so Exuno\nwill not write there:\n\n  {root}/.githooks\n\nA hook manager (husky, lefthook, pre-commit) most likely owns it. Add this\nto the hook it manages instead:\n\n  command -v agentsync >/dev/null 2>&1 && agentsync sync --if-stale || true\n\n"
+                "This repository points core.hooksPath at another directory, so Exuno\nwill not write there:\n\n  {root}/.githooks\n\nA hook manager (husky, lefthook, pre-commit) most likely owns it. Add this\nto the hook it manages instead:\n\n  command -v exuno >/dev/null 2>&1 && exuno sync --if-stale || true\n\n"
             )
         );
         assert!(!dir.path().join(".githooks/post-merge").exists());
@@ -442,7 +446,7 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(
             out,
-            "\n  exuno setup-hooks — install the git hooks that suit the project's outputs mode\n\n  USAGE\n    exuno setup-hooks [--pre-commit]\n\n  DESCRIPTION\n    Installs the git hooks that suit this project's outputs mode. Each hook\n    gets one marked block appended; whatever the hook already ran stays.\n    Running it again rewrites a block an older release installed.\n\n  MODES\n    committed   pre-commit re-syncs and fails the commit when a generated file\n                changed, so outputs never lag source\n    local       post-merge and post-checkout run exuno sync after\n                pull/checkout\n\n  OPTIONS\n    --pre-commit   In local mode, also install a pre-commit hook that runs\n                   exuno sync --if-stale\n    -h, --help     Show this help\n\n  ENVIRONMENT\n    AGENTSYNC_SKIP_HOOKS=1   Make the installed hooks no-ops\n\n  EXAMPLES\n    exuno setup-hooks\n    exuno setup-hooks --pre-commit\n\n"
+            "\n  exuno setup-hooks — install the git hooks that suit the project's outputs mode\n\n  USAGE\n    exuno setup-hooks [--pre-commit]\n\n  DESCRIPTION\n    Installs the git hooks that suit this project's outputs mode. Each hook\n    gets one marked block appended; whatever the hook already ran stays.\n    Running it again rewrites a block an older release installed.\n\n  MODES\n    committed   pre-commit re-syncs and fails the commit when a generated file\n                changed, so outputs never lag source\n    local       post-merge and post-checkout run exuno sync after\n                pull/checkout\n\n  OPTIONS\n    --pre-commit   In local mode, also install a pre-commit hook that runs\n                   exuno sync --if-stale\n    -h, --help     Show this help\n\n  ENVIRONMENT\n    EXUNO_SKIP_HOOKS=1   Make the installed hooks no-ops\n\n  EXAMPLES\n    exuno setup-hooks\n    exuno setup-hooks --pre-commit\n\n"
         );
         let missing = format!("{root}/nowhere");
         let (status, _, err) = run(&missing, &[]);
