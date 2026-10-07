@@ -128,7 +128,7 @@ pub const EXPORT_HELP: Help = Help {
         entries: &[
             (
                 "-o, --output <path>",
-                "Output file path (default: ./agentsync-bundle.tar.gz)",
+                "Output file path (default: ./exuno-bundle.tar.gz)",
             ),
             ("--dry-run", "Preview what would be exported"),
             ("-h, --help", "Show this help"),
@@ -235,7 +235,7 @@ pub fn export(
         return Ok(1);
     }
     if output.is_empty() {
-        output = format!("{root}/agentsync-bundle.tar.gz");
+        output = format!("{root}/exuno-bundle.tar.gz");
     }
     put(
         out,
@@ -317,7 +317,7 @@ pub const IMPORT_HELP: Help = Help {
             title: "SOURCES",
             entries: &[
                 ("GitHub URL", "https://github.com/user/repo"),
-                ("Archive file", "path/to/agentsync-bundle.tar.gz"),
+                ("Archive file", "path/to/exuno-bundle.tar.gz"),
                 ("Local directory", "path/to/project/"),
             ],
         },
@@ -341,7 +341,7 @@ pub const IMPORT_HELP: Help = Help {
     examples: &[
         "import https://github.com/user/repo",
         "import https://github.com/user/repo/tree/develop",
-        "import agentsync-bundle.tar.gz",
+        "import exuno-bundle.tar.gz",
         "import ../other-project/",
         "import https://github.com/user/repo --only rules,skills",
         "import bundle.tar.gz --dry-run",
@@ -1108,7 +1108,7 @@ mod tests {
     fn export_help_has_the_shared_shape() {
         assert_eq!(
             EXPORT_HELP.render(&Style::plain()),
-            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./agentsync-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --dry-run\n\n"
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./exuno-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --dry-run\n\n"
         );
     }
 
@@ -1116,7 +1116,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/agentsync-bundle.tar.gz\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import agentsync-bundle.tar.gz\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
@@ -1282,7 +1282,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  Exuno Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • exuno.yaml\n\n  Dry run — no files written.\n  Would create: {root}/agentsync-bundle.tar.gz\n\n"
+                "\n  Exuno Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • exuno.yaml\n\n  Dry run — no files written.\n  Would create: {root}/exuno-bundle.tar.gz\n\n"
             )
         );
         let (status, out, err) = run_export(&root, &["--bogus"]);

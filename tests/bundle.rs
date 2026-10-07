@@ -135,7 +135,7 @@ fn export_writes_the_bundle_and_lists_its_contents() {
         .stdout(predicate::str::contains("AGENTS.md"))
         .stdout(predicate::str::contains("rules/ ("))
         .stdout(predicate::str::contains("Exported!"));
-    let archive = project.join("agentsync-bundle.tar.gz");
+    let archive = project.join("exuno-bundle.tar.gz");
     assert!(archive.is_file());
     let listing = tar_list(&archive);
     assert!(listing.lines().any(|l| l == ".ai/src/AGENTS.md"));
@@ -151,7 +151,7 @@ fn export_dry_run_writes_nothing() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Dry run"));
-    assert!(!project.join("agentsync-bundle.tar.gz").exists());
+    assert!(!project.join("exuno-bundle.tar.gz").exists());
 }
 
 #[test]
@@ -297,7 +297,7 @@ fn export_carries_a_legacy_ai_agent_sync_yaml() {
         .assert()
         .success()
         .stdout(predicate::str::contains("agent_sync.yaml"));
-    let listing = tar_list(&project.join("agentsync-bundle.tar.gz"));
+    let listing = tar_list(&project.join("exuno-bundle.tar.gz"));
     assert!(listing.lines().any(|l| l == ".ai/agent_sync.yaml"));
 }
 

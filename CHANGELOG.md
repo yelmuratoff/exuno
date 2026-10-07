@@ -19,6 +19,7 @@
 
 - **Git hooks and shell-init:** call `exuno`, or `agentsync` when only that is installed, and `setup-hooks` replaces an older agentsync block instead of adding a second.
 - **CI gate:** `init --ci github` writes `exuno-check.yml` and keeps an existing `agentsync-check.yml`.
+- **Export:** writes `exuno-bundle.tar.gz` by default.
 - **Releases:** keep publishing `agentsync-<target>` archives until 1.0, so `agentsync update` on an older install reaches them.
 
 ### Fixed
