@@ -81,13 +81,19 @@ pub fn format_notice(project_dir: &Path, program: &str, style: &Style) -> String
         out.push_str(&format!(
             "  The command is {} now; rerun the installer to add it ({program} keeps working until 1.0):\n    {}\n",
             names::NAME,
-            style.cyan(&format!(
-                "curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash"
-            ))
+            style.cyan(&installer_command())
         ));
     }
     out.push('\n');
     out
+}
+
+fn installer_command() -> String {
+    if cfg!(windows) {
+        format!("irm https://github.com/{REPO}/releases/latest/download/exuno-installer.ps1 | iex")
+    } else {
+        format!("curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash")
+    }
 }
 
 /// `read -r latest_tag < "$cache_file"`: the first line, IFS blanks trimmed.
@@ -202,11 +208,22 @@ mod tests {
         std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "format: 2\n").unwrap();
         let notice = format_notice(dir.path(), "agentsync", &Style::plain());
         assert!(
-            notice.ends_with(
-                "  Preview it with agentsync migrate, apply with agentsync migrate --apply\n  The command is exuno now; rerun the installer to add it (agentsync keeps working until 1.0):\n    curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n\n"
-            ),
+            notice.ends_with(&format!(
+                "  Preview it with agentsync migrate, apply with agentsync migrate --apply\n  The command is exuno now; rerun the installer to add it (agentsync keeps working until 1.0):\n    {}\n\n",
+                installer_command()
+            )),
             "{notice}"
         );
+    }
+
+    #[test]
+    fn the_installer_line_runs_in_the_platform_shell() {
+        let expected = if cfg!(windows) {
+            "irm https://github.com/yelmuratoff/exuno/releases/latest/download/exuno-installer.ps1 | iex"
+        } else {
+            "curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash"
+        };
+        assert_eq!(installer_command(), expected);
     }
 
     #[test]
