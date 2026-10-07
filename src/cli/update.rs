@@ -86,8 +86,16 @@ const fn archive_extension() -> &'static str {
     if cfg!(windows) { "zip" } else { "tar.xz" }
 }
 
-const fn binary_name() -> &'static str {
-    if cfg!(windows) { "exuno.exe" } else { "exuno" }
+/// The names a release archive and its binary carry, newest first; releases
+/// before 0.45.0 ship as `agentsync-<target>`.
+const RELEASE_NAMES: [&str; 2] = ["exuno", "agentsync"];
+
+fn binary_file(name: &str) -> String {
+    if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    }
 }
 
 /// The shipped catalog as `(slug, yaml)` in byte order.
@@ -210,13 +218,9 @@ fn version_of(answer: &str) -> Option<String> {
     (!version.is_empty()).then(|| version.to_string())
 }
 
-/// The unpacked binary: `exuno[.exe]` at the top or below the archive's
-/// one directory, as cargo-dist lays it out.
+/// The unpacked binary: `exuno[.exe]`, else `agentsync[.exe]`, at the top or
+/// below the archive's one directory, as cargo-dist lays it out.
 fn unpacked_binary(dir: &Path) -> Option<PathBuf> {
-    let flat = dir.join(binary_name());
-    if flat.is_file() {
-        return Some(flat);
-    }
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir)
         .ok()?
         .filter_map(|entry| entry.ok())
@@ -224,9 +228,13 @@ fn unpacked_binary(dir: &Path) -> Option<PathBuf> {
         .filter(|path| path.is_dir())
         .collect();
     dirs.sort();
-    dirs.into_iter()
-        .map(|top| top.join(binary_name()))
-        .find(|path| path.is_file())
+    RELEASE_NAMES.iter().find_map(|name| {
+        let file = binary_file(name);
+        std::iter::once(dir.to_path_buf())
+            .chain(dirs.iter().cloned())
+            .map(|top| top.join(&file))
+            .find(|path| path.is_file())
+    })
 }
 
 /// The staged copy renamed over the running binary. Windows cannot replace a
@@ -236,7 +244,7 @@ fn replace_binary(new: &Path, exe: &Path) -> Result<(), Error> {
     let name = exe
         .file_name()
         .map(|n| n.disk_text())
-        .unwrap_or_else(|| binary_name().to_string());
+        .unwrap_or_else(|| binary_file(RELEASE_NAMES[0]));
     let staged = dir.join(format!(".{name}.new"));
     std::fs::copy(new, &staged).map_err(|e| Error::io(&staged, e))?;
     #[cfg(unix)]
@@ -459,22 +467,36 @@ impl Download<'_, '_> {
         }
     }
 
-    /// The release archive; a pinned tag without one is told apart from a
-    /// tag that predates the binary releases.
+    /// The release archive under the first of [`RELEASE_NAMES`] it is
+    /// published as, with that file name; a pinned tag without one is told
+    /// apart from a tag that predates the binary releases.
     fn archive(
         &mut self,
         tag: &str,
         pinned: bool,
-        url: &str,
-        name: &str,
-    ) -> Result<Result<PathBuf, u8>, Error> {
-        let archive = self.scratch.join(name);
-        let fetched = (self.env.fetch)(url, &archive);
-        if pinned && matches!(fetched, Ok(404)) {
+        base: &str,
+        target: &str,
+    ) -> Result<Result<(String, PathBuf), u8>, Error> {
+        let names = RELEASE_NAMES.map(|name| format!("{name}-{target}.{}", archive_extension()));
+        for name in &names {
+            let url = format!("{base}/{name}");
+            let archive = self.scratch.join(name);
+            let fetched = (self.env.fetch)(&url, &archive);
+            if !matches!(fetched, Ok(404)) {
+                return Ok(self
+                    .answered(&url, fetched)?
+                    .map(|()| (name.clone(), archive)));
+            }
+        }
+        if pinned {
             let message = self.missing_tag(tag);
             return Ok(Err(self.refuse(&message)?));
         }
-        Ok(self.answered(url, fetched)?.map(|()| archive))
+        let url = format!("{base}/{}", names[0]);
+        let archive = self.scratch.join(&names[0]);
+        Ok(self
+            .answered(&url, Ok(404))?
+            .map(|()| (names[0].clone(), archive)))
     }
 
     fn missing_tag(&mut self, tag: &str) -> String {
@@ -528,9 +550,10 @@ impl Download<'_, '_> {
         }
         match unpacked_binary(&unpacked) {
             Some(binary) => Ok(Ok(binary)),
-            None => Ok(Err(
-                self.refuse(&format!("{name} does not contain {}.", binary_name()))?
-            )),
+            None => Ok(Err(self.refuse(&format!(
+                "{name} does not contain {}.",
+                binary_file(RELEASE_NAMES[0])
+            ))?)),
         }
     }
 
@@ -575,11 +598,9 @@ impl Download<'_, '_> {
         pinned: bool,
         target: &str,
     ) -> Result<Result<Fetched, u8>, Error> {
-        let archive_name = format!("exuno-{target}.{}", archive_extension());
         let base = format!("https://github.com/{REPO}/releases/download/{tag}");
-        let archive_url = format!("{base}/{archive_name}");
-        let archive = match self.archive(tag, pinned, &archive_url, &archive_name)? {
-            Ok(archive) => archive,
+        let (archive_name, archive) = match self.archive(tag, pinned, &base, target)? {
+            Ok(found) => found,
             Err(status) => return Ok(Err(status)),
         };
         let sum_name = format!("{archive_name}.sha256");
@@ -893,14 +914,23 @@ mod tests {
         }
 
         fn publish(&mut self, tag: &str) {
+            self.publish_as(tag, "exuno");
+        }
+
+        /// A release whose archive and the binary inside are named `name`.
+        fn publish_as(&mut self, tag: &str, name: &str) {
+            if name != "exuno" {
+                std::fs::rename(self.release_dir.join("exuno"), self.release_dir.join(name))
+                    .unwrap();
+            }
             let target = target().unwrap();
             let base = format!("https://github.com/{REPO}/releases/download/{tag}");
             let archive = b"an archive".to_vec();
-            let sum = format!("{}  exuno-{target}.tar.xz\n", sha256_hex(&archive));
+            let sum = format!("{}  {name}-{target}.tar.xz\n", sha256_hex(&archive));
             self.served
-                .insert(format!("{base}/exuno-{target}.tar.xz"), archive);
+                .insert(format!("{base}/{name}-{target}.tar.xz"), archive);
             self.served.insert(
-                format!("{base}/exuno-{target}.tar.xz.sha256"),
+                format!("{base}/{name}-{target}.tar.xz.sha256"),
                 sum.into_bytes(),
             );
         }
@@ -925,8 +955,9 @@ mod tests {
             let mut extract = |_archive: &Path, into: &Path| -> bool {
                 let top = into.join("exuno-fixture");
                 std::fs::create_dir_all(&top).unwrap();
-                for name in ["exuno", "CHANGELOG.md"] {
-                    std::fs::copy(release_dir.join(name), top.join(name)).unwrap();
+                for entry in std::fs::read_dir(&release_dir).unwrap() {
+                    let entry = entry.unwrap();
+                    std::fs::copy(entry.path(), top.join(entry.file_name())).unwrap();
                 }
                 true
             };
@@ -995,6 +1026,18 @@ mod tests {
         assert_eq!(
             refresh_hint(dir.path(), &style),
             "  Rule, skill, and command templates in .ai/src/ update separately — run exuno refresh to review them.\n\n"
+        );
+    }
+
+    #[test]
+    fn a_pin_to_a_release_before_the_rename_installs_its_agentsync_archive() {
+        let mut fixture = Fixture::new("0.43.0", &catalog_dump());
+        fixture.publish_as("0.43.0", "agentsync");
+        let (status, out, err) = fixture.run(&["0.43.0"]);
+        assert_eq!((status, err.as_str()), (0, ""), "{out}");
+        assert_eq!(
+            std::fs::read_to_string(fixture.exe()).unwrap(),
+            "new binary"
         );
     }
 
