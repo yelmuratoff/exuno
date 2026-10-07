@@ -192,6 +192,7 @@ fn install_hook(
                     let mut rewritten = existing[..start].to_vec();
                     rewritten.extend_from_slice(block.as_bytes());
                     rewritten.extend_from_slice(&existing[end..]);
+                    let rewritten = without_legacy_blocks(&rewritten);
                     std::fs::write(&hook, rewritten).map_err(|e| Error::io(&hook, e))?;
                     put(out, format!("Updated Exuno hook in {name}.\n").as_bytes())?;
                 }
@@ -294,7 +295,9 @@ pub fn setup_hooks(
         hooks_dir = format!("{root}/{hooks_dir}");
     }
     let git_dir = git(&root, &["rev-parse", "--absolute-git-dir"]).unwrap_or_default();
+    let committed = outputs_mode(&root) == "committed";
     if physical(&hooks_dir) != physical(&format!("{git_dir}/hooks")) {
+        upgrade_legacy_blocks(&Path::new(&git_dir).join("hooks"), committed, &[], out)?;
         put(
             out,
             HOOKS_PATH_ELSEWHERE
@@ -304,18 +307,64 @@ pub fn setup_hooks(
         return Ok(0);
     }
     let hooks_dir = PathBuf::from(hooks_dir);
-    if outputs_mode(&root) == "committed" {
-        install_hook(&hooks_dir, "pre-commit", GATE_BODY, out)?;
-        put(out, b"Git hooks configured for committed outputs.\n")?;
-    } else {
-        install_hook(&hooks_dir, "post-merge", &sync_body("sync"), out)?;
-        install_hook(&hooks_dir, "post-checkout", &sync_body("sync"), out)?;
-        if pre_commit {
-            install_hook(&hooks_dir, "pre-commit", &sync_body("sync --if-stale"), out)?;
-        }
-        put(out, b"Git hooks configured for local outputs.\n")?;
+    let hooks = hooks_for(committed, pre_commit);
+    for (name, body) in &hooks {
+        install_hook(&hooks_dir, name, body, out)?;
     }
+    let installed: Vec<&str> = hooks.iter().map(|(name, _)| *name).collect();
+    upgrade_legacy_blocks(&hooks_dir, committed, &installed, out)?;
+    let mode = if committed { "committed" } else { "local" };
+    put(
+        out,
+        format!("Git hooks configured for {mode} outputs.\n").as_bytes(),
+    )?;
     Ok(0)
+}
+
+fn hooks_for(committed: bool, pre_commit: bool) -> Vec<(&'static str, String)> {
+    if committed {
+        return vec![("pre-commit", GATE_BODY.to_string())];
+    }
+    let mut hooks = vec![
+        ("post-merge", sync_body("sync")),
+        ("post-checkout", sync_body("sync")),
+    ];
+    if pre_commit {
+        hooks.push(("pre-commit", sync_body("sync --if-stale")));
+    }
+    hooks
+}
+
+/// Rewrites an older release's block in every hook past `skip`; creates no hook.
+fn upgrade_legacy_blocks(
+    hooks_dir: &Path,
+    committed: bool,
+    skip: &[&str],
+    out: &mut dyn Write,
+) -> Result<(), Error> {
+    let (legacy_start, _) = names::LEGACY_HOOK_BLOCK;
+    let pre_commit = if committed {
+        GATE_BODY.to_string()
+    } else {
+        sync_body("sync --if-stale")
+    };
+    let older = [
+        ("pre-commit", pre_commit),
+        ("post-merge", sync_body("sync")),
+        ("post-checkout", sync_body("sync")),
+    ];
+    for (name, body) in older.iter().filter(|(name, _)| !skip.contains(name)) {
+        let hook = hooks_dir.join(name);
+        let text = match std::fs::read(&hook) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(Error::io(&hook, e)),
+        };
+        if find(&text, legacy_start.as_bytes(), 0).is_some() {
+            install_hook(hooks_dir, name, body, out)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(all(test, unix))]
@@ -435,6 +484,109 @@ mod tests {
         assert_eq!(outputs_mode(&root), "local");
         std::fs::write(dir.path().join(".ai/exuno.yaml"), "outputs: committed\n").unwrap();
         assert_eq!(outputs_mode(&root), "committed");
+    }
+
+    #[test]
+    fn another_hooks_path_still_upgrades_an_older_block_in_git_hooks() {
+        let (dir, root) = repo("outputs: local\n");
+        std::fs::create_dir_all(dir.path().join(".githooks")).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["-C", &root, "config", "core.hooksPath", ".githooks"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        let (legacy_start, legacy_end) = names::LEGACY_HOOK_BLOCK;
+        let post_merge = dir.path().join(".git/hooks/post-merge");
+        std::fs::write(
+            &post_merge,
+            format!("#!/bin/sh\n\n{legacy_start}\nagentsync sync\n{legacy_end}\n"),
+        )
+        .unwrap();
+
+        let (status, out, err) = run(&root, &[]);
+        assert_eq!((status, err.as_str()), (0, ""));
+        assert!(
+            out.starts_with("Updated Exuno hook in post-merge.\nConfigured post-merge hook.\n"),
+            "{out}"
+        );
+        assert!(out.contains("points core.hooksPath at another directory"));
+        assert_eq!(
+            std::fs::read_to_string(&post_merge).unwrap(),
+            format!(
+                "#!/bin/sh\n\n{BLOCK_START}\n{}\n{BLOCK_END}\n",
+                sync_body("sync")
+            )
+        );
+        assert!(!dir.path().join(".git/hooks/post-checkout").exists());
+        assert!(!dir.path().join(".githooks/post-merge").exists());
+    }
+
+    fn legacy_hook(dir: &Path, name: &str, blocks: usize) -> PathBuf {
+        let (start, end) = names::LEGACY_HOOK_BLOCK;
+        let hook = dir.join(".git/hooks").join(name);
+        let body = format!("{start}\nagentsync sync\n{end}\n").repeat(blocks);
+        std::fs::write(&hook, format!("#!/bin/sh\n\n{body}")).unwrap();
+        hook
+    }
+
+    #[test]
+    fn committed_outputs_upgrade_older_sync_hooks_they_do_not_install() {
+        let (dir, root) = repo("outputs: committed\n");
+        let post_merge = legacy_hook(dir.path(), "post-merge", 1);
+        let (status, _, err) = run(&root, &[]);
+        assert_eq!((status, err.as_str()), (0, ""));
+        let text = std::fs::read_to_string(&post_merge).unwrap();
+        assert!(!text.contains("AGENTSYNC AUTO SYNC"), "{text}");
+        assert!(text.contains(&sync_body("sync")), "{text}");
+        assert!(!dir.path().join(".git/hooks/post-checkout").exists());
+    }
+
+    #[test]
+    fn every_older_block_in_a_hook_is_replaced_by_one_block() {
+        let (dir, root) = repo("outputs: local\n");
+        let post_merge = legacy_hook(dir.path(), "post-merge", 2);
+        run(&root, &[]);
+        let text = std::fs::read_to_string(&post_merge).unwrap();
+        assert!(!text.contains("AGENTSYNC AUTO SYNC"), "{text}");
+        assert_eq!(text.matches(BLOCK_START).count(), 1, "{text}");
+    }
+
+    #[test]
+    fn an_unreadable_hook_with_an_older_block_fails_instead_of_passing() {
+        if Command::new("id")
+            .arg("-u")
+            .output()
+            .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        {
+            return;
+        }
+        let (dir, root) = repo("outputs: committed\n");
+        std::fs::create_dir_all(dir.path().join(".githooks")).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["-C", &root, "config", "core.hooksPath", ".githooks"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        let post_merge = legacy_hook(dir.path(), "post-merge", 1);
+        let mut perms = std::fs::metadata(&post_merge).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o000);
+        std::fs::set_permissions(&post_merge, perms).unwrap();
+        let args: Vec<String> = Vec::new();
+        let result = setup_hooks(
+            &args,
+            &root,
+            &Style::plain(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+        );
+        let mut perms = std::fs::metadata(&post_merge).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o755);
+        std::fs::set_permissions(&post_merge, perms).unwrap();
+        assert!(result.is_err());
     }
 
     #[test]
