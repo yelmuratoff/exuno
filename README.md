@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/yelmuratoff/exuno/main/assets/agent_sync.svg">
-    <img src="https://raw.githubusercontent.com/yelmuratoff/exuno/main/assets/agent_sync_light.svg" alt="Exuno" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/yelmuratoff/exuno/main/assets/exuno.svg">
+    <img src="https://raw.githubusercontent.com/yelmuratoff/exuno/main/assets/exuno_light.svg" alt="Exuno" width="400">
   </picture>
 
   <h3>One source → 15 AI tools. Stop copy-pasting rules.</h3>
