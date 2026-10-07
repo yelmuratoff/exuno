@@ -26,11 +26,11 @@ impl Project {
         project
     }
 
-    /// `seed_project`: an empty repository after `agentsync init <args>`.
+    /// `seed_project`: an empty repository after `exuno init <args>`.
     pub fn seeded(init_args: &[&str]) -> Self {
         let project = Self::empty();
         project
-            .agentsync()
+            .exuno()
             .arg("init")
             .args(init_args)
             .assert()
@@ -49,8 +49,8 @@ impl Project {
     /// The binary under test in this project, with the shell variables that
     /// would leak trust or the developer's install removed, and git told to
     /// read no global or system config.
-    pub fn agentsync(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    pub fn exuno(&self) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
         command.current_dir(self.path());
         scrub(&mut command);
         command
@@ -92,13 +92,13 @@ impl Project {
 
     /// `file_sha256`: the hex digest of one file.
     pub fn sha256(&self, rel: &str) -> String {
-        agentsync::transaction::manifest::sha256_hex(&std::fs::read(self.join(rel)).unwrap())
+        exuno::transaction::manifest::sha256_hex(&std::fs::read(self.join(rel)).unwrap())
     }
 
     /// `enable_tools`: enable without scaffolding, so a test starts from the
     /// same tree whatever `enable` scaffolds later.
     pub fn enable_tools(&self, tools: &[&str]) {
-        self.agentsync()
+        self.exuno()
             .arg("enable")
             .args(tools)
             .arg("--no-scaffold")
@@ -110,14 +110,16 @@ impl Project {
 /// The variables `tests/test_helper.bash` unsets, and the config paths it
 /// points at a file that does not exist.
 pub fn scrub(command: &mut Command) {
-    for var in [
-        "AGENTSYNC_ALLOW_POST_SYNC",
-        "AGENTSYNC_SKIP_POST_SYNC",
-        "AGENTSYNC_SKIP_HOOKS",
-        "AGENTSYNC_EXTERNAL_SOURCE_ROOTS",
-        "AGENTSYNC_HOME",
+    for suffix in [
+        "ALLOW_POST_SYNC",
+        "SKIP_POST_SYNC",
+        "SKIP_HOOKS",
+        "EXTERNAL_SOURCE_ROOTS",
+        "HOME",
     ] {
-        command.env_remove(var);
+        for prefix in ["EXUNO_", "AGENTSYNC_"] {
+            command.env_remove(format!("{prefix}{suffix}"));
+        }
     }
     command
         .env("GIT_CONFIG_GLOBAL", absent_git_config())
@@ -134,7 +136,7 @@ fn absent_git_config() -> PathBuf {
 /// reads, goes through this — `tests/test_helper.bash` used `cygpath -ml` for
 /// the same reason.
 pub fn engine_path(path: &Path) -> String {
-    use agentsync::paths::DiskText;
+    use exuno::paths::DiskText;
     path.disk_text()
 }
 

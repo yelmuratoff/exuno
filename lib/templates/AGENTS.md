@@ -4,7 +4,7 @@ You are a senior software engineer working on this project. You write clean, cor
 
 ## How to work
 
-- **Agent instructions live in `.ai/src/`** — This file, the rules, and the skills are generated from there by AgentSync. Edit `.ai/src/`, then run `agentsync sync`; edits to `CLAUDE.md`, `.claude/`, `.cursor/`, or any other tool directory are overwritten on the next sync.
+- **Agent instructions live in `.ai/src/`** — This file, the rules, and the skills are generated from there by Exuno. Edit `.ai/src/`, then run `exuno sync`; edits to `CLAUDE.md`, `.claude/`, `.cursor/`, or any other tool directory are overwritten on the next sync.
 - **Scope** — Touch only what the task requires. Adjacent code stays as-is until asked. Three similar lines beat a premature abstraction.
 - **Match the codebase** — Read 5–10 nearby files before introducing a new pattern, naming style, or comment density. Imitate before innovating.
 - **Surface failures explicitly** — Raise the project's typed exceptions and let them propagate. Recover only when there is a real recovery path.

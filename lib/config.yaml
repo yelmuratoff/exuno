@@ -1,4 +1,4 @@
-# AgentSync - Global Configuration
+# Exuno - Global Configuration
 # Source paths (relative to repo root)
 
 source:
@@ -8,9 +8,9 @@ source:
   tools: ".ai/src/tools"
 
 # Post-sync hooks run arbitrary shell from a tool YAML, so they are gated behind
-# an out-of-repo trust signal: export AGENTSYNC_ALLOW_POST_SYNC=true, or set
+# an out-of-repo trust signal: export EXUNO_ALLOW_POST_SYNC=true, or set
 # allow: true here and rebuild — this file is compiled into the binary. The
-# in-repo agent_sync.yaml cannot enable them — cloning and syncing an untrusted
+# in-repo exuno.yaml cannot enable them — cloning and syncing an untrusted
 # repo must not run its hook.
 post_sync:
   allow: false

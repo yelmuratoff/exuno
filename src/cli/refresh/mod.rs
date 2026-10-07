@@ -1,4 +1,4 @@
-//! `agentsync refresh`: `cmd_refresh` of `lib/helpers/refresh.sh`, which pulls
+//! `exuno refresh`: `cmd_refresh` of `lib/helpers/refresh.sh`, which pulls
 //! updated templates into `.ai/src/` through a three-way diff against the
 //! template manifest, so untouched files update silently and only true
 //! conflicts wait for an answer.
@@ -27,7 +27,7 @@ pub(crate) use session::write_template;
 /// Printed where Bash printed `$AGENTSYNC_HOME/lib/templates`; the binary
 /// reads the embedded copy, so the line names the release it came from.
 fn templates_display() -> String {
-    format!("shipped with agentsync v{}", crate::engine_version())
+    format!("shipped with exuno v{}", crate::engine_version())
 }
 
 /// What `refresh` takes from the terminal.
@@ -72,7 +72,7 @@ pub fn refresh(
     let Some(src_base) = src_base(root) else {
         let message = format!(
             "No .ai/ directory found in {root}\nRun {} first.",
-            style.cyan("agentsync init")
+            style.cyan("exuno init")
         );
         return fail(err, style, &message);
     };
@@ -239,7 +239,7 @@ mod tests {
 
     pub(super) fn header(root: &str, scope: &str) -> String {
         format!(
-            "\n  AgentSync Refresh\n\n  Templates: {}\n  Project:   {root}/.ai/src\n  Scope:     {scope}\n\n",
+            "\n  Exuno Refresh\n\n  Templates: {}\n  Project:   {root}/.ai/src\n  Scope:     {scope}\n\n",
             templates_display()
         )
     }
@@ -290,7 +290,7 @@ mod tests {
             (
                 1,
                 "",
-                format!("Error: No .ai/ directory found in {root}\nRun agentsync init first.\n")
+                format!("Error: No .ai/ directory found in {root}\nRun exuno init first.\n")
             )
         );
     }

@@ -1,8 +1,8 @@
-name: AgentSync
+name: Exuno
 
 # Generated outputs (CLAUDE.md, .claude/, .cursor/, …) are committed, so this
 # gate proves they still match .ai/src/. It installs the version this project
-# pins in .ai/agent_sync.yaml, because a different engine can generate
+# pins in .ai/exuno.yaml, because a different engine can generate
 # different bytes.
 
 on:
@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install AgentSync __AGENTSYNC_VERSION__
-        run: curl -fsSL __AGENTSYNC_INSTALL_URL__ | AGENTSYNC_VERSION=__AGENTSYNC_VERSION__ bash
+      - name: Install Exuno __EXUNO_VERSION__
+        run: curl -fsSL __EXUNO_INSTALL_URL__ | EXUNO_VERSION=__EXUNO_VERSION__ bash
       - name: Check
-        run: agentsync check
+        run: exuno check
 
-  # For teams who would rather not install AgentSync locally: this job
+  # For teams who would rather not install Exuno locally: this job
   # regenerates the outputs and commits them into the pull request branch.
   # To enable it, replace `if: false` with
   #   if: github.event_name == 'pull_request'
@@ -38,10 +38,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Install AgentSync __AGENTSYNC_VERSION__
-        run: curl -fsSL __AGENTSYNC_INSTALL_URL__ | AGENTSYNC_VERSION=__AGENTSYNC_VERSION__ bash
+      - name: Install Exuno __EXUNO_VERSION__
+        run: curl -fsSL __EXUNO_INSTALL_URL__ | EXUNO_VERSION=__EXUNO_VERSION__ bash
       - name: Sync
-        run: agentsync sync
+        run: exuno sync
       - name: Commit regenerated outputs
         run: |
           git config user.name "github-actions[bot]"

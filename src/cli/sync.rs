@@ -1,4 +1,4 @@
-//! `agentsync sync`: `lib/sync.sh` with its transaction. The render writes the
+//! `exuno sync`: `lib/sync.sh` with its transaction. The render writes the
 //! project in place, as Bash does; a failure after the backup restores it.
 
 use std::path::Path;
@@ -20,7 +20,7 @@ pub const HELP: Help = Help {
     tagline: "sync .ai/src/ to every enabled tool",
     synopsis: &["sync [OPTIONS]"],
     description: &[
-        "A real run snapshots every destination it may change and restores the\nsnapshot if the run fails. Use agentsync rollback to restore a successful\nrun by hand.",
+        "A real run snapshots every destination it may change and restores the\nsnapshot if the run fails. Use exuno rollback to restore a successful\nrun by hand.",
         "The log goes to stderr. Stdout stays empty unless --json asks for the\nsummary.",
     ],
     sections: &[Section {
@@ -143,8 +143,8 @@ pub fn run(root: &str, args: &[String], env: &Env, colors: bool, sink: Sink) -> 
         log.error(&format!(
             "Refusing to sync from inside the .ai/ directory: {root}"
         ));
-        log.err("Run agentsync from the project root (the parent of .ai/):".to_string());
-        let command = log.command(&format!("cd \"{project}\" && agentsync sync"));
+        log.err("Run exuno from the project root (the parent of .ai/):".to_string());
+        let command = log.command(&format!("cd \"{project}\" && exuno sync"));
         log.err(format!("  {command}"));
         return 2;
     }
@@ -242,7 +242,7 @@ fn prune(s: &mut Session, env: &Env, retention: backup::Retention) {
         retention,
     ) {
         report_backup_error(&mut s.log, &e);
-        s.log.warning("Could not prune old AgentSync backups.");
+        s.log.warning("Could not prune old Exuno backups.");
     }
 }
 
@@ -433,11 +433,11 @@ fn warn_baseline_replacements(s: &mut Session, run: &Run, baseline: bool) {
         s.log.err(format!("      {rel}"));
     }
     s.log
-        .err("      Content AgentSync did not generate is replaced from .ai/src/.".into());
+        .err("      Content Exuno did not generate is replaced from .ai/src/.".into());
     let keep = format!(
         "      To keep a file instead, restore it with {} and run {} first.",
-        s.log.command("agentsync rollback"),
-        s.log.command("agentsync adopt <file>")
+        s.log.command("exuno rollback"),
+        s.log.command("exuno adopt <file>")
     );
     s.log.err(keep);
 }
@@ -506,7 +506,7 @@ fn check_drift(s: &mut Session, run: &Run, previous: Option<&Manifest>) -> Resul
     for rel in drift {
         s.log.err(format!("      {rel}"));
     }
-    let adopt = s.log.command("agentsync adopt <file>");
+    let adopt = s.log.command("exuno adopt <file>");
     for line in [
         String::new(),
         "  These files would be silently overwritten. Choose one:".into(),

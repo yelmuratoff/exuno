@@ -1,4 +1,4 @@
-//! `tests/simplify.bats`: `agentsync simplify` — dropping override fields
+//! `tests/simplify.bats`: `exuno simplify` — dropping override fields
 //! that match the base, deleting byte-identical payload overrides, and the
 //! dry-run/--apply/-y interactions. Deeper coverage of the redundant-field
 //! diffing and payload comparison logic lives in the
@@ -13,7 +13,7 @@ use predicates::prelude::*;
 
 fn customize_full(project: &Project, tool: &str) {
     project
-        .agentsync()
+        .exuno()
         .args(["customize", tool, "--full"])
         .assert()
         .success();
@@ -24,7 +24,7 @@ fn customize_full(project: &Project, tool: &str) {
 #[test]
 fn simplify_with_no_overrides_prints_friendly_message() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .arg("simplify")
         .assert()
         .success()
@@ -37,7 +37,7 @@ fn simplify_rejects_unknown_tool_name() {
     customize_full(&project, "claude");
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "bogus_tool_xyz"])
         .assert()
         .failure()
@@ -47,7 +47,7 @@ fn simplify_rejects_unknown_tool_name() {
 #[test]
 fn simplify_rejects_unknown_flag() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["simplify", "--whatever"])
         .assert()
         .failure()
@@ -63,7 +63,7 @@ fn simplify_is_dry_run_by_default_and_does_not_mutate_files() {
     let before = std::fs::read(project.join(".ai/src/tools/cursor.yaml")).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .arg("simplify")
         .assert()
         .success()
@@ -79,7 +79,7 @@ fn simplify_dry_run_flags_redundant_fields_and_file_would_delete() {
     customize_full(&project, "cursor");
 
     project
-        .agentsync()
+        .exuno()
         .arg("simplify")
         .assert()
         .success()
@@ -100,7 +100,7 @@ fn simplify_dry_run_reports_remove_count_when_some_fields_stay() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .arg("simplify")
         .assert()
         .success()
@@ -121,7 +121,7 @@ fn simplify_apply_removes_redundant_fields_and_keeps_diverging_ones() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success()
@@ -142,7 +142,7 @@ fn simplify_apply_y_deletes_override_when_all_fields_match_base() {
     assert!(project.exists(".ai/src/tools/cursor.yaml"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success()
@@ -157,7 +157,7 @@ fn simplify_apply_keeps_empty_file_when_no_y_and_no_tty() {
     customize_full(&project, "cursor");
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply"])
         .assert()
         .success()
@@ -188,14 +188,14 @@ fn simplify_apply_is_idempotent() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success();
     let snapshot = std::fs::read(project.join(".ai/src/tools/cursor.yaml")).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success()
@@ -216,7 +216,7 @@ fn simplify_tool_only_touches_that_tool() {
     assert!(project.exists(".ai/src/tools/claude.yaml"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "cursor", "--apply", "-y"])
         .assert()
         .success();
@@ -233,7 +233,7 @@ fn simplify_tool_only_reports_that_tool_in_dry_run() {
     customize_full(&project, "claude");
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "cursor"])
         .assert()
         .success()
@@ -263,7 +263,7 @@ fn simplify_apply_removes_byte_identical_payload_overrides() {
     assert!(project.exists(".ai/src/tools/cursor/mcp.json"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success()
@@ -284,7 +284,7 @@ fn simplify_keeps_payload_overrides_that_diverge_from_base() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success();
@@ -305,7 +305,7 @@ fn simplify_dry_run_on_payloads_reports_byte_identical_files() {
     scaffold_cursor_payloads(&project);
 
     project
-        .agentsync()
+        .exuno()
         .arg("simplify")
         .assert()
         .success()
@@ -321,7 +321,7 @@ fn simplify_dry_run_on_payloads_reports_byte_identical_files() {
 fn simplify_reads_payload_overrides_from_the_configured_tools_directory() {
     let project = Project::seeded(&[]);
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "tools:\n  enabled: [cursor]\nsource:\n  tools: custom/tools\n",
     );
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -330,7 +330,7 @@ fn simplify_reads_payload_overrides_from_the_configured_tools_directory() {
     std::fs::write(project.join("custom/tools/cursor/hooks.json"), &base_hooks).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success()
@@ -348,7 +348,7 @@ fn simplify_flags_legacy_flat_layout_payloads_without_deleting_them() {
     std::fs::write(project.join(".ai/src/hooks/cursor.json"), &base_hooks).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .args(["simplify", "--apply", "-y"])
         .assert()
         .success()

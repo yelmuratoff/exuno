@@ -207,14 +207,14 @@ fn validate_store(canonical_root: &str) -> Result<String, Error> {
     let ai = PathBuf::from(format!("{canonical_root}/.ai"));
     let store = PathBuf::from(format!("{canonical_root}/.ai/backups"));
     if ai.is_symlink() {
-        return Err(refuse("AgentSync state directory cannot be a symlink: .ai"));
+        return Err(refuse("Exuno state directory cannot be a symlink: .ai"));
     }
     if ai.exists() && !ai.is_dir() {
-        return Err(refuse("AgentSync state path is not a directory: .ai"));
+        return Err(refuse("Exuno state path is not a directory: .ai"));
     }
     if ai.is_dir() && canonical_dir(&ai).ok().as_deref() != Some(&format!("{canonical_root}/.ai")) {
         return Err(refuse(
-            "AgentSync state directory resolves outside the repository root",
+            "Exuno state directory resolves outside the repository root",
         ));
     }
     if store.is_symlink() {
@@ -1030,7 +1030,7 @@ mod tests {
             create(&p.root, "sync", &[p.abs("AGENTS.md")], Retention::Bounded)
                 .unwrap_err()
                 .to_string(),
-            "AgentSync state directory cannot be a symlink: .ai"
+            "Exuno state directory cannot be a symlink: .ai"
         );
         assert!(!outside.path().join("backups").exists());
 

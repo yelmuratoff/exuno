@@ -107,7 +107,12 @@ fn inline_rules_into_agents(
         block.extend(title);
         block.push(b'\n');
     }
-    block.extend_from_slice("\nFind all rules in `.ai/src/rules/`.\n".as_bytes());
+    let rules_dir = if s.paths.root_is_home() {
+        "~/.ai/src/rules/"
+    } else {
+        ".ai/src/rules/"
+    };
+    block.extend_from_slice(format!("\nFind all rules in `{rules_dir}`.\n").as_bytes());
     s.ws.append(dest_agents, &block).map_err(|e| io(s, e))?;
     s.record_write(dest_agents);
     s.log.step(&format!(
@@ -523,7 +528,7 @@ fn guard_whole_file(s: &mut Session, tool: &Tool, resource: &str, dest: &str) ->
     } else {
         s.log.error(&headline);
     }
-    let force = s.log.command("agentsync sync --force");
+    let force = s.log.command("exuno sync --force");
     s.log.err(format!(
         "  • Set targets.{resource}.ownership: keys in .ai/src/tools/{}.yaml, or run {force} to own the whole file",
         tool.slug
@@ -567,8 +572,8 @@ fn merge_keyed(s: &mut Session, dest: &str, desired: &str, what: &str) -> Step {
         for key in &merged.drifted {
             s.log.err(format!("      {}", keyed::display(key)));
         }
-        let force = s.log.command("agentsync sync --force");
-        let adopt = s.log.command("agentsync adopt <file>");
+        let force = s.log.command("exuno sync --force");
+        let adopt = s.log.command("exuno adopt <file>");
         s.log.err(format!(
             "  • Copy the live values into the source, or run {force} to apply .ai/src; {adopt} works once a sync has recorded the owned keys"
         ));

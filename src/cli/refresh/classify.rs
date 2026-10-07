@@ -1,5 +1,5 @@
 //! The three-way classification of each template against the manifest, the
-//! project file, and the `agent_sync.yaml` overrides.
+//! project file, and the `exuno.yaml` overrides.
 
 use std::path::{Path, PathBuf};
 
@@ -62,7 +62,7 @@ impl Changes {
     }
 }
 
-/// `template_overrides.declined` and `.pinned` from `agent_sync.yaml`.
+/// `template_overrides.declined` and `.pinned` from `exuno.yaml`.
 #[derive(Default)]
 pub(super) struct Overrides {
     pub(super) declined: Vec<String>,
@@ -268,7 +268,7 @@ mod tests {
             (
                 0,
                 format!(
-                    "{head}{plan}  ↑ rules/core.md  (auto-updated; you hadn't touched it)\n  ? commands/review.md (previously declined — skipped under --yes; run interactively)\n  + rules/comments.md\n  ~ rules/git.md (conflict — skipped; run interactively to review)\n\n  Done. Added: 1 · Auto-updated: 1 · Updated: 0 · Skipped: 2 · Unchanged: 14\n\n  Next: agentsync sync to distribute the updates to enabled tools.\n\n"
+                    "{head}{plan}  ↑ rules/core.md  (auto-updated; you hadn't touched it)\n  ? commands/review.md (previously declined — skipped under --yes; run interactively)\n  + rules/comments.md\n  ~ rules/git.md (conflict — skipped; run interactively to review)\n\n  Done. Added: 1 · Auto-updated: 1 · Updated: 0 · Skipped: 2 · Unchanged: 14\n\n  Next: exuno sync to distribute the updates to enabled tools.\n\n"
                 )
             )
         );
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn declined_and_pinned_overrides_silence_templates_and_status_lists_them() {
         let (_dir, root) = seeded();
-        let config = Path::new(&root).join(".ai/agent_sync.yaml");
+        let config = Path::new(&root).join(".ai/exuno.yaml");
         std::fs::write(
             &config,
             "tools:\n  enabled: []\n\ntemplate_overrides:\n  declined:\n    - rules/comments.md\n    - rules/git.md\n  pinned:\n    - rules/core.md\n",
@@ -368,12 +368,12 @@ mod tests {
         drop_entry(&root, "rules/core.md");
         assert_eq!(
             call(&root, &["--status"], false, &[]).out,
-            "\n  Declined templates\n  Persistent  (template_overrides.declined in agent_sync.yaml — never offered):\n    · rules/comments.md\n    · rules/git.md\n\n"
+            "\n  Declined templates\n  Persistent  (template_overrides.declined in exuno.yaml — never offered):\n    · rules/comments.md\n    · rules/git.md\n\n"
         );
         assert_eq!(
             call(&root, &["--yes"], false, &[]).out,
             format!(
-                "{}  Already up to date! 15 file(s) match the current templates.\n  Persistently declined (agent_sync.yaml): 2 file(s).\n  Pass --status for the full list.\n\n",
+                "{}  Already up to date! 15 file(s) match the current templates.\n  Persistently declined (exuno.yaml): 2 file(s).\n  Pass --status for the full list.\n\n",
                 header(&root, "rules,skills,commands,agents")
             )
         );

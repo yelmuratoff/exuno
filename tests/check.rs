@@ -1,4 +1,4 @@
-//! `tests/check.bats`: `agentsync check` on a project synced for Claude.
+//! `tests/check.bats`: `exuno check` on a project synced for Claude.
 
 mod common;
 
@@ -9,16 +9,16 @@ use predicates::prelude::*;
 fn synced_project() -> Project {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project
 }
 
 fn check(project: &Project) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("check").assert()
+    project.exuno().arg("check").assert()
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn check_warns_about_the_file_a_disabled_target_left_behind() {
         ".ai/src/tools/claude.yaml",
         "targets:\n  agents:\n    enabled: false\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project)
         .success()
         .stdout(predicate::str::contains(
@@ -53,7 +53,7 @@ fn check_detects_minimax_mcp_drift() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["minimax"]);
     project.write(".ai/src/mcp.json", "{\"mcpServers\":{}}\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project).success();
     project.write(
         ".ai/src/mcp.json",
@@ -68,7 +68,7 @@ fn check_detects_minimax_mcp_drift() {
 fn check_detects_kiro_steering_drift() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["kiro"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project).success();
     project.append(".kiro/steering/core.md", "Edited by hand.\n");
     check(&project)
@@ -109,11 +109,11 @@ fn check_follows_relative_shared_sources_and_detects_parent_changes_without_writ
         "parent rule\n",
     );
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nshared:\n  path: \"shared parent\"\n  inherit: rules\n",
     );
-    project.agentsync().arg("sync").assert().success();
-    let config_before = project.sha256(".ai/agent_sync.yaml");
+    project.exuno().arg("sync").assert().success();
+    let config_before = project.sha256(".ai/exuno.yaml");
     let manifest_before = project.sha256(".ai/.sync-manifest");
     let manifest = project.read(".ai/.sync-manifest");
     let generated = manifest
@@ -125,7 +125,7 @@ fn check_follows_relative_shared_sources_and_detects_parent_changes_without_writ
     let generated_before = project.sha256(&generated);
 
     check(&project).success();
-    assert_eq!(project.sha256(".ai/agent_sync.yaml"), config_before);
+    assert_eq!(project.sha256(".ai/exuno.yaml"), config_before);
 
     project.write(
         "shared parent/.ai/src/rules/parent-only.md",
@@ -192,7 +192,7 @@ fn check_leaves_no_temp_artifacts_behind() {
     let sandbox = project.join("tmpdir_sandbox");
     std::fs::create_dir_all(&sandbox).unwrap();
     project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", &sandbox)
         .arg("check")
         .assert()
@@ -209,10 +209,10 @@ fn check_agrees_with_sync_when_shared_inherit_names_a_category_sync_skips() {
         "targets:\n  agents:\n    dest: \"OTHER.md\"\n",
     );
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nshared:\n  path: \"parent\"\n  inherit: rules, tools\n",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     check(&project)
         .success()
         .stdout(predicate::str::contains("synced"));
@@ -221,12 +221,12 @@ fn check_agrees_with_sync_when_shared_inherit_names_a_category_sync_skips() {
 #[test]
 fn check_help_is_answered_on_stdout_without_rendering() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["check", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync check — verify outputs are in sync with source\n\n  USAGE\n    agentsync check\n",
+            "\n  exuno check — verify outputs are in sync with source\n\n  USAGE\n    exuno check\n",
         ))
         .stdout(predicate::str::contains("\n  EXIT STATUS\n"))
         .stderr("");

@@ -17,7 +17,7 @@ use predicates::prelude::*;
 /// tests only need `agent_sync.yaml` and a git repo.
 fn init_mode(project: &Project, mode: &str) {
     project
-        .agentsync()
+        .exuno()
         .args([
             "init",
             "--no-detect",
@@ -61,17 +61,17 @@ fn git(
 }
 
 #[cfg(unix)]
-/// Put an `agentsync` on PATH that runs the working copy, so an installed
-/// hook can call it. Also keeps the developer's real install out of the test.
-fn shim_agentsync_on_path(project: &Project) -> std::path::PathBuf {
+/// Put a `name` on PATH that runs the working copy, so an installed hook can
+/// call it. Also keeps the developer's real install out of the test.
+fn shim_on_path(project: &Project, name: &str) -> std::path::PathBuf {
     let bin_dir = project.join("bin");
     std::fs::create_dir_all(&bin_dir).unwrap();
-    let shim = bin_dir.join("agentsync");
+    let shim = bin_dir.join(name);
     std::fs::write(
         &shim,
         format!(
             "#!/bin/sh\nexec \"{}\" \"$@\"\n",
-            env!("CARGO_BIN_EXE_agentsync")
+            env!("CARGO_BIN_EXE_exuno")
         ),
     )
     .unwrap();
@@ -89,18 +89,18 @@ fn shim_agentsync_on_path(project: &Project) -> std::path::PathBuf {
 fn setup_hooks_local_mode_creates_post_merge_and_post_checkout_hooks() {
     let project = Project::empty();
     init_mode(&project, "local");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(project.join(".git/hooks/post-merge").is_file());
     assert!(project.join(".git/hooks/post-checkout").is_file());
     assert!(
         project
             .read(".git/hooks/post-merge")
-            .contains("AGENTSYNC AUTO SYNC")
+            .contains("EXUNO AUTO SYNC")
     );
     assert!(
         project
             .read(".git/hooks/post-checkout")
-            .contains("AGENTSYNC AUTO SYNC")
+            .contains("EXUNO AUTO SYNC")
     );
 }
 
@@ -108,21 +108,21 @@ fn setup_hooks_local_mode_creates_post_merge_and_post_checkout_hooks() {
 fn setup_hooks_local_mode_hook_invokes_the_installed_binary() {
     let project = Project::empty();
     init_mode(&project, "local");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     let hook = project.read(".git/hooks/post-merge");
-    assert!(hook.contains("command -v agentsync"));
-    assert!(hook.contains("agentsync sync"));
+    assert!(hook.contains("command -v exuno"));
+    assert!(hook.contains("\"$_exuno\" sync"));
 }
 
 #[test]
 fn setup_hooks_local_mode_hook_is_non_fatal_on_sync_failure() {
     let project = Project::empty();
     init_mode(&project, "local");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(
         project
             .read(".git/hooks/post-merge")
-            .contains("agentsync sync ||")
+            .contains("\"$_exuno\" sync ||")
     );
 }
 
@@ -130,11 +130,11 @@ fn setup_hooks_local_mode_hook_is_non_fatal_on_sync_failure() {
 fn setup_hooks_local_mode_is_idempotent() {
     let project = Project::empty();
     init_mode(&project, "local");
-    project.agentsync().arg("setup-hooks").assert().success();
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     let count = project
         .read(".git/hooks/post-merge")
-        .matches("AGENTSYNC AUTO SYNC START")
+        .matches("EXUNO AUTO SYNC START")
         .count();
     assert_eq!(count, 1);
 }
@@ -156,10 +156,10 @@ fn setup_hooks_local_mode_preserves_existing_hook_content() {
         )
         .unwrap();
     }
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     let hook = project.read(".git/hooks/post-merge");
     assert!(hook.contains("existing hook"));
-    assert!(hook.contains("AGENTSYNC AUTO SYNC"));
+    assert!(hook.contains("EXUNO AUTO SYNC"));
 }
 
 #[test]
@@ -171,35 +171,76 @@ fn setup_hooks_local_mode_rewrites_an_outdated_block_in_place() {
         "#!/bin/sh\necho before\n\n# >>> AGENTSYNC AUTO SYNC START >>>\nif [ -f \"lib/system/sync.sh\" ]; then\n    bash lib/system/sync.sh\nfi\n# <<< AGENTSYNC AUTO SYNC END <<<\necho after\n",
     );
     project
-        .agentsync()
+        .exuno()
         .arg("setup-hooks")
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Updated AgentSync hook in post-checkout.\n",
+            "Updated Exuno hook in post-checkout.\n",
         ));
     let hook = project.read(".git/hooks/post-checkout");
     assert!(!hook.contains("lib/system/sync.sh"), "{hook}");
-    assert!(hook.starts_with("#!/bin/sh\necho before\n\n# >>> AGENTSYNC"));
-    assert!(hook.ends_with("# <<< AGENTSYNC AUTO SYNC END <<<\necho after\n"));
-    assert_eq!(hook.matches("AGENTSYNC AUTO SYNC START").count(), 1);
-    assert!(hook.contains("agentsync sync ||"));
+    assert!(!hook.contains("AGENTSYNC AUTO SYNC"), "{hook}");
+    assert!(hook.starts_with("#!/bin/sh\necho before\n\n# >>> EXUNO"));
+    assert!(hook.ends_with("# <<< EXUNO AUTO SYNC END <<<\necho after\n"));
+    assert_eq!(hook.matches("EXUNO AUTO SYNC START").count(), 1);
+    assert!(hook.contains("\"$_exuno\" sync ||"));
     project
-        .agentsync()
+        .exuno()
         .arg("setup-hooks")
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "AgentSync hook already present in post-checkout.\n",
+            "Exuno hook already present in post-checkout.\n",
         ));
     assert_eq!(project.read(".git/hooks/post-checkout"), hook);
+}
+
+#[test]
+fn setup_hooks_rewrites_an_exuno_block_in_place() {
+    let project = Project::empty();
+    init_mode(&project, "local");
+    project.write(
+        ".git/hooks/post-checkout",
+        "#!/bin/sh\necho before\n\n# >>> EXUNO AUTO SYNC START >>>\nold\n# <<< EXUNO AUTO SYNC END <<<\necho after\n",
+    );
+    project
+        .exuno()
+        .arg("setup-hooks")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Updated Exuno hook in post-checkout.\n",
+        ));
+    let hook = project.read(".git/hooks/post-checkout");
+    assert!(!hook.contains("\nold\n"), "{hook}");
+    assert_eq!(hook.matches("AUTO SYNC START").count(), 1, "{hook}");
+    assert!(hook.starts_with("#!/bin/sh\necho before\n\n# >>> EXUNO"));
+    assert!(hook.ends_with("# <<< EXUNO AUTO SYNC END <<<\necho after\n"));
+}
+
+#[test]
+fn setup_hooks_keeps_one_block_when_a_legacy_block_follows_an_exuno_one() {
+    let project = Project::empty();
+    init_mode(&project, "local");
+    project.write(
+        ".git/hooks/post-checkout",
+        "#!/bin/sh\necho before\n\n# >>> EXUNO AUTO SYNC START >>>\nnew\n# <<< EXUNO AUTO SYNC END <<<\necho middle\n\n# >>> AGENTSYNC AUTO SYNC START >>>\nold\n# <<< AGENTSYNC AUTO SYNC END <<<\necho after\n",
+    );
+    project.exuno().arg("setup-hooks").assert().success();
+    let hook = project.read(".git/hooks/post-checkout");
+    assert_eq!(hook.matches("AUTO SYNC START").count(), 1, "{hook}");
+    assert!(!hook.contains("AGENTSYNC AUTO SYNC"), "{hook}");
+    assert!(!hook.contains("\nold\n"), "{hook}");
+    assert!(hook.contains("\necho middle\n"), "{hook}");
+    assert!(hook.ends_with("echo after\n"), "{hook}");
 }
 
 #[test]
 fn setup_hooks_local_mode_installs_no_pre_commit_hook_by_default() {
     let project = Project::empty();
     init_mode(&project, "local");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(!project.join(".git/hooks/pre-commit").is_file());
 }
 
@@ -208,7 +249,7 @@ fn setup_hooks_local_mode_pre_commit_uses_if_stale() {
     let project = Project::empty();
     init_mode(&project, "local");
     project
-        .agentsync()
+        .exuno()
         .args(["setup-hooks", "--pre-commit"])
         .assert()
         .success();
@@ -216,7 +257,7 @@ fn setup_hooks_local_mode_pre_commit_uses_if_stale() {
     assert!(
         project
             .read(".git/hooks/pre-commit")
-            .contains("agentsync sync --if-stale")
+            .contains("\"$_exuno\" sync --if-stale")
     );
 }
 
@@ -226,7 +267,7 @@ fn setup_hooks_local_mode_pre_commit_uses_if_stale() {
 fn setup_hooks_committed_mode_installs_only_a_pre_commit_gate() {
     let project = Project::empty();
     init_mode(&project, "committed");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(project.join(".git/hooks/pre-commit").is_file());
     assert!(!project.join(".git/hooks/post-merge").exists());
     assert!(!project.join(".git/hooks/post-checkout").exists());
@@ -236,38 +277,49 @@ fn setup_hooks_committed_mode_installs_only_a_pre_commit_gate() {
 fn setup_hooks_committed_mode_gate_reads_the_manifest() {
     let project = Project::empty();
     init_mode(&project, "committed");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     let gate = project.read(".git/hooks/pre-commit");
     assert!(gate.contains(".ai/.sync-manifest"));
     assert!(gate.contains("git add -A"));
 }
 
 #[test]
-fn setup_hooks_every_hook_honours_agentsync_skip_hooks() {
+fn setup_hooks_every_hook_honours_both_skip_hooks_spellings() {
     let project = Project::empty();
     init_mode(&project, "committed");
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(
         project
             .read(".git/hooks/pre-commit")
-            .contains("AGENTSYNC_SKIP_HOOKS")
+            .contains("[ -n \"${EXUNO_SKIP_HOOKS:-}${AGENTSYNC_SKIP_HOOKS:-}\" ] && exit 0")
     );
 }
 
-// The following three exercise the installed hook through a real `git
-// commit`, which looks up `agentsync` on PATH — a POSIX shim script this test
-// puts there. There is no such shim mechanism worth trusting on Windows CI.
+// The following exercise the installed hook through a real `git commit`,
+// which looks up `exuno` (else `agentsync`) on PATH — a POSIX shim script these
+// tests put there. There is no such shim mechanism worth trusting on Windows CI.
 #[cfg(unix)]
 #[test]
 fn setup_hooks_committed_gate_blocks_a_commit_whose_outputs_lag_the_source() {
+    gate_blocks_a_lagging_commit("exuno");
+}
+
+#[cfg(unix)]
+#[test]
+fn setup_hooks_committed_gate_falls_back_to_an_agentsync_install() {
+    gate_blocks_a_lagging_commit("agentsync");
+}
+
+#[cfg(unix)]
+fn gate_blocks_a_lagging_commit(binary: &str) {
     let project = Project::empty();
-    let shim_dir = shim_agentsync_on_path(&project);
+    let shim_dir = shim_on_path(&project, binary);
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(git(&project, &["add", "-A"], None, &[]).status.success());
     assert!(
         git(
@@ -307,13 +359,13 @@ fn setup_hooks_committed_gate_blocks_a_commit_whose_outputs_lag_the_source() {
 #[test]
 fn setup_hooks_committed_gate_passes_once_the_outputs_are_staged() {
     let project = Project::empty();
-    let shim_dir = shim_agentsync_on_path(&project);
+    let shim_dir = shim_on_path(&project, "exuno");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(git(&project, &["add", "-A"], None, &[]).status.success());
     assert!(
         git(
@@ -327,7 +379,7 @@ fn setup_hooks_committed_gate_passes_once_the_outputs_are_staged() {
     );
 
     project.append(".ai/src/rules/core.md", "\n- A rule only in the source.\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(git(&project, &["add", "-A"], None, &[]).status.success());
 
     let output = git(
@@ -348,15 +400,26 @@ fn setup_hooks_committed_gate_passes_once_the_outputs_are_staged() {
 
 #[cfg(unix)]
 #[test]
-fn setup_hooks_agentsync_skip_hooks_1_lets_the_commit_through() {
+fn setup_hooks_exuno_skip_hooks_1_lets_the_commit_through() {
+    skip_hooks_lets_the_commit_through("EXUNO_SKIP_HOOKS");
+}
+
+#[cfg(unix)]
+#[test]
+fn setup_hooks_agentsync_skip_hooks_1_still_lets_the_commit_through() {
+    skip_hooks_lets_the_commit_through("AGENTSYNC_SKIP_HOOKS");
+}
+
+#[cfg(unix)]
+fn skip_hooks_lets_the_commit_through(variable: &str) {
     let project = Project::empty();
-    let shim_dir = shim_agentsync_on_path(&project);
+    let shim_dir = shim_on_path(&project, "exuno");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
-    project.agentsync().arg("setup-hooks").assert().success();
+    project.exuno().arg("setup-hooks").assert().success();
     assert!(git(&project, &["add", "-A"], None, &[]).status.success());
     assert!(
         git(
@@ -380,7 +443,7 @@ fn setup_hooks_agentsync_skip_hooks_1_lets_the_commit_through() {
         &project,
         &["commit", "-m", "rules: source only, on purpose"],
         Some(&shim_dir),
-        &[("AGENTSYNC_SKIP_HOOKS", "1")],
+        &[(variable, "1")],
     );
     assert!(output.status.success());
 }
@@ -394,7 +457,7 @@ fn setup_hooks_refuses_to_write_when_core_hooks_path_points_elsewhere() {
     project.write(".githooks/.keep", "");
     project.git(&["config", "core.hooksPath", ".githooks"]);
     let assert = project
-        .agentsync()
+        .exuno()
         .arg("setup-hooks")
         .assert()
         .success()
@@ -410,7 +473,7 @@ fn setup_hooks_rejects_unknown_options() {
     let project = Project::empty();
     init_mode(&project, "local");
     project
-        .agentsync()
+        .exuno()
         .args(["setup-hooks", "--bogus"])
         .assert()
         .code(2);
@@ -421,7 +484,7 @@ fn setup_hooks_fails_outside_a_git_repository() {
     let project = Project::empty();
     init_mode(&project, "local");
     std::fs::remove_dir_all(project.join(".git")).unwrap();
-    let output = project.agentsync().arg("setup-hooks").output().unwrap();
+    let output = project.exuno().arg("setup-hooks").output().unwrap();
     assert!(!output.status.success());
     let combined = format!(
         "{}{}",

@@ -1,11 +1,11 @@
 ---
 name: release
-description: Bump the AgentSync version, write a CHANGELOG entry summarising changes since the last tag, and prepare a clean release commit. Use this skill when the user asks to release, ship, cut a version, bump major/minor/patch, tag, or prepare a new version — including phrasings like "let's ship 0.12", "bump the version", "make a release", or when asked to update CHANGELOG.md after a stretch of work.
+description: Bump the Exuno version, write a CHANGELOG entry summarising changes since the last tag, and prepare a clean release commit. Use this skill when the user asks to release, ship, cut a version, bump major/minor/patch, tag, or prepare a new version — including phrasings like "let's ship 0.12", "bump the version", "make a release", or when asked to update CHANGELOG.md after a stretch of work.
 ---
 
 # Release
 
-Prepare a new AgentSync release: run pre-release checks, bump VERSION, update CHANGELOG.md, commit.
+Prepare a new Exuno release: run pre-release checks, bump VERSION, update CHANGELOG.md, commit.
 
 ## Pre-release checks
 
@@ -37,11 +37,11 @@ When a doc gap is real, fix it in the **same release commit** (or a separate com
    - Bold the feature/component name: `- **Export command:** added --dry-run support.`
    - Describe user-facing impact, not implementation details.
    - Match the tone and format of existing entries.
-5. **Update the version** — Write the new number to `VERSION` (no `v` prefix, one trailing newline, as `agentsync release` writes it) and the same value to `Cargo.toml` and `Cargo.lock`; the test in `src/lib.rs` fails when they disagree.
+5. **Update the version** — Write the new number to `VERSION` (no `v` prefix, one trailing newline, as `exuno release` writes it) and the same value to `Cargo.toml` and `Cargo.lock`; the test in `src/lib.rs` fails when they disagree.
 6. **Commit** — `git add VERSION Cargo.toml Cargo.lock CHANGELOG.md <any doc files fixed above> && git commit -m "release: vX.Y.Z"`.
 7. **Leave the push to the user** — CI handles the rest:
    - `auto-tag.yaml` creates the annotated git tag when VERSION changes on `main`, using the CHANGELOG section as the tag message, and dispatches `release.yml`.
-   - cargo-dist builds the platform archives and publishes the GitHub Release; `agentsync update` downloads the binary from it.
+   - cargo-dist builds the platform archives and publishes the GitHub Release; `exuno update` downloads the binary from it.
 
 ## CHANGELOG Format
 
@@ -64,6 +64,6 @@ When a doc gap is real, fix it in the **same release commit** (or a separate com
 - Leave git tag creation to CI. `auto-tag.yaml` runs when VERSION changes on `main`.
 - Stop after the commit — let the user review before pushing.
 - CHANGELOG entries extracted by CI use `awk` with exact `## X.Y.Z` matching — the version header must be `## X.Y.Z` with no extra text.
-- The `agentsync release` CLI command exists for maintainer use with interactive confirmation. The AI workflow edits files and commits.
+- The `exuno release` CLI command exists for maintainer use with interactive confirmation. The AI workflow edits files and commits.
 - Keep CHANGELOG entries to user-visible changes. Internal refactors with no behavioural effect stay out.
 - Doc fixes uncovered by the pre-release checks ride **with** the release commit; never ship a known-stale README "to fix next time".

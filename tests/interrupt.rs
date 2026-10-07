@@ -4,7 +4,7 @@
 
 #![cfg(unix)]
 
-use agentsync::transaction::interrupt::{Interrupt, status};
+use exuno::transaction::interrupt::{Interrupt, status};
 use signal_hook::consts::signal;
 
 #[test]

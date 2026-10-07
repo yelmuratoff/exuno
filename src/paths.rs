@@ -252,7 +252,7 @@ pub fn find_parent_ai_src(start: &str) -> Option<String> {
 }
 
 /// `find_workspace_ai_dirs`: every `.ai` directory below `root` holding `src/`
-/// or `agent_sync.yaml`, deepest first and then in byte order. `.git` and
+/// or a project config, deepest first and then in byte order. `.git` and
 /// `node_modules` are not entered, nor is a `.ai` once found, nor a symlink.
 pub fn find_workspace_ai_dirs(root: &str) -> Vec<String> {
     fn walk(dir: &str, found: &mut Vec<String>) {
@@ -285,7 +285,10 @@ pub fn find_workspace_ai_dirs(root: &str) -> Vec<String> {
     walk(root, &mut found);
     found.retain(|ai| {
         Path::new(&format!("{ai}/src")).is_dir()
-            || Path::new(&format!("{ai}/agent_sync.yaml")).is_file()
+            || crate::config::names::CONFIG_CANDIDATES
+                .iter()
+                .filter_map(|rel| rel.strip_prefix(".ai/"))
+                .any(|name| Path::new(&format!("{ai}/{name}")).is_file())
     });
     found.sort_by(|a, b| {
         let depth = |p: &str| p.split('/').count();
@@ -483,7 +486,7 @@ impl Paths {
                 };
                 if !self.is_safe_source(&target) && !self.is_trusted_external(&target) {
                     return Err(format!(
-                        "Source symlink {shown} resolves outside the project: {target}; add that directory (or a parent) to AGENTSYNC_EXTERNAL_SOURCE_ROOTS to read it"
+                        "Source symlink {shown} resolves outside the project: {target}; add that directory (or a parent) to EXUNO_EXTERNAL_SOURCE_ROOTS to read it"
                     ));
                 }
                 if Path::new(&target).is_dir() && !visited.contains(&target) {
@@ -704,6 +707,15 @@ mod tests {
                 format!("{root}/.ai"),
             ]
         );
+    }
+
+    #[test]
+    fn a_workspace_ai_holding_only_exuno_yaml_is_a_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().disk_text();
+        std::fs::create_dir_all(dir.path().join("c/.ai")).unwrap();
+        std::fs::write(dir.path().join("c/.ai/exuno.yaml"), "").unwrap();
+        assert_eq!(find_workspace_ai_dirs(&root), [format!("{root}/c/.ai")]);
     }
 
     #[test]
@@ -1026,7 +1038,7 @@ mod tests {
         assert_eq!(
             p.escaping_source_link(&roots),
             Err(format!(
-                "Source symlink .ai/src/rules/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to AGENTSYNC_EXTERNAL_SOURCE_ROOTS to read it"
+                "Source symlink .ai/src/rules/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to EXUNO_EXTERNAL_SOURCE_ROOTS to read it"
             ))
         );
         p.trust_external_roots(Some(&format!("{base}/outside")));
@@ -1048,7 +1060,7 @@ mod tests {
         assert_eq!(
             p.escaping_source_link(&roots),
             Err(format!(
-                "Source symlink vendor/skill/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to AGENTSYNC_EXTERNAL_SOURCE_ROOTS to read it"
+                "Source symlink vendor/skill/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to EXUNO_EXTERNAL_SOURCE_ROOTS to read it"
             ))
         );
 

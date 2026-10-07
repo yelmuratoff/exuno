@@ -35,7 +35,7 @@ pub(super) fn plan(style: &Style, target: &str, choices: &Choices, no_templates:
     if tools.is_empty() {
         text.push_str(&format!(
             "  Tools:    {}\n",
-            style.dim("(none — opt in later via 'agentsync enable')")
+            style.dim("(none — opt in later via 'exuno enable')")
         ));
     } else {
         text.push_str(&format!(
@@ -120,12 +120,12 @@ fn created_lines(style: &Style, scaffold: &Scaffold, payload_lines: &[String]) -
     if outputs == "committed" {
         text.push_str(&format!(
             "   Created {}     — project config (outputs: committed — teammates need only git pull)\n",
-            style.cyan(".ai/agent_sync.yaml")
+            style.cyan(crate::config::names::CONFIG)
         ));
     } else {
         text.push_str(&format!(
-            "   Created {}     — project config (outputs: local — every clone runs agentsync sync)\n",
-            style.cyan(".ai/agent_sync.yaml")
+            "   Created {}     — project config (outputs: local — every clone runs exuno sync)\n",
+            style.cyan(crate::config::names::CONFIG)
         ));
     }
     let agents = src.join("AGENTS.md");
@@ -183,7 +183,7 @@ fn tools_line(style: &Style, tools: &[String], detect_source: &str) -> String {
     if tools.is_empty() {
         return format!(
             "   {}\n",
-            style.dim("No tools enabled. Run 'agentsync enable <slug>' to opt in.")
+            style.dim("No tools enabled. Run 'exuno enable <slug>' to opt in.")
         );
     }
     let joined = tools.join(", ");
@@ -226,43 +226,43 @@ fn next_steps(style: &Style, scaffold: &Scaffold) -> String {
     }
     text.push_str(&format!(
         "  {step}. Run {}    — print an AI prompt to tailor .ai/src/ to your codebase\n",
-        style.cyan("agentsync generate")
+        style.cyan("exuno generate")
     ));
     step += 1;
     text.push_str(&format!(
         "  {step}. Run {}        — browse all available tools\n",
-        style.cyan("agentsync list")
+        style.cyan("exuno list")
     ));
     step += 1;
     if tools.is_empty() {
         text.push_str(&format!(
             "  {step}. Run {} — opt in to tools you use\n",
-            style.cyan("agentsync enable <slug>")
+            style.cyan("exuno enable <slug>")
         ));
     } else {
         text.push_str(&format!(
             "  {step}. Run {} — add more tools\n",
-            style.cyan("agentsync enable <slug>")
+            style.cyan("exuno enable <slug>")
         ));
     }
     step += 1;
     if run_sync && !tools.is_empty() {
         text.push_str(&format!(
             "  {step}. Re-run {}     — after every change to .ai/src/\n",
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         ));
     } else {
         text.push_str(&format!(
             "  {step}. Run {}        — distribute to enabled tools\n",
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         ));
     }
     text.push_str(&format!(
         "\nCustomize:\n  {} {}            — configure shared MCP servers\n  {} {} — override settings/hooks per tool\n\n",
         style.dim("•"),
-        style.cyan("agentsync add mcp <server>"),
+        style.cyan("exuno add mcp <server>"),
         style.dim("•"),
-        style.cyan("agentsync customize <tool> <resource>")
+        style.cyan("exuno customize <tool> <resource>")
     ));
     text
 }
@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(
             run.out,
             format!(
-                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules\n  Tools:    claude, cursor (flag)\n  settings: claude.json\n  hooks:    cursor.json\n\nInitializing AgentSync in {root}\n\n\n   Created .ai/agent_sync.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/tools/claude/settings.json\n   Created .ai/src/tools/cursor/hooks.json\n\n   Enabled 2 tool(s): claude, cursor (from --tools)\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run agentsync generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run agentsync list        — browse all available tools\n  4. Run agentsync enable <slug> — add more tools\n  5. Run agentsync sync        — distribute to enabled tools\n\nCustomize:\n  • agentsync add mcp <server>            — configure shared MCP servers\n  • agentsync customize <tool> <resource> — override settings/hooks per tool\n\n{}",
+                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules\n  Tools:    claude, cursor (flag)\n  settings: claude.json\n  hooks:    cursor.json\n\nInitializing Exuno in {root}\n\n\n   Created .ai/exuno.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/tools/claude/settings.json\n   Created .ai/src/tools/cursor/hooks.json\n\n   Enabled 2 tool(s): claude, cursor (from --tools)\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run exuno generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run exuno list        — browse all available tools\n  4. Run exuno enable <slug> — add more tools\n  5. Run exuno sync        — distribute to enabled tools\n\nCustomize:\n  • exuno add mcp <server>            — configure shared MCP servers\n  • exuno customize <tool> <resource> — override settings/hooks per tool\n\n{}",
                 backup_line(&root)
             )
         );
@@ -311,7 +311,7 @@ mod tests {
             tree(&root),
             [
                 ".ai/.template-manifest",
-                ".ai/agent_sync.yaml",
+                ".ai/exuno.yaml",
                 ".ai/src/AGENTS.md",
                 ".ai/src/rules/comments.md",
                 ".ai/src/rules/core.md",
@@ -320,11 +320,11 @@ mod tests {
                 ".ai/src/tools/cursor/hooks.json"
             ]
         );
-        let config = std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap();
+        let config = std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap();
         assert!(config.contains("\ntools:\n  enabled:\n    - claude\n    - cursor\n\n"));
         let snapshot = backups(&root).pop().unwrap();
         let targets = std::fs::read_to_string(snapshot.join("targets.tsv")).unwrap();
-        assert!(targets.starts_with("missing\t.ai/src\nmissing\t.ai/agent_sync.yaml\nmissing\t.ai/.template-manifest\nmissing\tCLAUDE.md\n"));
+        assert!(targets.starts_with("missing\t.ai/src\nmissing\t.ai/exuno.yaml\nmissing\t.ai/.template-manifest\nmissing\tCLAUDE.md\n"));
         assert!(targets.contains("missing\t.cursor/hooks.json\n"));
 
         let (_dir, root) = project(&[]);
@@ -340,7 +340,7 @@ mod tests {
             ],
             quiet(),
         );
-        assert!(empty.out.contains("\n   Created .ai/agent_sync.yaml     — project config (outputs: local — every clone runs agentsync sync)\n   Created .ai/src/AGENTS.md      — (empty)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
+        assert!(empty.out.contains("\n   Created .ai/exuno.yaml     — project config (outputs: local — every clone runs exuno sync)\n   Created .ai/src/AGENTS.md      — (empty)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
         assert_eq!(
             std::fs::metadata(Path::new(&root).join(".ai/src/AGENTS.md"))
                 .unwrap()
@@ -371,11 +371,11 @@ mod tests {
                 .out
                 .contains("  Content:  rules (no starter templates)\n")
         );
-        assert!(rules_only.out.contains("\n   Created .ai/agent_sync.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
+        assert!(rules_only.out.contains("\n   Created .ai/exuno.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
         assert!(
             rules_only
                 .out
-                .contains("Next steps:\n  1. Run agentsync generate")
+                .contains("Next steps:\n  1. Run exuno generate")
         );
         assert!(!Path::new(&root).join(".ai/src/AGENTS.md").exists());
     }

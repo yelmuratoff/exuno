@@ -41,7 +41,7 @@ impl Doctor<'_> {
         if !manifest_path.is_file() {
             return self.info(&format!(
                 "No .sync-manifest yet — run {} to create it",
-                style.cyan("agentsync sync")
+                style.cyan("exuno sync")
             ));
         }
         let Some(manifest) = Manifest::load(&self.root)? else {
@@ -76,7 +76,7 @@ impl Doctor<'_> {
             self.say(&format!(
                 "\n    {} {} {} {} {}\n",
                 style.dim("Re-run"),
-                style.cyan("agentsync sync"),
+                style.cyan("exuno sync"),
                 style.dim("to overwrite, or move edits into"),
                 style.cyan(".ai/src/"),
                 style.dim("first.")
@@ -142,7 +142,7 @@ impl Doctor<'_> {
         if legacy > 0 {
             self.warn(&format!(
                 "Legacy payload layout ({legacy} file(s) under .ai/src/{{hooks,mcp,settings}}/). Run {} to move them to .ai/src/tools/<tool>/<resource>.<ext>.",
-                style.cyan("agentsync migrate --apply")
+                style.cyan("exuno migrate --apply")
             ))?;
         }
         if hits == 0 && invalid == 0 && legacy == 0 {
@@ -172,7 +172,7 @@ impl Doctor<'_> {
         for (name, rels) in &collisions {
             let claims: Vec<_> = rels.iter().map(|rel| format!("skills/{rel}/")).collect();
             self.warn(&format!(
-                "skill name '{name}' is claimed by {} — agentsync sync refuses it; rename one",
+                "skill name '{name}' is claimed by {} — exuno sync refuses it; rename one",
                 claims.join(", ")
             ))?;
         }
@@ -210,7 +210,7 @@ impl Doctor<'_> {
         for rel in &nonstandard {
             self.advise(&format!(
                 "skills/{rel}/ — category name is not lowercase-kebab {}",
-                style.dim("(agentsync add --category refuses it — rename)")
+                style.dim("(exuno add --category refuses it — rename)")
             ))?;
         }
         if collisions.is_empty()
@@ -268,7 +268,7 @@ impl Doctor<'_> {
         if Path::new(&self.root).join(".agent").is_dir() {
             self.advise(&format!(
                 ".agent/ — legacy pre-v0.6 layout (run {} to preview cleanup)",
-                style.cyan("agentsync migrate --legacy")
+                style.cyan("exuno migrate --legacy")
             ))?;
             found += 1;
         }
@@ -370,7 +370,7 @@ impl Doctor<'_> {
             self.info(&format!(
                 "{} {} {}",
                 style.dim("Run"),
-                style.cyan("agentsync dedupe"),
+                style.cyan("exuno dedupe"),
                 style.dim("to remove duplicates interactively.")
             ))
         } else {

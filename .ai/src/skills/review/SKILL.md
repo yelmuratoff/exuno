@@ -25,12 +25,12 @@ Systematically review changes for correctness, security, and maintainability.
    - Mark as **blocking** (must fix) or **suggestion** (nice to have).
 5. When the code is solid, say so plainly. Manufactured criticism erodes review trust.
 
-## AgentSync Checks
+## Exuno Checks
 
 On top of the priority order above, a diff in this repo answers:
 
 - **Portability** — does it hold on macOS, Linux, and Windows? Engine paths stay `/`-separated through `src/paths.rs`; no GNU-only flag in `install.sh` or the POSIX-`sh` guard hook.
-- **Idempotency** — will `agentsync sync` still produce byte-identical output on a second run? Unsorted directory listings and PID- or timestamp-derived names are the usual culprits.
+- **Idempotency** — will `exuno sync` still produce byte-identical output on a second run? Unsorted directory listings and PID- or timestamp-derived names are the usual culprits.
 - **Error handling** — exit codes preserved, the right `Error` variant, and the two output voices kept apart (`src/output/log.rs` for the engine, `src/output/style.rs` for command modules).
 - **Transactional safety** — backup, restore, manifest, and cleanup behaviour for `init`, `sync`, and `rollback`.
 - **Security** — no `eval`, no unsafe path escape, no leaked secret, no unquoted user-controlled YAML value.

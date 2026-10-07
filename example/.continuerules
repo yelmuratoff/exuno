@@ -90,7 +90,7 @@ Study the existing codebase before changing anything. Understand the architectur
 
 The following skills provide step-by-step workflows. Find them in `.ai/src/skills/`:
 
-- `agentsync` — Create or edit AgentSync configuration — rules, skills, commands, agents, settings, MCP, or tool configs.
+- `exuno` — Create or edit Exuno configuration — rules, skills, commands, agents, settings, MCP, or tool configs.
 - `commit` — Create a well-structured git commit message for staged changes.
 - `debug` — Investigate and fix bugs, errors, or unexpected behavior.
 - `refactor` — Restructure existing code without changing its behavior.

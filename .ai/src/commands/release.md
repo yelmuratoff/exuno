@@ -3,7 +3,7 @@ description: Bump version, update CHANGELOG.md, and prepare a release
 argument-hint: "<major|minor|patch>"
 ---
 
-Prepare a release for AgentSync with version bump type: $ARGUMENTS (default: patch).
+Prepare a release for Exuno with version bump type: $ARGUMENTS (default: patch).
 
 ## Current State
 

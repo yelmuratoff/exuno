@@ -1,4 +1,4 @@
-//! `tests/doctor.bats`: `agentsync doctor`, plus the two `list`/`init` cases
+//! `tests/doctor.bats`: `exuno doctor`, plus the two `list`/`init` cases
 //! bats colocated in the same file (payload-override column, version pin).
 //! Doctor writes everything to stdout, `main.rs`'s `cli::doctor::doctor` call.
 
@@ -12,18 +12,18 @@ use common::Project;
 use predicates::prelude::*;
 
 fn doctor(project: &Project) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("doctor").assert()
+    project.exuno().arg("doctor").assert()
 }
 
 fn doctor_at(dir: &Path) -> assert_cmd::assert::Assert {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command.arg("doctor").assert()
 }
 
 fn init_at(dir: &Path, args: &[&str]) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command.arg("init").args(args).assert().success();
@@ -48,14 +48,14 @@ fn git_init_at(dir: &Path) {
     run(&["config", "user.name", "Test"]);
 }
 
-/// `pin_version`: rewrite the `agentsync_version:` line in place.
+/// `pin_version`: rewrite the `exuno_version:` line in place.
 fn pin_version(project: &Project, version: &str) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .map(|line| {
-            if line.starts_with("agentsync_version:") {
-                format!("agentsync_version: \"{version}\"")
+            if line.starts_with("exuno_version:") {
+                format!("exuno_version: \"{version}\"")
             } else {
                 line.to_string()
             }
@@ -63,7 +63,27 @@ fn pin_version(project: &Project, version: &str) {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
+}
+
+#[test]
+fn doctor_names_what_still_carries_the_agentsync_name() {
+    let project = Project::seeded(&["--tools", "claude", "--yes", "--no-sync"]);
+    project.write(
+        ".ai/src/skills/deploy/SKILL.md",
+        "---\nname: deploy\ndescription: Deploy\nmetadata:\n  agentsync-use-when: Shipping\n---\n",
+    );
+    project.write(
+        ".git/hooks/post-merge",
+        "#!/bin/sh\n# >>> AGENTSYNC AUTO SYNC START >>>\nagentsync sync\n# <<< AGENTSYNC AUTO SYNC END <<<\n",
+    );
+    doctor(&project)
+        .stdout(predicate::str::contains(
+            "! metadata.agentsync-* → metadata.exuno-* in .ai/src/skills/deploy/SKILL.md — run exuno migrate\n",
+        ))
+        .stdout(predicate::str::contains(
+            "! .git/hooks/post-merge still runs the agentsync block — run exuno setup-hooks\n",
+        ));
 }
 
 #[test]
@@ -84,7 +104,7 @@ fn doctor_passes_on_fresh_init() {
 fn doctor_advises_about_the_file_a_disabled_target_left_behind() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.write(
         ".ai/src/tools/claude.yaml",
         "targets:\n  agents:\n    enabled: false\n",
@@ -108,7 +128,7 @@ fn doctor_shows_customization_marker() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude"])
         .assert()
         .success();
@@ -159,14 +179,14 @@ fn doctor_checks_explicit_external_sources_at_their_configured_location() {
     let outside_str = common::engine_path(outside.path());
     // Overwrite the config wholesale, as the bats fixture does with `>`.
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         &format!(
-            "format: 2\ntools:\n  enabled: []\nsource:\n  agents: \"{outside_str}/AGENTS.md\"\n  rules: \"{outside_str}/rules\"\n"
+            "format: 3\ntools:\n  enabled: []\nsource:\n  agents: \"{outside_str}/AGENTS.md\"\n  rules: \"{outside_str}/rules\"\n"
         ),
     );
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_EXTERNAL_SOURCE_ROOTS", &outside_str)
         .arg("doctor")
         .assert()
@@ -178,7 +198,7 @@ fn doctor_checks_explicit_external_sources_at_their_configured_location() {
     std::fs::write(outside.path().join("AGENTS.md"), "# External\n").unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_EXTERNAL_SOURCE_ROOTS", &outside_str)
         .arg("doctor")
         .assert()
@@ -249,12 +269,12 @@ fn doctor_warns_about_legacy_flat_layout_payload_overrides() {
 fn list_shows_payload_override_column_when_hooks_override_exists() {
     let project = Project::seeded(&["--tools", "cursor"]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "cursor", "hooks", "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .arg("list")
         .assert()
         .success()
@@ -263,13 +283,13 @@ fn list_shows_payload_override_column_when_hooks_override_exists() {
 }
 
 #[test]
-fn init_pins_agentsync_version_in_agent_sync_yaml() {
+fn init_pins_exuno_version_in_exuno_yaml() {
     let project = Project::seeded(&["--no-detect"]);
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
-            .any(|line| line.starts_with("agentsync_version:"))
+            .any(|line| line.starts_with("exuno_version:"))
     );
 }
 
@@ -287,11 +307,11 @@ fn doctor_warns_when_pinned_version_differs_from_cli() {
 fn upgrade_config_bumps_pinned_version_to_current_cli() {
     let project = Project::seeded(&["--no-detect"]);
     pin_version(&project, "0.0.1");
-    project.agentsync().arg("upgrade-config").assert().success();
+    project.exuno().arg("upgrade-config").assert().success();
     assert!(
         !project
-            .read(".ai/agent_sync.yaml")
-            .contains("agentsync_version: \"0.0.1\"")
+            .read(".ai/exuno.yaml")
+            .contains("exuno_version: \"0.0.1\"")
     );
     doctor(&project).stdout(predicate::str::contains("differs from pinned").not());
 }
@@ -302,7 +322,7 @@ fn doctor_shows_edit_paths_section_for_enabled_tools() {
     // Plain `enable`, not the no-scaffold helper: this asserts the scaffolded
     // settings.json path, which `--no-scaffold` would never create.
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
@@ -312,7 +332,7 @@ fn doctor_shows_edit_paths_section_for_enabled_tools() {
         .stdout(predicate::str::contains(
             ".ai/src/tools/claude/settings.json",
         ))
-        .stdout(predicate::str::contains("agentsync add mcp"));
+        .stdout(predicate::str::contains("exuno add mcp"));
 }
 
 #[test]
@@ -322,7 +342,7 @@ fn doctor_edit_paths_shows_customize_hint_when_no_override_exists() {
     doctor(&project)
         .success()
         .stdout(predicate::str::contains("Edit paths"))
-        .stdout(predicate::str::contains("agentsync customize cursor hooks"));
+        .stdout(predicate::str::contains("exuno customize cursor hooks"));
 }
 
 #[test]
@@ -357,21 +377,21 @@ fn doctor_advises_on_empty_skill_directory_no_skill_md() {
 #[test]
 fn doctor_advises_when_a_project_copy_replaces_the_bundled_skill() {
     let project = Project::seeded(&["--no-detect"]);
-    let replaced = "skills/meta/agentsync/ — replaces the bundled skill";
-    project.write(".ai/src/skills/meta/agentsync/SKILL.append.md", "Notes.\n");
+    let replaced = "skills/meta/exuno/ — replaces the bundled skill";
+    project.write(".ai/src/skills/meta/exuno/SKILL.append.md", "Notes.\n");
     doctor(&project)
         .success()
         .stdout(predicate::str::contains(replaced).not());
 
     project.write(
-        ".ai/src/skills/meta/agentsync/SKILL.md",
-        "---\nname: agentsync\ndescription: Mine\n---\n",
+        ".ai/src/skills/meta/exuno/SKILL.md",
+        "---\nname: exuno\ndescription: Mine\n---\n",
     );
     doctor(&project)
         .success()
         .stdout(predicate::str::contains(replaced));
 
-    project.append(".ai/agent_sync.yaml", "base_skills: false\n");
+    project.append(".ai/exuno.yaml", "base_skills: false\n");
     doctor(&project)
         .success()
         .stdout(predicate::str::contains(replaced).not());
@@ -391,7 +411,7 @@ fn doctor_accepts_categories_and_warns_on_a_name_two_skills_share() {
 
     project.write(".ai/src/skills/flutter/auth/SKILL.md", skill);
     doctor(&project).stdout(predicate::str::contains(
-        "skill name 'auth' is claimed by skills/backend/auth/, skills/flutter/auth/ — agentsync sync refuses it; rename one",
+        "skill name 'auth' is claimed by skills/backend/auth/, skills/flutter/auth/ — exuno sync refuses it; rename one",
     ));
 }
 
@@ -537,7 +557,7 @@ fn doctor_detects_identical_hash_duplicate_against_parent_ai_src() {
         .stdout(predicate::str::contains(
             "rules/shared.md — duplicate of parent",
         ))
-        .stdout(predicate::str::contains("agentsync dedupe"));
+        .stdout(predicate::str::contains("exuno dedupe"));
 }
 
 #[test]
@@ -584,9 +604,9 @@ fn doctor_honors_shared_path_across_git_boundary_asymmetric_repro() {
         inner.join(".ai/src/rules/shared.md"),
     )
     .unwrap();
-    let mut config = std::fs::read_to_string(inner.join(".ai/agent_sync.yaml")).unwrap();
+    let mut config = std::fs::read_to_string(inner.join(".ai/exuno.yaml")).unwrap();
     config.push_str("\nshared:\n  path: \"../\"\n  inherit: rules\n");
-    std::fs::write(inner.join(".ai/agent_sync.yaml"), config).unwrap();
+    std::fs::write(inner.join(".ai/exuno.yaml"), config).unwrap();
 
     doctor_at(&inner)
         .success()
@@ -672,12 +692,12 @@ fn doctor_the_summary_follows_a_blank_line_with_no_rule() {
 #[test]
 fn doctor_help_is_answered_on_stdout_without_a_project() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .args(["doctor", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync doctor — validate setup and surface warnings\n\n  USAGE\n    agentsync doctor\n",
+            "\n  exuno doctor — validate setup and surface warnings\n\n  USAGE\n    exuno doctor\n",
         ))
         .stdout(predicate::str::contains("\n  EXIT STATUS\n"))
         .stderr("");

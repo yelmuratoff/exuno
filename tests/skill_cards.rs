@@ -58,7 +58,7 @@ fn help_is_available_before_project_discovery_or_any_write() {
     let project = Project::empty();
     project.write("not-a-temp-directory", "not a directory\n");
     let output = project
-        .agentsync()
+        .exuno()
         .env("TMPDIR", project.join("not-a-temp-directory"))
         .args(["skills", "catalog", "help"])
         .output()
@@ -68,7 +68,7 @@ fn help_is_available_before_project_discovery_or_any_write() {
     assert!(
         String::from_utf8(output.stdout)
             .unwrap()
-            .contains("agentsync skills catalog list")
+            .contains("exuno skills catalog list")
     );
     assert!(!project.exists(".ai"));
     assert!(!project.exists(".update_cache"));
@@ -85,7 +85,7 @@ fn list_keeps_cards_visible_when_their_source_is_not_mapped() {
     );
 
     let output = project
-        .agentsync()
+        .exuno()
         .args(["skills", "catalog", "list", "--catalog", "catalog.tsv"])
         .output()
         .unwrap();
@@ -121,7 +121,7 @@ fn show_reads_the_pinned_blob_not_a_later_or_dirty_worktree() {
     let before = status(&source);
 
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "catalog",
@@ -156,7 +156,7 @@ fn list_filters_ids_with_the_engine_globs() {
     );
 
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "catalog",
@@ -203,7 +203,7 @@ fn malformed_catalogs_and_unsupported_options_write_no_partial_stdout() {
         ],
         vec!["skills", "catalog", "set", "--catalog", "bad.tsv"],
     ] {
-        let output = project.agentsync().args(args).output().unwrap();
+        let output = project.exuno().args(args).output().unwrap();
         assert!(!output.status.success());
         assert!(output.stdout.is_empty());
     }
@@ -235,7 +235,7 @@ fn unavailable_pins_and_frontmatter_are_reported_without_execution() {
     );
 
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "catalog",
@@ -255,7 +255,7 @@ fn unavailable_pins_and_frontmatter_are_reported_without_execution() {
     assert!(!Path::new(&marker).exists());
 
     let listed = project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "catalog",
@@ -305,7 +305,7 @@ fn unsupported_frontmatter_never_fabricates_a_pinned_name_or_description() {
 
     for id in ["missing-name", "plain-multiline", "indicator-yaml"] {
         let output = project
-            .agentsync()
+            .exuno()
             .args([
                 "skills",
                 "catalog",
@@ -344,7 +344,7 @@ fn malformed_extra_source_field_does_not_appear_as_parsed_frontmatter() {
     );
 
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "catalog",
@@ -382,7 +382,7 @@ fn optional_frontmatter_blocks_preserve_pinned_source_metadata() {
     );
 
     let output = project
-        .agentsync()
+        .exuno()
         .args([
             "skills",
             "catalog",
@@ -451,7 +451,7 @@ fn unsupported_optional_block_forms_leave_pinned_metadata_unknown() {
 
     for (id, _) in cases {
         let output = project
-            .agentsync()
+            .exuno()
             .args([
                 "skills",
                 "catalog",

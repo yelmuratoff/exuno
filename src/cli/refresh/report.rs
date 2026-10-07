@@ -25,7 +25,7 @@ impl Report<'_> {
         }
         let mut header = format!(
             "\n{}\n\n  {} {}\n  {}   {project}\n  {}     {scope_label}\n",
-            style.bold("  AgentSync Refresh"),
+            style.bold("  Exuno Refresh"),
             style.dim("Templates:"),
             super::templates_display(),
             style.dim("Project:"),
@@ -53,7 +53,7 @@ impl Report<'_> {
             text.push_str(&format!(
                 "  {}\n",
                 style.dim(&format!(
-                    "Persistently declined (agent_sync.yaml): {declined} file(s)."
+                    "Persistently declined (exuno.yaml): {declined} file(s)."
                 ))
             ));
         }
@@ -156,7 +156,7 @@ impl Report<'_> {
         if tally.added + tally.auto_applied + tally.updated > 0 {
             closing.push_str(&format!(
                 "\n  Next: {} to distribute the updates to enabled tools.\n",
-                style.cyan("agentsync sync")
+                style.cyan("exuno sync")
             ));
         }
         closing.push('\n');

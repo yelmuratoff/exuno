@@ -10,11 +10,13 @@ use crate::config::template_manifest::TemplateManifest;
 use crate::paths::DiskText;
 use crate::project::Project;
 use crate::transaction::interrupt::Interrupt;
-use crate::{Error, config::catalog, config::format_rev, engine::staging};
+use crate::{Error, config::catalog, config::format_rev, config::names, engine::staging};
 
 /// `AGENTSYNC_REPO` of `lib/helpers/update.sh`, which the CI template's install
 /// URL names.
-const REPO: &str = "yelmuratoff/agent_sync";
+const REPO: &str = "yelmuratoff/exuno";
+const CI_WORKFLOW: &str = names::CI_WORKFLOW;
+const LEGACY_CI_WORKFLOW: &str = names::LEGACY_CI_WORKFLOW;
 
 pub(super) struct Scaffold<'a> {
     pub(super) target: &'a str,
@@ -150,11 +152,12 @@ fn write_payloads(tools: &[String], src: &str) -> Result<Vec<String>, Error> {
     Ok(written)
 }
 
-/// `agent_sync.yaml`, unless the project already has one in `.ai/` or its root.
+/// `exuno.yaml`, unless the project already has one in `.ai/` or its root.
 fn write_project_config(s: &Scaffold, version: &str) -> Result<(), Error> {
-    let config_file = format!("{}/agent_sync.yaml", s.ai_dir);
-    if Path::new(&config_file).is_file()
-        || Path::new(&format!("{}/agent_sync.yaml", s.target)).is_file()
+    let config_file = format!("{}/exuno.yaml", s.ai_dir);
+    if names::CONFIG_CANDIDATES
+        .iter()
+        .any(|rel| Path::new(&format!("{}/{rel}", s.target)).is_file())
     {
         return Ok(());
     }
@@ -207,7 +210,7 @@ fn adopt_existing(run: &mut Run, target: &str, existing: &[String]) -> Result<()
     if !skips.is_empty() {
         run.say(&format!(
             "   {}\n",
-            style.dim("Skipped files are regenerated from .ai/src/ — restore them with 'agentsync rollback' if needed.")
+            style.dim("Skipped files are regenerated from .ai/src/ — restore them with 'exuno rollback' if needed.")
         ))?;
     }
     if adopted > 0 || !skips.is_empty() {
@@ -219,26 +222,31 @@ fn adopt_existing(run: &mut Run, target: &str, existing: &[String]) -> Result<()
 /// `_init_write_ci_workflow`.
 fn write_ci_workflow(run: &mut Run, target: &str) -> Result<(), Error> {
     let style = run.style;
-    let dest = format!("{target}/.github/workflows/agentsync-check.yml");
-    if Path::new(&dest).is_file() {
+    let present = [CI_WORKFLOW, LEGACY_CI_WORKFLOW]
+        .into_iter()
+        .find(|rel| Path::new(&format!("{target}/{rel}")).is_file());
+    if let Some(rel) = present {
         return run.say(&format!(
             "   {} {} {}\n",
             style.yellow("Kept"),
-            style.cyan(".github/workflows/agentsync-check.yml"),
+            style.cyan(rel),
             style.dim("(already exists)")
         ));
     }
     create_dir(&format!("{target}/.github/workflows"))?;
     let text = catalog::CI_GITHUB_WORKFLOW
-        .replace("__AGENTSYNC_VERSION__", run.env.version)
+        .replace("__EXUNO_VERSION__", run.env.version)
         .replace(
-            "__AGENTSYNC_INSTALL_URL__",
+            "__EXUNO_INSTALL_URL__",
             &format!("https://raw.githubusercontent.com/{REPO}/main/install.sh"),
         );
-    staging::write_beside(Path::new(&dest), text.as_bytes())?;
+    staging::write_beside(
+        Path::new(&format!("{target}/{CI_WORKFLOW}")),
+        text.as_bytes(),
+    )?;
     run.say(&format!(
-        "   Created {} — CI gate (agentsync check)\n",
-        style.cyan(".github/workflows/agentsync-check.yml")
+        "   Created {} — CI gate (exuno check)\n",
+        style.cyan(CI_WORKFLOW)
     ))
 }
 
@@ -254,14 +262,14 @@ fn project_config_text(version: &str, tools: &[String], outputs: &str) -> String
         text
     };
     format!(
-        "# AgentSync — Project Configuration
+        "# Exuno — Project Configuration
 # All keys are optional — remove any that you leave at the default.
 
-agentsync_version: \"{version}\"
+exuno_version: \"{version}\"
 format: {}
 
 # Tools: which ones to sync for this project.
-# Each name must match a base tool (see `agentsync list`) or a custom override
+# Each name must match a base tool (see `exuno list`) or a custom override
 # file under .ai/src/tools/<name>.yaml.
 tools:
 {enabled}
@@ -279,16 +287,16 @@ defaults:
   cleanup: true
 
 # Post-sync hooks run arbitrary shell — enabling them requires the out-of-repo
-# signal AGENTSYNC_ALLOW_POST_SYNC=true, never this in-repo file.
+# signal EXUNO_ALLOW_POST_SYNC=true, never this in-repo file.
 # `skip: true` here always disables them.
 post_sync:
   skip: false
 
 # Where generated tool files live.
 #   committed — outputs and .ai/.sync-manifest are committed; teammates get
-#               them from `git pull` and CI runs `agentsync check`.
+#               them from `git pull` and CI runs `exuno check`.
 #   local     — outputs and the manifest are gitignored; every clone runs
-#               `agentsync sync` (see `agentsync setup-hooks`).
+#               `exuno sync` (see `exuno setup-hooks`).
 outputs: {outputs}
 
 # .gitignore management (false leaves the managed block untouched).
@@ -314,7 +322,7 @@ mod tests {
         let run = call(&root, &["--tools", "claude", "--yes", "--no-sync"], quiet());
         assert_eq!(run.status, 0);
         assert!(run.out.contains(&format!(
-            "Initializing AgentSync in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted .claude/settings.json → .ai/src/tools/claude/settings.json\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n\n   Created .ai/agent_sync.yaml"
+            "Initializing Exuno in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted .claude/settings.json → .ai/src/tools/claude/settings.json\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n\n   Created .ai/exuno.yaml"
         )));
         assert!(
             run.out
@@ -346,7 +354,7 @@ mod tests {
             &["--tools", "claude,codex", "--yes", "--no-sync"],
             quiet(),
         );
-        assert!(two.out.contains("\n   Adopted AGENTS.md → .ai/src/AGENTS.md\n   Kept as-is CLAUDE.md — another file already became .ai/src/AGENTS.md\n   Skipped files are regenerated from .ai/src/ — restore them with 'agentsync rollback' if needed.\n\n"));
+        assert!(two.out.contains("\n   Adopted AGENTS.md → .ai/src/AGENTS.md\n   Kept as-is CLAUDE.md — another file already became .ai/src/AGENTS.md\n   Skipped files are regenerated from .ai/src/ — restore them with 'exuno rollback' if needed.\n\n"));
         assert_eq!(
             std::fs::read_to_string(Path::new(&root).join(".ai/src/AGENTS.md")).unwrap(),
             "# From AGENTS\n"
@@ -392,16 +400,15 @@ mod tests {
             &["--tools", "claude", "--yes", "--ci", "github", "--no-sync"],
             quiet(),
         );
-        assert!(run.out.contains(&format!("Initializing AgentSync in {root}\n\n   Created .github/workflows/agentsync-check.yml — CI gate (agentsync check)\n\n   Created .ai/agent_sync.yaml")));
-        let workflow = Path::new(&root).join(".github/workflows/agentsync-check.yml");
+        assert!(run.out.contains(&format!("Initializing Exuno in {root}\n\n   Created .github/workflows/exuno-check.yml — CI gate (exuno check)\n\n   Created .ai/exuno.yaml")));
+        let workflow = Path::new(&root).join(".github/workflows/exuno-check.yml");
         let text = std::fs::read_to_string(&workflow).unwrap();
-        assert!(text.contains("AGENTSYNC_VERSION=9.9.9 bash"));
+        assert!(text.contains("EXUNO_VERSION=9.9.9 bash"));
+        assert!(text.contains("run: exuno check\n"));
         assert!(
-            text.contains(
-                "https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh"
-            )
+            text.contains("https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh")
         );
-        assert!(!text.contains("__AGENTSYNC_"));
+        assert!(!text.contains("__EXUNO_"));
         {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(
@@ -424,6 +431,11 @@ mod tests {
             std::fs::read_to_string(Path::new(&root).join(".github/workflows/agentsync-check.yml"))
                 .unwrap(),
             "name: mine\n"
+        );
+        assert!(
+            !Path::new(&root)
+                .join(".github/workflows/exuno-check.yml")
+                .exists()
         );
         let none = call(
             &root,

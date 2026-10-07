@@ -1,4 +1,4 @@
-//! `tests/refresh.bats`: `agentsync refresh` (three-way diff via
+//! `tests/refresh.bats`: `exuno refresh` (three-way diff via
 //! `.ai/.template-manifest`) on a project scaffolded with every content
 //! category.
 
@@ -47,12 +47,12 @@ fn drop_manifest_prefix(project: &Project, prefix: &str) {
 #[test]
 fn refresh_help_prints_usage() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["refresh", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync refresh — pull new template files into an existing .ai/src/\n\n  USAGE\n    agentsync refresh [OPTIONS]\n\n  DESCRIPTION\n",
+            "\n  exuno refresh — pull new template files into an existing .ai/src/\n\n  USAGE\n    exuno refresh [OPTIONS]\n\n  DESCRIPTION\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    --only <csv>          "))
         .stdout(predicate::str::contains("--include-agents-md"))
@@ -68,7 +68,7 @@ fn refresh_errors_when_no_ai_directory() {
     let project = seeded();
     std::fs::remove_dir_all(project.join(".ai")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .failure()
@@ -78,7 +78,7 @@ fn refresh_errors_when_no_ai_directory() {
 #[test]
 fn refresh_rejects_unknown_only_value() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--only", "bogus"])
         .assert()
         .failure()
@@ -95,7 +95,7 @@ fn refresh_errors_when_no_source_categories_present_and_no_only() {
         }
     }
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .failure()
@@ -108,7 +108,7 @@ fn refresh_non_tty_without_yes_errors_with_hint_when_changes_pending() {
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     drop_manifest_entry(&project, "rules/comments.md");
     project
-        .agentsync()
+        .exuno()
         .arg("refresh")
         .assert()
         .failure()
@@ -142,7 +142,7 @@ fn refresh_untouched_file_missing_manifest_matching_template_is_unchanged() {
     let project = seeded();
     drop_manifest_entry(&project, "rules/core.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -157,7 +157,7 @@ fn refresh_new_template_no_manifest_entry_file_absent_is_added_with_yes() {
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     drop_manifest_entry(&project, "rules/comments.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -176,7 +176,7 @@ fn refresh_user_edited_no_change_is_silent() {
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     let before = project.read(".ai/src/rules/core.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -200,7 +200,7 @@ fn refresh_follows_a_template_skill_into_its_category() {
     let project = seeded();
     move_skill_into_category(&project, "comments", "meta");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -223,7 +223,7 @@ fn refresh_auto_updates_a_template_skill_kept_in_a_category() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -241,7 +241,7 @@ fn refresh_file_removed_locally_is_silent_without_include_deleted() {
     let project = seeded();
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -256,7 +256,7 @@ fn refresh_include_deleted_lists_previously_declined_files_in_dry_run() {
     let project = seeded();
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--include-deleted", "--dry-run"])
         .assert()
         .success()
@@ -270,7 +270,7 @@ fn refresh_include_deleted_with_yes_still_skips_restoration_interactive_only() {
     let project = seeded();
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--include-deleted"])
         .assert()
         .success()
@@ -284,13 +284,13 @@ fn refresh_include_deleted_with_yes_still_skips_restoration_interactive_only() {
 fn refresh_declined_override_skips_template_entirely() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  declined:\n    - rules/comments.md\n",
     );
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     drop_manifest_entry(&project, "rules/comments.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -302,14 +302,14 @@ fn refresh_declined_override_skips_template_entirely() {
 fn refresh_pinned_override_silences_conflict_on_user_edited_file_when_template_moves() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  pinned:\n    - rules/core.md\n",
     );
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     drop_manifest_entry(&project, "rules/core.md");
     let before = project.read(".ai/src/rules/core.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -325,7 +325,7 @@ fn refresh_dry_run_does_not_write() {
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     drop_manifest_entry(&project, "rules/comments.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--dry-run"])
         .assert()
         .success()
@@ -341,7 +341,7 @@ fn refresh_only_filters_by_category() {
     drop_manifest_entry(&project, "rules/comments.md");
     drop_manifest_entry(&project, "skills/comments/SKILL.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--only", "rules"])
         .assert()
         .success();
@@ -355,7 +355,7 @@ fn refresh_only_subagents_alias_maps_to_agents_dir() {
     std::fs::remove_dir_all(project.join(".ai/src/agents")).unwrap();
     drop_manifest_prefix(&project, "agents/");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--only", "subagents"])
         .assert()
         .success();
@@ -370,7 +370,7 @@ fn refresh_only_value_form_equals_separator() {
     drop_manifest_entry(&project, "rules/comments.md");
     drop_manifest_entry(&project, "skills/comments/SKILL.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--only=rules"])
         .assert()
         .success();
@@ -382,12 +382,12 @@ fn refresh_only_value_form_equals_separator() {
 fn refresh_idempotent_second_run_reports_up_to_date() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -402,7 +402,7 @@ fn refresh_agents_md_excluded_by_default() {
     project.write(".ai/src/AGENTS.md", "USER LOCAL EDIT\n");
     let before = project.read(".ai/src/AGENTS.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -417,7 +417,7 @@ fn refresh_include_agents_md_surfaces_agents_md_but_conflict_still_skipped_under
     drop_manifest_entry(&project, "AGENTS.md");
     let before = project.read(".ai/src/AGENTS.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--include-agents-md"])
         .assert()
         .success()
@@ -433,7 +433,7 @@ fn refresh_leaves_users_custom_files_alone_not_in_templates() {
         "# My Custom Rule\nCustom content.\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -451,7 +451,7 @@ fn refresh_scope_auto_detection_skips_categories_absent_from_ai_src() {
     std::fs::remove_dir_all(project.join(".ai/src/commands")).unwrap();
     std::fs::remove_dir_all(project.join(".ai/src/agents")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -467,7 +467,7 @@ fn refresh_explicit_only_opts_into_a_category_not_yet_in_tree() {
     std::fs::remove_dir_all(project.join(".ai/src/commands")).unwrap();
     drop_manifest_prefix(&project, "commands/");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes", "--only", "commands"])
         .assert()
         .success();
@@ -486,7 +486,7 @@ fn refresh_nested_skill_references_files_added_when_missing_new() {
     std::fs::remove_dir_all(project.join(".ai/src/skills/humanizer/references")).unwrap();
     drop_manifest_prefix(&project, "skills/humanizer/references/");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -508,7 +508,7 @@ fn refresh_yes_records_new_manifest_entries_when_adding_new_files() {
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     drop_manifest_entry(&project, "rules/comments.md");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -526,7 +526,7 @@ fn refresh_backward_compat_works_on_project_with_no_manifest_at_all() {
     std::fs::remove_file(project.join(".ai/.template-manifest")).unwrap();
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -542,7 +542,7 @@ fn refresh_heals_manifest_from_current_matches_when_no_manifest_existed() {
     let project = seeded();
     std::fs::remove_file(project.join(".ai/.template-manifest")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
@@ -566,7 +566,7 @@ fn refresh_silently_kept_divergence_does_not_surface_without_review() {
     let project = seeded();
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -584,7 +584,7 @@ fn refresh_review_surfaces_silently_kept_divergence_in_dry_run() {
     let project = seeded();
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--review", "--dry-run"])
         .assert()
         .success()
@@ -603,7 +603,7 @@ fn refresh_review_with_yes_surfaces_but_preserves_users_edit() {
     let project = seeded();
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--review", "--yes"])
         .assert()
         .success()
@@ -619,13 +619,13 @@ fn refresh_review_with_yes_surfaces_but_preserves_users_edit() {
 fn refresh_up_to_date_summary_hints_at_review_when_files_differ_silently() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -637,12 +637,12 @@ fn refresh_up_to_date_summary_hints_at_review_when_files_differ_silently() {
 fn refresh_up_to_date_summary_omits_the_review_hint_when_nothing_differs() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()
@@ -654,12 +654,12 @@ fn refresh_up_to_date_summary_omits_the_review_hint_when_nothing_differs() {
 fn refresh_pinned_override_still_wins_over_review() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  pinned:\n    - rules/core.md\n",
     );
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--review", "--yes"])
         .assert()
         .success()
@@ -677,11 +677,11 @@ fn refresh_pinned_override_still_wins_over_review() {
 fn refresh_status_prints_persistent_declined_list() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  declined:\n    - rules/core.md\n    - rules/git.md\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--status"])
         .assert()
         .success()
@@ -699,7 +699,7 @@ fn refresh_reads_template_overrides_from_the_config_agentsync_config_path_names(
         "tools:\n  enabled: []\n\ntemplate_overrides:\n  declined:\n    - rules/git.md\n",
     );
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "selected.yaml")
         .args(["refresh", "--status"])
         .assert()
@@ -710,7 +710,7 @@ fn refresh_reads_template_overrides_from_the_config_agentsync_config_path_names(
 #[test]
 fn refresh_status_prints_nothing_declined_when_list_is_empty() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["refresh", "--status"])
         .assert()
         .success()
@@ -722,17 +722,17 @@ fn refresh_status_prints_nothing_declined_when_list_is_empty() {
 fn refresh_up_to_date_output_splits_persistent_vs_local_declined_counts() {
     let project = seeded();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  declined:\n    - rules/core.md\n",
     );
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["refresh", "--yes"])
         .assert()
         .success()

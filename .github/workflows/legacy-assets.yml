@@ -1,0 +1,60 @@
+name: Legacy agentsync assets
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to republish agentsync-<target> archives for
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  republish:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        # Mirrors `targets` in dist-workspace.toml.
+        include:
+          - { target: aarch64-apple-darwin, ext: tar.xz }
+          - { target: aarch64-unknown-linux-musl, ext: tar.xz }
+          - { target: x86_64-apple-darwin, ext: tar.xz }
+          - { target: x86_64-unknown-linux-musl, ext: tar.xz }
+          - { target: x86_64-pc-windows-msvc, ext: zip }
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      INPUT_TAG: ${{ inputs.tag }}
+      PLAN: ${{ inputs.plan }}
+      SOURCE: exuno-${{ matrix.target }}.${{ matrix.ext }}
+      LEGACY: agentsync-${{ matrix.target }}.${{ matrix.ext }}
+    steps:
+      - name: Resolve the release tag
+        run: echo "TAG=${INPUT_TAG:-$(printf '%s' "$PLAN" | jq -r .announcement_tag)}" >> "$GITHUB_ENV"
+      - name: Download the exuno archive
+        run: gh release download "$TAG" --pattern "$SOURCE"
+      - name: Unpack a tar.xz archive
+        if: matrix.ext == 'tar.xz'
+        run: mkdir stage && tar -xJf "$SOURCE" -C stage
+      - name: Unpack a zip archive
+        if: matrix.ext == 'zip'
+        run: mkdir stage && unzip -q "$SOURCE" -d stage
+      - name: Rename the binary to agentsync
+        run: find stage -type f \( -name exuno -o -name exuno.exe \) -execdir sh -c 'mv "$1" "agentsync${1#./exuno}"' _ {} \;
+      - name: Repack as tar.xz
+        if: matrix.ext == 'tar.xz'
+        run: tar -cJf "$LEGACY" -C stage .
+      - name: Repack as zip
+        if: matrix.ext == 'zip'
+        run: cd stage && zip -qr "../$LEGACY" .
+      - name: Upload the archive and its checksum
+        run: |
+          sha256sum "$LEGACY" > "$LEGACY.sha256"
+          gh release upload "$TAG" "$LEGACY" "$LEGACY.sha256" --clobber

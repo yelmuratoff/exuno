@@ -1,4 +1,4 @@
-//! `profiles:` in `agent_sync.yaml`, read as `lib/helpers/profiles.sh` reads it.
+//! `profiles:` in `exuno.yaml`, read as `lib/helpers/profiles.sh` reads it.
 
 use crate::config::yaml_subset;
 

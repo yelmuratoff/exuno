@@ -1,4 +1,4 @@
-//! `tests/init_flow.bats`: `agentsync init` as the one setup command — pick
+//! `tests/init_flow.bats`: `exuno init` as the one setup command — pick
 //! the outputs mode, keep the project's existing tool config, write the CI
 //! gate, and run the first sync.
 
@@ -15,7 +15,7 @@ fn engine_version() -> &'static str {
 fn init_runs_the_first_sync_so_outputs_exist_without_a_second_command() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
@@ -28,7 +28,7 @@ fn init_runs_the_first_sync_so_outputs_exist_without_a_second_command() {
 fn init_no_sync_leaves_the_outputs_unwritten() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
@@ -40,7 +40,7 @@ fn init_no_sync_leaves_the_outputs_unwritten() {
 fn init_no_enabled_tools_means_no_sync() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--no-detect", "--yes"])
         .assert()
         .success();
@@ -52,7 +52,7 @@ fn init_an_existing_claude_md_is_adopted_so_the_first_sync_reproduces_it() {
     let project = Project::empty();
     project.write("CLAUDE.md", "# Hand-written team rules\n");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success()
@@ -74,7 +74,7 @@ fn init_an_existing_rule_file_is_adopted_into_ai_src_rules() {
     let project = Project::empty();
     project.write(".claude/rules/legacy.md", "# Legacy rule\n");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
@@ -95,7 +95,7 @@ fn init_existing_replace_regenerates_instead_of_keeping() {
     let project = Project::empty();
     project.write("CLAUDE.md", "# Hand-written team rules\n");
     project
-        .agentsync()
+        .exuno()
         .args([
             "init",
             "--tools",
@@ -122,7 +122,7 @@ fn init_existing_replace_regenerates_instead_of_keeping() {
 fn init_rejects_an_unknown_existing_action() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--existing", "bogus"])
         .assert()
         .failure()
@@ -136,7 +136,7 @@ fn init_two_destinations_mapping_to_one_source_keep_the_first_and_report_the_res
     project.write("CLAUDE.md", "# From CLAUDE\n");
     project.write("AGENTS.md", "# From AGENTS\n");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude,codex", "--yes", "--no-sync"])
         .assert()
         .success()
@@ -152,7 +152,7 @@ fn init_a_file_no_tool_produces_is_kept_with_the_resolvers_reason() {
     let project = Project::empty();
     project.write(".cursor/rules/core.mdc", "body\n");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "cursor", "--yes", "--no-sync"])
         .assert()
         .success()
@@ -166,25 +166,25 @@ fn init_a_file_no_tool_produces_is_kept_with_the_resolvers_reason() {
 fn init_ci_github_writes_the_check_workflow_with_the_pinned_version() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--ci", "github"])
         .assert()
         .success();
-    let workflow = project.read(".github/workflows/agentsync-check.yml");
-    assert!(workflow.contains("agentsync check"));
-    assert!(workflow.contains(&format!("AGENTSYNC_VERSION={}", engine_version())));
-    assert!(!workflow.contains("__AGENTSYNC_VERSION__"));
+    let workflow = project.read(".github/workflows/exuno-check.yml");
+    assert!(workflow.contains("exuno check"));
+    assert!(workflow.contains(&format!("EXUNO_VERSION={}", engine_version())));
+    assert!(!workflow.contains("__EXUNO_VERSION__"));
 }
 
 #[test]
 fn init_the_ci_workflow_ships_the_autofix_job_disabled() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--ci", "github"])
         .assert()
         .success();
-    let workflow = project.read(".github/workflows/agentsync-check.yml");
+    let workflow = project.read(".github/workflows/exuno-check.yml");
     assert!(workflow.contains("autofix:"));
     assert!(workflow.contains("if: false"));
 }
@@ -192,14 +192,14 @@ fn init_the_ci_workflow_ships_the_autofix_job_disabled() {
 #[test]
 fn init_an_existing_ci_workflow_is_never_overwritten() {
     let project = Project::empty();
-    project.write(".github/workflows/agentsync-check.yml", "name: mine\n");
+    project.write(".github/workflows/exuno-check.yml", "name: mine\n");
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--ci", "github"])
         .assert()
         .success();
     assert_eq!(
-        project.read(".github/workflows/agentsync-check.yml"),
+        project.read(".github/workflows/exuno-check.yml"),
         "name: mine\n"
     );
 }
@@ -209,18 +209,18 @@ fn init_no_ci_workflow_without_ci() {
     let project = Project::empty();
     std::fs::create_dir_all(project.join(".github")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
-    assert!(!project.exists(".github/workflows/agentsync-check.yml"));
+    assert!(!project.exists(".github/workflows/exuno-check.yml"));
 }
 
 #[test]
 fn init_rejects_an_unsupported_ci_provider() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes", "--ci", "gitlab"])
         .assert()
         .failure()
@@ -231,7 +231,7 @@ fn init_rejects_an_unsupported_ci_provider() {
 fn init_committed_mode_ends_by_telling_the_user_to_commit() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .stdout(predicate::str::contains("Commit"));

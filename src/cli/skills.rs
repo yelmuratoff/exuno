@@ -25,7 +25,7 @@ pub const HELP: Help = Help {
     ],
     description: &[
         "Reads the effective source.skills tree, including shared and bundled\nskills. --profile applies the same profile overlay as sync. No project\nfiles are changed.",
-        "show displays the skill's declared metadata and optional annotations.\nThose annotations and requirements are not verified by AgentSync.",
+        "show displays the skill's declared metadata and optional annotations.\nThose annotations and requirements are not verified by Exuno.",
         "check verifies the required fields, the supported scalar forms, and\nthe category layout. For full Agent Skills validation, use skills-ref\nvalidate <skill-dir>. Of its findings, sync refuses only a name two\nskills share.",
         "catalog inspects explicitly declared external skills. Its curator\nnotes are unverified; pinned local Git metadata is read only when a source\nmapping is supplied. It never installs or runs a skill.",
     ],

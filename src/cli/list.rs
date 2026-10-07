@@ -1,4 +1,4 @@
-//! `agentsync list`: the tool catalog with per-project status, byte for byte
+//! `exuno list`: the tool catalog with per-project status, byte for byte
 //! the table `lib/helpers/list.sh` prints.
 
 use std::collections::BTreeSet;
@@ -37,9 +37,9 @@ pub const HELP: Help = Help {
         Section {
             title: "SEE ALSO",
             entries: &[
-                ("agentsync enable <slug>", "Opt in to a tool"),
+                ("exuno enable <slug>", "Opt in to a tool"),
                 (
-                    "agentsync customize <slug>",
+                    "exuno customize <slug>",
                     "Create a per-field override for a tool",
                 ),
             ],
@@ -74,7 +74,7 @@ pub fn render(project: &Project, style: &Style) -> Result<String, Error> {
         .collect();
 
     let mut text = String::from("\n");
-    text.push_str(&style.bold("  AgentSync Tools"));
+    text.push_str(&style.bold("  Exuno Tools"));
     text.push('\n');
     text.push_str(&style.dim(
         "  ● enabled   ○ available   ★ tool override   H M S = hooks/mcp/settings (· = base only, * = override, ~ = legacy override)",
@@ -143,22 +143,22 @@ pub fn render(project: &Project, style: &Style) -> Result<String, Error> {
     if enabled_count == 0 {
         text.push_str(&format!(
             "  Enable a tool:     {}\n",
-            style.cyan("agentsync enable <slug>")
+            style.cyan("exuno enable <slug>")
         ));
     }
     text.push_str(&format!(
         "  Customize a tool:  {}\n",
-        style.cyan("agentsync customize <slug> [<resource>]")
+        style.cyan("exuno customize <slug> [<resource>]")
     ));
     if !shared_mcp {
         text.push_str(&format!(
             "  Add MCP server:    {}\n",
-            style.cyan("agentsync add mcp <server> --command …")
+            style.cyan("exuno add mcp <server> --command …")
         ));
     }
     text.push_str(&format!(
         "  Sync outputs:      {}\n",
-        style.cyan("agentsync sync")
+        style.cyan("exuno sync")
     ));
     text.push('\n');
     Ok(text)
@@ -217,7 +217,7 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, HELP.render(&Style::plain()));
         assert!(out.starts_with(
-            "\n  agentsync list — show available tools and their status\n\n  USAGE\n    agentsync list\n    agentsync ls\n"
+            "\n  exuno list — show available tools and their status\n\n  USAGE\n    exuno list\n    exuno ls\n"
         ));
         assert!(out.contains("\n  LEGEND\n    ●       Enabled in this project\n"));
     }
@@ -237,7 +237,7 @@ mod tests {
         assert!(
             String::from_utf8(out)
                 .unwrap()
-                .starts_with("\n  AgentSync Tools\n")
+                .starts_with("\n  Exuno Tools\n")
         );
     }
 
@@ -246,18 +246,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let project = Project::at(dir.path()).unwrap();
         let text = render(&project, &Style::plain()).unwrap();
-        assert!(text.starts_with("\n  AgentSync Tools\n  ● enabled"));
+        assert!(text.starts_with("\n  Exuno Tools\n  ● enabled"));
         assert!(
             text.contains("    ○    Claude Code            claude        available   ·  M  S  \n")
         );
         assert!(
             text.contains("    ○    Zed                    zed           available   ·  ·  S  \n")
         );
-        assert!(
-            text.contains("\n  0 of 15 enabled\n\n  Enable a tool:     agentsync enable <slug>\n")
-        );
-        assert!(text.contains("  Add MCP server:    agentsync add mcp <server> --command …\n"));
-        assert!(text.ends_with("  Sync outputs:      agentsync sync\n\n"));
+        assert!(text.contains("\n  0 of 15 enabled\n\n  Enable a tool:     exuno enable <slug>\n"));
+        assert!(text.contains("  Add MCP server:    exuno add mcp <server> --command …\n"));
+        assert!(text.ends_with("  Sync outputs:      exuno sync\n\n"));
     }
 
     #[test]

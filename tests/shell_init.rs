@@ -10,7 +10,7 @@ use common::Project;
 use predicates::prelude::*;
 
 fn shell_init(project: &Project, args: &[&str]) -> assert_cmd::assert::Assert {
-    project.agentsync().arg("shell-init").args(args).assert()
+    project.exuno().arg("shell-init").args(args).assert()
 }
 
 #[cfg(unix)]
@@ -26,18 +26,18 @@ fn spawn(project: &Project, shell: &str, script: &str, extra_env: &[(&str, &str)
 }
 
 #[cfg(unix)]
-/// A `command -v agentsync` on PATH that prints `$AGENTSYNC_REPO_ROOT` to
-/// `$AGENTSYNC_TEST_LOG` instead of syncing anything.
-fn write_logging_stub(project: &Project, rel_dir: &str) {
+/// A `binary` on PATH that prints `$EXUNO_REPO_ROOT` to `$EXUNO_TEST_LOG`
+/// instead of syncing anything.
+fn write_logging_stub(project: &Project, rel_dir: &str, binary: &str) {
     project.write(
-        &format!("{rel_dir}/agentsync"),
-        "#!/bin/sh\nprintf \"%s\\n\" \"$AGENTSYNC_REPO_ROOT\" >> \"$AGENTSYNC_TEST_LOG\"\n",
+        &format!("{rel_dir}/{binary}"),
+        "#!/bin/sh\nprintf \"%s\\n\" \"$EXUNO_REPO_ROOT\" >> \"$EXUNO_TEST_LOG\"\n",
     );
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(
-            project.join(&format!("{rel_dir}/agentsync")),
+            project.join(&format!("{rel_dir}/{binary}")),
             std::fs::Permissions::from_mode(0o755),
         )
         .unwrap();
@@ -66,20 +66,20 @@ fn has_zsh() -> bool {
 fn shell_init_zsh_prints_a_zsh_hook() {
     shell_init(&Project::empty(), &["zsh"])
         .success()
-        .stdout(predicate::str::contains("agentsync shell hook (zsh)"))
+        .stdout(predicate::str::contains("exuno shell hook (zsh)"))
         .stdout(predicate::str::contains(
-            "add-zsh-hook chpwd _agentsync_autosync",
+            "add-zsh-hook chpwd _exuno_autosync",
         ))
-        .stdout(predicate::str::contains("agentsync sync --if-stale"));
+        .stdout(predicate::str::contains("\"$_EXUNO_BIN\" sync --if-stale"));
 }
 
 #[test]
 fn shell_init_bash_prints_a_bash_hook() {
     shell_init(&Project::empty(), &["bash"])
         .success()
-        .stdout(predicate::str::contains("agentsync shell hook (bash)"))
+        .stdout(predicate::str::contains("exuno shell hook (bash)"))
         .stdout(predicate::str::contains("PROMPT_COMMAND"))
-        .stdout(predicate::str::contains("agentsync sync --if-stale"));
+        .stdout(predicate::str::contains("\"$_EXUNO_BIN\" sync --if-stale"));
 }
 
 #[test]
@@ -95,11 +95,11 @@ fn shell_init_does_not_sync_a_parent_project_from_a_nested_directory() {
     let project = Project::empty();
     project.write("project/.ai/src/.keep", "");
     project.write("project/nested/.keep", "");
-    write_logging_stub(&project, "stub");
+    write_logging_stub(&project, "stub", "exuno");
 
     let script = format!(
-        "eval \"$('{}' shell-init bash)\"\ncd \"$TEST_PROJECT_ROOT/nested\"\n_agentsync_autosync\n",
-        env!("CARGO_BIN_EXE_agentsync")
+        "eval \"$('{}' shell-init bash)\"\ncd \"$TEST_PROJECT_ROOT/nested\"\n_exuno_autosync\n",
+        env!("CARGO_BIN_EXE_exuno")
     );
     let output = spawn(
         &project,
@@ -108,7 +108,7 @@ fn shell_init_does_not_sync_a_parent_project_from_a_nested_directory() {
         &[
             ("PATH", &path_with(&project, "stub")),
             (
-                "AGENTSYNC_TEST_LOG",
+                "EXUNO_TEST_LOG",
                 &project.join("autosync.log").display().to_string(),
             ),
             ("AGENTSYNC_HOME", env!("CARGO_MANIFEST_DIR")),
@@ -125,13 +125,24 @@ fn shell_init_does_not_sync_a_parent_project_from_a_nested_directory() {
 #[cfg(unix)]
 #[test]
 fn shell_init_syncs_when_the_current_directory_is_a_project_root() {
+    syncs_from_a_project_root("exuno");
+}
+
+#[cfg(unix)]
+#[test]
+fn shell_init_falls_back_to_an_agentsync_install() {
+    syncs_from_a_project_root("agentsync");
+}
+
+#[cfg(unix)]
+fn syncs_from_a_project_root(binary: &str) {
     let project = Project::empty();
     project.write("project/.ai/src/.keep", "");
-    write_logging_stub(&project, "stub");
+    write_logging_stub(&project, "stub", binary);
 
     let script = format!(
-        "eval \"$('{}' shell-init bash)\"\ncd \"$TEST_PROJECT_ROOT\"\n_agentsync_autosync\n",
-        env!("CARGO_BIN_EXE_agentsync")
+        "eval \"$('{}' shell-init bash)\"\ncd \"$TEST_PROJECT_ROOT\"\n_exuno_autosync\n",
+        env!("CARGO_BIN_EXE_exuno")
     );
     let output = spawn(
         &project,
@@ -140,7 +151,7 @@ fn shell_init_syncs_when_the_current_directory_is_a_project_root() {
         &[
             ("PATH", &path_with(&project, "stub")),
             (
-                "AGENTSYNC_TEST_LOG",
+                "EXUNO_TEST_LOG",
                 &project.join("autosync.log").display().to_string(),
             ),
             ("AGENTSYNC_HOME", env!("CARGO_MANIFEST_DIR")),
@@ -158,10 +169,12 @@ fn shell_init_syncs_when_the_current_directory_is_a_project_root() {
 }
 
 #[test]
-fn shell_init_snippet_honors_the_agentsync_no_auto_sync_kill_switch() {
+fn shell_init_snippet_honors_both_no_auto_sync_kill_switches() {
     shell_init(&Project::empty(), &["zsh"])
         .success()
-        .stdout(predicate::str::contains("AGENTSYNC_NO_AUTO_SYNC"));
+        .stdout(predicate::str::contains(
+            "${EXUNO_NO_AUTO_SYNC:-}${AGENTSYNC_NO_AUTO_SYNC:-}",
+        ));
 }
 
 #[test]
@@ -174,14 +187,14 @@ fn shell_init_hook_never_cds_zsh_chpwd_recursion_regression() {
         .clone();
     let text = String::from_utf8(output).unwrap();
     assert!(!text.contains("cd "));
-    assert!(text.contains("AGENTSYNC_REPO_ROOT="));
+    assert!(text.contains("EXUNO_REPO_ROOT="));
 }
 
 #[test]
 fn shell_init_hook_guards_against_re_entrancy() {
     shell_init(&Project::empty(), &["bash"])
         .success()
-        .stdout(predicate::str::contains("_AGENTSYNC_BUSY"));
+        .stdout(predicate::str::contains("_EXUNO_BUSY"));
 }
 
 #[cfg(unix)]
@@ -193,12 +206,12 @@ fn shell_init_zsh_hook_does_not_recurse_on_cd() {
     }
     let project = Project::empty();
     project.write("proj/.ai/src/.keep", "");
-    project.write("stub/agentsync", "#!/bin/sh\nexit 0\n");
+    project.write("stub/exuno", "#!/bin/sh\nexit 0\n");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(
-            project.join("stub/agentsync"),
+            project.join("stub/exuno"),
             std::fs::Permissions::from_mode(0o755),
         )
         .unwrap();
@@ -206,7 +219,7 @@ fn shell_init_zsh_hook_does_not_recurse_on_cd() {
 
     let script = format!(
         "eval \"$('{}' shell-init zsh)\"\ncd '{}'\nprint OK\n",
-        env!("CARGO_BIN_EXE_agentsync"),
+        env!("CARGO_BIN_EXE_exuno"),
         project.join("proj").display()
     );
     let output = spawn(
@@ -224,23 +237,23 @@ fn shell_init_zsh_hook_does_not_recurse_on_cd() {
 #[test]
 fn shell_init_auto_detects_zsh_from_shell() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .arg("shell-init")
         .env("SHELL", "/usr/bin/zsh")
         .assert()
         .success()
-        .stdout(predicate::str::contains("agentsync shell hook (zsh)"));
+        .stdout(predicate::str::contains("exuno shell hook (zsh)"));
 }
 
 #[test]
 fn shell_init_auto_detects_bash_from_shell() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .arg("shell-init")
         .env("SHELL", "/bin/bash")
         .assert()
         .success()
-        .stdout(predicate::str::contains("agentsync shell hook (bash)"));
+        .stdout(predicate::str::contains("exuno shell hook (bash)"));
 }
 
 #[test]
@@ -251,7 +264,7 @@ fn shell_init_errors_when_the_shell_is_unsupported() {
 #[test]
 fn shell_init_errors_when_the_shell_cannot_be_detected() {
     Project::empty()
-        .agentsync()
+        .exuno()
         .arg("shell-init")
         .env("SHELL", "")
         .assert()
@@ -263,7 +276,7 @@ fn shell_init_help_prints_usage() {
     shell_init(&Project::empty(), &["--help"])
         .success()
         .stdout(predicate::str::contains(
-            "\n  USAGE\n    agentsync shell-init [zsh|bash]\n",
+            "\n  USAGE\n    exuno shell-init [zsh|bash]\n",
         ));
 }
 
@@ -271,7 +284,5 @@ fn shell_init_help_prints_usage() {
 fn shell_init_help_recommends_the_eval_form() {
     shell_init(&Project::empty(), &["--help"])
         .success()
-        .stdout(predicate::str::contains(
-            "eval \"$(agentsync shell-init zsh)\"",
-        ));
+        .stdout(predicate::str::contains("eval \"$(exuno shell-init zsh)\""));
 }

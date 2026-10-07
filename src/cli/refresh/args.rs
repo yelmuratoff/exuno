@@ -112,7 +112,7 @@ pub(super) fn resolve_scope(
                     "{}: No source content categories present in {user_base}.\nPass {} to opt into specific ones,\nor run {} to scaffold them.\n",
                     style.red("Error"),
                     style.cyan("--only rules,skills,commands,agents"),
-                    style.cyan("agentsync init")
+                    style.cyan("exuno init")
                 )
                 .as_bytes(),
             )?;
@@ -211,7 +211,7 @@ pub const HELP: Help = Help {
             title: "PERSISTENT OVERRIDES",
             entries: &[(
                 "",
-                "Edit .ai/agent_sync.yaml to silence specific templates forever (this\nis stronger than [s]kip — even new template versions stay hidden):\ntemplate_overrides:\n  declined:        # always-skip; never offered\n    - rules/some-rule.md\n  pinned:          # ignore template updates; keep your version\n    - rules/my-version.md",
+                "Edit .ai/exuno.yaml to silence specific templates forever (this\nis stronger than [s]kip — even new template versions stay hidden):\ntemplate_overrides:\n  declined:        # always-skip; never offered\n    - rules/some-rule.md\n  pinned:          # ignore template updates; keep your version\n    - rules/my-version.md",
             )],
         },
     ],
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(help.status, 0);
         assert_eq!(
             help.out,
-            "\n  agentsync refresh — pull new template files into an existing .ai/src/\n\n  USAGE\n    agentsync refresh [OPTIONS]\n\n  DESCRIPTION\n    Compares each shipped template (rules, skills, commands, agents) against\n    your local .ai/src/ using a three-way diff (template-old vs template-new\n    vs your current file) when a template manifest is present. Files you\n    haven't touched auto-update silently; only true conflicts require review.\n    Files in .ai/src/ that aren't part of the templates (your custom content)\n    are left alone.\n\n  OPTIONS\n    --only <csv>          Categories to consider: rules, skills, commands, agents\n                          Default: only categories that already have a subdir\n                          in your .ai/src/. Pass --only to opt into a category\n                          you don't have yet.\n    --include-agents-md   Also offer updates to AGENTS.md (off by default —\n                          almost always heavily customized).\n    --include-deleted     Re-offer files you previously declined and removed\n                          from disk so they can be restored.\n    --review              Resurface every local divergence from the shipped\n                          templates, including conflicts you previously\n                          [s]kipped. Use this to revisit earlier decisions\n                          or audit local edits.\n    --status              Print declined breakdown (persistent + local) and\n                          exit. No mutation, no prompts.\n    --dry-run             Print the plan without writing anything.\n    -y, --yes             Apply auto-updates and add new files; skip conflicts\n                          (no prompts). Required in non-interactive contexts.\n    -h, --help            Show this help\n\n  REMEMBERED SKIPS\n    Picking [s]kip on a conflict records the current template hash in\n    .ai/.template-manifest. The divergence stays silent on future\n    refreshes until a newer template ships (at which point it\n    resurfaces automatically so you can review the new change). Pass\n    --review at any time to revisit your skips explicitly.\n\n  PERSISTENT OVERRIDES\n    Edit .ai/agent_sync.yaml to silence specific templates forever (this\n    is stronger than [s]kip — even new template versions stay hidden):\n    template_overrides:\n      declined:        # always-skip; never offered\n        - rules/some-rule.md\n      pinned:          # ignore template updates; keep your version\n        - rules/my-version.md\n\n  EXAMPLES\n    agentsync refresh\n    agentsync refresh --only rules,skills\n    agentsync refresh --dry-run\n    agentsync refresh --yes               # CI-friendly: auto-update + add new\n    agentsync refresh --include-deleted   # revisit previously declined files\n    agentsync refresh --review            # revisit conflicts you skipped\n\n"
+            "\n  exuno refresh — pull new template files into an existing .ai/src/\n\n  USAGE\n    exuno refresh [OPTIONS]\n\n  DESCRIPTION\n    Compares each shipped template (rules, skills, commands, agents) against\n    your local .ai/src/ using a three-way diff (template-old vs template-new\n    vs your current file) when a template manifest is present. Files you\n    haven't touched auto-update silently; only true conflicts require review.\n    Files in .ai/src/ that aren't part of the templates (your custom content)\n    are left alone.\n\n  OPTIONS\n    --only <csv>          Categories to consider: rules, skills, commands, agents\n                          Default: only categories that already have a subdir\n                          in your .ai/src/. Pass --only to opt into a category\n                          you don't have yet.\n    --include-agents-md   Also offer updates to AGENTS.md (off by default —\n                          almost always heavily customized).\n    --include-deleted     Re-offer files you previously declined and removed\n                          from disk so they can be restored.\n    --review              Resurface every local divergence from the shipped\n                          templates, including conflicts you previously\n                          [s]kipped. Use this to revisit earlier decisions\n                          or audit local edits.\n    --status              Print declined breakdown (persistent + local) and\n                          exit. No mutation, no prompts.\n    --dry-run             Print the plan without writing anything.\n    -y, --yes             Apply auto-updates and add new files; skip conflicts\n                          (no prompts). Required in non-interactive contexts.\n    -h, --help            Show this help\n\n  REMEMBERED SKIPS\n    Picking [s]kip on a conflict records the current template hash in\n    .ai/.template-manifest. The divergence stays silent on future\n    refreshes until a newer template ships (at which point it\n    resurfaces automatically so you can review the new change). Pass\n    --review at any time to revisit your skips explicitly.\n\n  PERSISTENT OVERRIDES\n    Edit .ai/exuno.yaml to silence specific templates forever (this\n    is stronger than [s]kip — even new template versions stay hidden):\n    template_overrides:\n      declined:        # always-skip; never offered\n        - rules/some-rule.md\n      pinned:          # ignore template updates; keep your version\n        - rules/my-version.md\n\n  EXAMPLES\n    exuno refresh\n    exuno refresh --only rules,skills\n    exuno refresh --dry-run\n    exuno refresh --yes               # CI-friendly: auto-update + add new\n    exuno refresh --include-deleted   # revisit previously declined files\n    exuno refresh --review            # revisit conflicts you skipped\n\n"
         );
 
         let bogus = call(&root, &["--bogus", "--help"], false, &[]);
@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(
             rules.out,
             format!(
-                "{}  Manifest:  none — falling back to two-way diff\n\n  Summary:\n    + 1 new template(s)\n    · 2 unchanged\n\n  New:\n    + rules/comments.md\n\n  + rules/comments.md\n\n  Done. Added: 1 · Auto-updated: 0 · Updated: 0 · Skipped: 0 · Unchanged: 2\n\n  Next: agentsync sync to distribute the updates to enabled tools.\n\n",
+                "{}  Manifest:  none — falling back to two-way diff\n\n  Summary:\n    + 1 new template(s)\n    · 2 unchanged\n\n  New:\n    + rules/comments.md\n\n  + rules/comments.md\n\n  Done. Added: 1 · Auto-updated: 0 · Updated: 0 · Skipped: 0 · Unchanged: 2\n\n  Next: exuno sync to distribute the updates to enabled tools.\n\n",
                 header(&root, "rules").strip_suffix('\n').unwrap()
             )
         );
@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(
             spaced.out,
             format!(
-                "{}  Summary:\n    + 2 new template(s)\n    · 11 unchanged\n\n  New:\n    + agents/code-reviewer.md\n    + skills/comments/SKILL.md\n\n  + agents/code-reviewer.md\n  + skills/comments/SKILL.md\n\n  Done. Added: 2 · Auto-updated: 0 · Updated: 0 · Skipped: 0 · Unchanged: 11\n\n  Next: agentsync sync to distribute the updates to enabled tools.\n\n",
+                "{}  Summary:\n    + 2 new template(s)\n    · 11 unchanged\n\n  New:\n    + agents/code-reviewer.md\n    + skills/comments/SKILL.md\n\n  + agents/code-reviewer.md\n  + skills/comments/SKILL.md\n\n  Done. Added: 2 · Auto-updated: 0 · Updated: 0 · Skipped: 0 · Unchanged: 11\n\n  Next: exuno sync to distribute the updates to enabled tools.\n\n",
                 header(&root, "skills,agents")
             )
         );
@@ -323,7 +323,7 @@ mod tests {
             (
                 1,
                 format!(
-                    "Error: No source content categories present in {root}/.ai/src.\nPass --only rules,skills,commands,agents to opt into specific ones,\nor run agentsync init to scaffold them.\n"
+                    "Error: No source content categories present in {root}/.ai/src.\nPass --only rules,skills,commands,agents to opt into specific ones,\nor run exuno init to scaffold them.\n"
                 )
             )
         );

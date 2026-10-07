@@ -24,4 +24,4 @@ One logical change per commit, imperative mood, build artefacts stay out of hist
 
 - Build artefacts, lockfile binaries, secrets, and `.env*` files belong outside the repo.
 - Reach for `.gitignore` to fence off environment-specific or machine-local output.
-- Leave the `AI SYNC GENERATED` block in `.gitignore` to AgentSync — `outputs:` in `.ai/agent_sync.yaml` decides whether generated agent config is committed, and when it is, those files belong in the same commit as the `.ai/src/` change that produced them.
+- Leave the `AI SYNC GENERATED` block in `.gitignore` to Exuno — `outputs:` in `.ai/exuno.yaml` decides whether generated agent config is committed, and when it is, those files belong in the same commit as the `.ai/src/` change that produced them.

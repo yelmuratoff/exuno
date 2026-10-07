@@ -370,8 +370,8 @@ mod tests {
     fn append_follows_the_last_item_or_builds_the_path_like_yaml_list_append() {
         let cases: [(&str, Option<&str>); 8] = [
             (
-                "# AgentSync — Project Configuration\ntools:\n  enabled: []\n",
-                Some("# AgentSync — Project Configuration\ntools:\n  enabled:\n    - claude\n"),
+                "# Exuno — Project Configuration\ntools:\n  enabled: []\n",
+                Some("# Exuno — Project Configuration\ntools:\n  enabled:\n    - claude\n"),
             ),
             (
                 "# c\ntools:\n  enabled:\n    - zed\n    # note\n    - cursor\n\nsource:\n  rules: x\n",

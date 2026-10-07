@@ -1,4 +1,4 @@
-//! `agentsync show`: `cmd_show` and `_show_payload` of `lib/helpers/customize.sh`.
+//! `exuno show`: `cmd_show` and `_show_payload` of `lib/helpers/customize.sh`.
 
 use crate::paths::DiskText;
 use std::io::Write;
@@ -210,7 +210,7 @@ impl Show<'_> {
                 format!(
                     "{}: Unknown tool '{slug}'.\nRun {} to see available tools.\n",
                     style.red("Error"),
-                    style.cyan("agentsync list")
+                    style.cyan("exuno list")
                 )
                 .as_bytes(),
             )?;
@@ -302,7 +302,7 @@ impl Show<'_> {
                 format!(
                     "{}: No {resource} source for '{slug}' (neither override nor base).\nRun {} to see available tools.\n",
                     style.red("Error"),
-                    style.cyan("agentsync list")
+                    style.cyan("exuno list")
                 )
                 .as_bytes(),
             )?;
@@ -375,7 +375,7 @@ mod tests {
             call(&root, &["--help"]),
             (
                 0,
-                "\n  agentsync show — show effective config for a tool\n\n  USAGE\n    agentsync show <slug> [<resource>] [--base]\n\n  DESCRIPTION\n    Print effective configuration for a tool. Each line is marked \"base\"\n    (inherited from the shipped template) or \"user\" (overridden in\n    .ai/src/tools/<slug>.yaml).\n\n  ARGUMENTS\n    <slug>       Tool to show\n    <resource>   Payload resource: tool, hooks, mcp, settings\n                 (default: tool, the YAML config)\n\n  OPTIONS\n    --base       Print the base template only, ignoring user overrides\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync show cursor\n    agentsync show cursor --base\n    agentsync show claude hooks\n\n".to_string(),
+                "\n  exuno show — show effective config for a tool\n\n  USAGE\n    exuno show <slug> [<resource>] [--base]\n\n  DESCRIPTION\n    Print effective configuration for a tool. Each line is marked \"base\"\n    (inherited from the shipped template) or \"user\" (overridden in\n    .ai/src/tools/<slug>.yaml).\n\n  ARGUMENTS\n    <slug>       Tool to show\n    <resource>   Payload resource: tool, hooks, mcp, settings\n                 (default: tool, the YAML config)\n\n  OPTIONS\n    --base       Print the base template only, ignoring user overrides\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno show cursor\n    exuno show cursor --base\n    exuno show claude hooks\n\n".to_string(),
                 String::new()
             )
         );
@@ -384,7 +384,7 @@ mod tests {
             (
                 1,
                 String::new(),
-                "Error: agentsync show <slug> [<resource>] [--base]\n  <resource>: tool hooks mcp settings (default: tool)\n".to_string()
+                "Error: exuno show <slug> [<resource>] [--base]\n  <resource>: tool hooks mcp settings (default: tool)\n".to_string()
             )
         );
     }
@@ -413,8 +413,7 @@ mod tests {
             (
                 1,
                 String::new(),
-                "Error: Unknown tool 'nope'.\nRun agentsync list to see available tools.\n"
-                    .to_string()
+                "Error: Unknown tool 'nope'.\nRun exuno list to see available tools.\n".to_string()
             )
         );
     }
@@ -432,7 +431,7 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(
             err,
-            "!  Legacy payload override layout detected: .ai/src/hooks/cursor.json\n   Move to .ai/src/tools/<tool>/<resource>.<ext> (canonical since 0.11).\n   Migrate with: agentsync migrate --legacy\n"
+            "!  Legacy payload override layout detected: .ai/src/hooks/cursor.json\n   Move to .ai/src/tools/<tool>/<resource>.<ext> (canonical since 0.11).\n   Migrate with: exuno migrate --legacy\n"
         );
         assert_eq!(
             out,

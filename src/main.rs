@@ -3,12 +3,13 @@ use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agentsync::cli::{self, Command};
-use agentsync::engine::render::Env;
-use agentsync::output::log::{Sink, Stream};
-use agentsync::output::style::Style;
-use agentsync::project::Project;
-use agentsync::{Error, engine_version, output::prompts, paths};
+use exuno::cli::{self, Command};
+use exuno::config::names;
+use exuno::engine::render::Env;
+use exuno::output::log::{Sink, Stream};
+use exuno::output::style::Style;
+use exuno::project::Project;
+use exuno::{Error, engine_version, output::prompts, paths};
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -96,7 +97,7 @@ fn dispatch(command: Command, rest: &[String], style: &Style) -> Result<u8, Erro
             let mut read = prompts::read_terminal;
             let answer = prompts::is_tty().then_some(&mut read as &mut dyn FnMut() -> String);
             let cwd = logical_cwd()?;
-            let config = path_var("AGENTSYNC_CONFIG_PATH");
+            let config = path_setting("CONFIG_PATH");
             let place = cli::dedupe::Place {
                 cwd: &cwd,
                 root: &project_root,
@@ -129,7 +130,7 @@ fn dispatch(command: Command, rest: &[String], style: &Style) -> Result<u8, Erro
         }
         Command::Init => init_command(rest, style),
         Command::Refresh => {
-            let config = path_var("AGENTSYNC_CONFIG_PATH");
+            let config = path_setting("CONFIG_PATH");
             let mut env = cli::refresh::Env {
                 interactive: prompts::is_tty(),
                 read_line: &mut prompts::read_terminal,
@@ -233,7 +234,7 @@ fn update_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let mut env = cli::update::Env {
         exe,
         project_dir: repo_root()?,
-        today: agentsync::config::snapshot::utc_date(now),
+        today: exuno::config::snapshot::utc_date(now),
         width: cli::update::terminal_width(),
         fetch: &mut cli::update::curl_fetch,
         extract: &mut cli::update::tar_extract,
@@ -254,7 +255,7 @@ fn migrate_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let mut env = cli::migrate::Env {
         version: engine_version(),
         prompt_root,
-        no_clipboard: var("AGENTSYNC_NO_CLIPBOARD").as_deref() == Some("1"),
+        no_clipboard: setting("NO_CLIPBOARD").as_deref() == Some("1"),
         stdout_tty: std::io::stdout().is_terminal(),
         interactive: prompts::is_tty(),
         confirm: &mut |question: &str, default_yes: bool| prompts::confirm(question, default_yes),
@@ -303,7 +304,7 @@ fn release_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     };
     let mut env = cli::release::Env {
         cwd: logical_cwd()?,
-        install_dir: var("AGENTSYNC_HOME").filter(|home| Path::new(home).join(".git").is_dir()),
+        install_dir: setting("HOME").filter(|home| Path::new(home).join(".git").is_dir()),
         read_line: &mut read_line,
     };
     cli::release::release(
@@ -350,9 +351,9 @@ fn init_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let mut env = cli::init::Env {
         version: engine_version(),
         cwd,
-        config_path: path_var("AGENTSYNC_CONFIG_PATH"),
-        backup_limit: var("AGENTSYNC_BACKUP_LIMIT"),
-        backup_max_age: var("AGENTSYNC_BACKUP_MAX_AGE_DAYS"),
+        config_path: path_setting("CONFIG_PATH"),
+        backup_limit: setting("BACKUP_LIMIT"),
+        backup_max_age: setting("BACKUP_MAX_AGE_DAYS"),
         interactive: prompts::is_tty(),
         confirm: &mut confirm,
         multiselect: &mut multiselect,
@@ -388,7 +389,7 @@ fn customize_command(rest: &[String], style: &Style) -> Result<u8, Error> {
 fn check_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let root = project_root()?;
     let env = Env {
-        config_path: path_var("AGENTSYNC_CONFIG_PATH"),
+        config_path: path_setting("CONFIG_PATH"),
         skip_post_sync: Some("true".to_string()),
         allow_post_sync: None,
         backup: None,
@@ -429,9 +430,9 @@ fn sync_command(rest: &[String], style: &Style) -> Result<u8, Error> {
 fn rollback_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let supplied_root = supplied_root()?;
     let env = cli::rollback::Env {
-        config_path: path_var("AGENTSYNC_CONFIG_PATH"),
-        backup_limit: var("AGENTSYNC_BACKUP_LIMIT"),
-        backup_max_age: var("AGENTSYNC_BACKUP_MAX_AGE_DAYS"),
+        config_path: path_setting("CONFIG_PATH"),
+        backup_limit: setting("BACKUP_LIMIT"),
+        backup_max_age: setting("BACKUP_MAX_AGE_DAYS"),
     };
     let mut confirm = |question: &str| prompts::confirm(question, false);
     Ok(cli::rollback::run(
@@ -449,17 +450,22 @@ fn var(name: &str) -> Option<String> {
     std::env::var(name).ok()
 }
 
-/// An environment variable holding one path, translated from Git Bash's
-/// spelling on Windows.
-fn path_var(name: &str) -> Option<String> {
-    var(name).map(|path| paths::from_msys(&path, var("MSYSTEM").as_deref()))
+/// `EXUNO_<suffix>`, else `AGENTSYNC_<suffix>`.
+fn setting(suffix: &str) -> Option<String> {
+    names::env(suffix, &var)
+}
+
+/// A [`setting`] holding one path, translated from Git Bash's spelling on
+/// Windows.
+fn path_setting(suffix: &str) -> Option<String> {
+    setting(suffix).map(|path| paths::from_msys(&path, var("MSYSTEM").as_deref()))
 }
 
 /// `AGENTSYNC_EXTERNAL_SOURCE_ROOTS`, colon-separated as Bash reads it; on
 /// Windows each entry is translated and the list rejoined with `;`, the
 /// separator `Paths::trust_external_roots` splits there.
 fn external_roots_var() -> Option<String> {
-    let raw = var("AGENTSYNC_EXTERNAL_SOURCE_ROOTS")?;
+    let raw = setting("EXTERNAL_SOURCE_ROOTS")?;
     if !cfg!(windows) {
         return Some(raw);
     }
@@ -489,21 +495,21 @@ fn external_roots_var() -> Option<String> {
 }
 
 fn sync_env() -> cli::sync::Env {
-    let skip_backup = var("AGENTSYNC_INTERNAL_SKIP_BACKUP").as_deref() == Some("true");
+    let skip_backup = setting("INTERNAL_SKIP_BACKUP").as_deref() == Some("true");
     cli::sync::Env {
         render: Env {
-            config_path: path_var("AGENTSYNC_CONFIG_PATH"),
-            skip_post_sync: var("AGENTSYNC_SKIP_POST_SYNC"),
-            allow_post_sync: var("AGENTSYNC_ALLOW_POST_SYNC"),
-            backup: (!skip_backup).then(|| agentsync::engine::render::BackupBounds {
-                limit: var("AGENTSYNC_BACKUP_LIMIT"),
-                max_age: var("AGENTSYNC_BACKUP_MAX_AGE_DAYS"),
+            config_path: path_setting("CONFIG_PATH"),
+            skip_post_sync: setting("SKIP_POST_SYNC"),
+            allow_post_sync: setting("ALLOW_POST_SYNC"),
+            backup: (!skip_backup).then(|| exuno::engine::render::BackupBounds {
+                limit: setting("BACKUP_LIMIT"),
+                max_age: setting("BACKUP_MAX_AGE_DAYS"),
             }),
             external_source_roots: external_roots_var(),
         },
         skip_backup,
-        backup_limit: var("AGENTSYNC_BACKUP_LIMIT"),
-        backup_max_age: var("AGENTSYNC_BACKUP_MAX_AGE_DAYS"),
+        backup_limit: setting("BACKUP_LIMIT"),
+        backup_max_age: setting("BACKUP_MAX_AGE_DAYS"),
     }
 }
 
@@ -559,7 +565,7 @@ fn current_exe() -> std::io::Result<PathBuf> {
 }
 
 fn repo_root_var() -> Option<String> {
-    path_var("AGENTSYNC_REPO_ROOT").filter(|root| !root.is_empty())
+    path_setting("REPO_ROOT").filter(|root| !root.is_empty())
 }
 
 fn logical_cwd() -> Result<String, Error> {
@@ -590,15 +596,15 @@ fn supplied_root() -> Result<String, Error> {
 /// install's `bin/`, and a detached `__update-cache` run that refreshes the
 /// cache for the next time.
 fn check_for_updates() -> Result<(), Error> {
-    if !std::io::stdout().is_terminal()
-        || var("AGENTSYNC_NO_UPDATE_CHECK").is_some_and(|v| !v.is_empty())
+    if !std::io::stdout().is_terminal() || setting("NO_UPDATE_CHECK").is_some_and(|v| !v.is_empty())
     {
         return Ok(());
     }
     let style = Style::for_stdout();
     let root = repo_root()?;
     let mut out = std::io::stdout().lock();
-    out.write_all(cli::notice::format_notice(Path::new(&root), &style).as_bytes())
+    let program = program_name();
+    out.write_all(cli::notice::format_notice(Path::new(&root), program, &style).as_bytes())
         .map_err(|e| Error::io("<stdout>", e))?;
     let Some(cache) = current_exe()
         .ok()
@@ -607,8 +613,10 @@ fn check_for_updates() -> Result<(), Error> {
         return Ok(());
     };
     if let Ok(text) = std::fs::read_to_string(&cache) {
-        out.write_all(cli::notice::update_banner(&text, engine_version(), &style).as_bytes())
-            .map_err(|e| Error::io("<stdout>", e))?;
+        out.write_all(
+            cli::notice::update_banner(&text, engine_version(), program, &style).as_bytes(),
+        )
+        .map_err(|e| Error::io("<stdout>", e))?;
     }
     out.flush().map_err(|e| Error::io("<stdout>", e))?;
     if let Ok(exe) = std::env::current_exe() {
@@ -630,9 +638,14 @@ fn print_usage() -> Result<u8, Error> {
         .map_err(|e| Error::io("<stdout>", e))
 }
 
+fn program_name() -> &'static str {
+    let program = std::env::args_os().next().unwrap_or_default();
+    names::invoked_as(Path::new(&program))
+}
+
 fn print_version() -> Result<u8, Error> {
     let mut out = std::io::stdout().lock();
-    writeln!(out, "agentsync v{}", engine_version())
+    writeln!(out, "{} v{}", program_name(), engine_version())
         .map(|()| 0)
         .map_err(|e| Error::io("<stdout>", e))
 }

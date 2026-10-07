@@ -1,4 +1,4 @@
-//! `tests/dedupe.bats`: `agentsync dedupe` — deleting source files a parent
+//! `tests/dedupe.bats`: `exuno dedupe` — deleting source files a parent
 //! `.ai/src/` already holds byte for byte, across walk-up, `--against`,
 //! `--workspace`, and `shared.path`. Deeper coverage of the interactive
 //! delete/keep/view/quit prompt loop and the identical/divergent diffing
@@ -16,7 +16,7 @@ fn init_at(dir: &Path) {
     std::fs::create_dir_all(dir).unwrap();
     // A null stdin and stdout, or `init` reads the runner's console as a
     // terminal on Windows and waits for the wizard's answers forever.
-    let status = std::process::Command::new(env!("CARGO_BIN_EXE_agentsync"))
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_exuno"))
         .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -59,7 +59,7 @@ fn git_init_at(dir: &Path) {
 }
 
 fn dedupe_in(dir: &Path, args: &[&str]) -> assert_cmd::assert::Assert {
-    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command.arg("dedupe").args(args).assert()
@@ -189,7 +189,7 @@ fn dedupe_yes_adds_template_derived_dupe_to_declined() {
     dedupe_in(&child_dir, &["--yes"]).success();
 
     assert!(!child_dir.join(".ai/src/rules/comments.md").exists());
-    let config = std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap();
+    let config = std::fs::read_to_string(child_dir.join(".ai/exuno.yaml")).unwrap();
     assert!(config.contains("  declined:"));
     assert!(config.contains("rules/comments.md"));
 }
@@ -211,10 +211,10 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
         child_dir.join(".ai/src/rules/comments.md"),
     )
     .unwrap();
-    let before = std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap();
+    let before = std::fs::read_to_string(child_dir.join(".ai/exuno.yaml")).unwrap();
     std::fs::write(child_dir.join("selected.yaml"), "tools:\n  enabled: []\n").unwrap();
 
-    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(&child_dir);
     common::scrub(&mut command);
     command
@@ -226,11 +226,11 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
     let selected = std::fs::read_to_string(child_dir.join("selected.yaml")).unwrap();
     assert!(selected.contains("rules/comments.md"));
     assert_eq!(
-        std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap(),
+        std::fs::read_to_string(child_dir.join(".ai/exuno.yaml")).unwrap(),
         before
     );
 
-    let mut missing = assert_cmd::Command::new(env!("CARGO_BIN_EXE_agentsync"));
+    let mut missing = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
     missing.current_dir(&child_dir);
     common::scrub(&mut missing);
     missing
@@ -239,7 +239,7 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "AGENTSYNC_CONFIG_PATH is set but file not found",
+            "EXUNO_CONFIG_PATH is set but file not found",
         ));
 }
 
@@ -251,7 +251,7 @@ fn dedupe_yes_does_not_add_non_template_duplicate_to_declined() {
     dedupe_in(&child, &["--yes"]).success();
 
     // rules/shared.md is NOT a shipped template — must not be added to declined.
-    let config = std::fs::read_to_string(child.join(".ai/agent_sync.yaml")).unwrap();
+    let config = std::fs::read_to_string(child.join(".ai/exuno.yaml")).unwrap();
     assert!(!config.contains("rules/shared.md"));
 }
 
@@ -341,7 +341,7 @@ fn dedupe_honors_shared_path_across_git_boundary() {
     use std::io::Write;
     let mut config = std::fs::OpenOptions::new()
         .append(true)
-        .open(inner.join(".ai/agent_sync.yaml"))
+        .open(inner.join(".ai/exuno.yaml"))
         .unwrap();
     write!(config, "\nshared:\n  path: \"../\"\n  inherit: rules\n").unwrap();
     drop(config);
@@ -374,7 +374,7 @@ fn dedupe_workspace_honors_per_project_shared_path_across_git_boundaries() {
     .unwrap();
     let mut config = std::fs::OpenOptions::new()
         .append(true)
-        .open(samerepo.join(".ai/agent_sync.yaml"))
+        .open(samerepo.join(".ai/exuno.yaml"))
         .unwrap();
     write!(config, "\nshared:\n  path: \"../\"\n  inherit: rules\n").unwrap();
     drop(config);
@@ -390,7 +390,7 @@ fn dedupe_workspace_honors_per_project_shared_path_across_git_boundaries() {
     .unwrap();
     let mut config = std::fs::OpenOptions::new()
         .append(true)
-        .open(ownrepo.join(".ai/agent_sync.yaml"))
+        .open(ownrepo.join(".ai/exuno.yaml"))
         .unwrap();
     write!(config, "\nshared:\n  path: \"../\"\n  inherit: rules\n").unwrap();
     drop(config);
@@ -407,12 +407,12 @@ fn dedupe_workspace_honors_per_project_shared_path_across_git_boundaries() {
 #[test]
 fn dedupe_help_prints_usage() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["dedupe", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync dedupe — remove source files that duplicate a parent .ai/src/\n\n  USAGE\n    agentsync dedupe [OPTIONS]\n",
+            "\n  exuno dedupe — remove source files that duplicate a parent .ai/src/\n\n  USAGE\n    exuno dedupe [OPTIONS]\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    --against <path>   "))
         .stdout(predicate::str::contains("\n    --workspace        "))
@@ -423,7 +423,7 @@ fn dedupe_help_prints_usage() {
 #[test]
 fn dedupe_rejects_workspace_and_against_combination() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["dedupe", "--workspace", "--against", "/tmp", "--yes"])
         .assert()
         .failure()

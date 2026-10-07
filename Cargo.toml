@@ -1,12 +1,12 @@
 [package]
-name = "agentsync"
-# Equal to VERSION: `agentsync release` bumps both, and src/lib.rs tests the pair.
-version = "0.44.2"
+name = "exuno"
+# Equal to VERSION: `exuno release` bumps both, and src/lib.rs tests the pair.
+version = "0.45.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Sync AI agent instructions from .ai/src/ to every tool."
 license = "GPL-3.0-only"
-repository = "https://github.com/yelmuratoff/agent_sync"
+repository = "https://github.com/yelmuratoff/exuno"
 publish = false
 
 # publish = false hides the crate from dist; this opts it back in.

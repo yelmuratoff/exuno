@@ -1,8 +1,8 @@
 # Writing Skills
 
-Full reference for authoring AgentSync skills. Read this when creating or editing a skill in `.ai/src/skills/<name>/`.
+Full reference for authoring Exuno skills. Read this when creating or editing a skill in `.ai/src/skills/<name>/`.
 
-AgentSync skills follow the open [agentskills.io](https://agentskills.io) format — a portable standard supported by Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenCode, and ~30 other agents. Validate any skill with `skills-ref validate <path>`.
+Exuno skills follow the open [agentskills.io](https://agentskills.io) format — a portable standard supported by Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenCode, and ~30 other agents. Validate any skill with `skills-ref validate <path>`.
 
 ## Contents
 
@@ -73,7 +73,7 @@ allowed-tools: Bash(git:*) Read Grep # Experimental; tool-specific.
 - Must convey _both_ what the skill does _and_ when to use it
 - Must survive YAML parsing as a plain unquoted scalar: no `: ` (colon followed by a space) anywhere in the value, and no YAML-special first character (`[`, `{`, `>`, `|`, `*`, `&`, `!`, `%`, `#`, `@`, `` ` ``, `"`, `'`). One stray `: ` (e.g. `Gate: present a design`) makes the parser fail with "mapping values are not allowed" and the loader **silently skips the entire skill** — it never triggers and nothing flags the loss. Rephrase with `—` instead of `: `; quoting or `>-` folded scalars also work but a plain dash keeps the single-line style consistent.
 
-After any frontmatter edit, prove it parses before moving on — `skills-ref validate <path>`, then `agentsync skills check` for the metadata AgentSync reads.
+After any frontmatter edit, prove it parses before moving on — `skills-ref validate <path>`, then `exuno skills check` for the metadata Exuno reads.
 
 ## Writing the description (the trigger)
 

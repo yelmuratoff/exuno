@@ -1,11 +1,11 @@
-//! The project being operated on: its root and `agent_sync.yaml`.
+//! The project being operated on: its root and `exuno.yaml`.
 
 use crate::paths::DiskText;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::config::project_config::{self, Selection};
-use crate::{Error, config::yaml_subset, paths};
+use crate::{Error, config::names, config::yaml_subset, paths};
 
 #[derive(Debug)]
 pub struct Project {
@@ -19,20 +19,19 @@ impl Project {
     /// working directory, with `AGENTSYNC_CONFIG_PATH` authoritative.
     pub fn discover() -> Result<Self, Error> {
         let msystem = std::env::var("MSYSTEM").ok();
-        let env_root = std::env::var("AGENTSYNC_REPO_ROOT")
-            .ok()
+        let lookup = |name: &str| std::env::var(name).ok();
+        let env_root = names::env("REPO_ROOT", &lookup)
             .filter(|root| !root.is_empty())
             .map(|root| paths::from_msys(&root, msystem.as_deref()));
         let cwd = std::env::current_dir().map_err(|e| Error::io(".", e))?;
         let pwd = std::env::var("PWD").ok();
         let root = paths::logical_root(env_root.as_deref(), &cwd, pwd.as_deref());
-        let explicit = std::env::var("AGENTSYNC_CONFIG_PATH")
-            .ok()
+        let explicit = names::env("CONFIG_PATH", &lookup)
             .map(|path| paths::from_msys(&path, msystem.as_deref()));
         Self::select(root, explicit.as_deref())
     }
 
-    /// Config is `.ai/agent_sync.yaml`, falling back to a root-level `agent_sync.yaml`.
+    /// Config is the first of [`names::CONFIG_CANDIDATES`] present.
     pub fn at(root: impl Into<PathBuf>) -> Result<Self, Error> {
         Self::select(root, None)
     }
@@ -262,7 +261,7 @@ mod tests {
             format!(
                 // The engine spells a disk path its own way, `/`-separated
                 // even on Windows, so the expectation goes through `disk_text`.
-                "AGENTSYNC_CONFIG_PATH is set but file not found: {}/missing.yaml",
+                "EXUNO_CONFIG_PATH is set but file not found: {}/missing.yaml",
                 dir.path().disk_text()
             )
         );

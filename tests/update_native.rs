@@ -1,4 +1,4 @@
-//! `tests/update_native.bats`: `agentsync update` on a binary install — the
+//! `tests/update_native.bats`: `exuno update` on a binary install — the
 //! binary run directly, as the installer links it, against a curl stand-in on
 //! `PATH` that serves a fixture release and a real tar archive.
 //!
@@ -54,7 +54,7 @@ struct Install {
 impl Install {
     fn new() -> Self {
         let project = Project::seeded(&[]);
-        let native_bin = PathBuf::from(env!("CARGO_BIN_EXE_agentsync"));
+        let native_bin = PathBuf::from(env!("CARGO_BIN_EXE_exuno"));
         let install_dir = project.join("install/bin");
         std::fs::create_dir_all(&install_dir).unwrap();
         let install_bin = install_dir.join("agentsync");
@@ -76,15 +76,15 @@ while [ $# -gt 0 ]; do
     esac
 done
 case "$url" in
-    https://api.github.com/repos/yelmuratoff/agent_sync/releases/latest)
+    https://api.github.com/repos/yelmuratoff/exuno/releases/latest)
         file="$FAKE_RELEASES/latest.json" ;;
-    https://api.github.com/repos/yelmuratoff/agent_sync/git/ref/tags/*)
+    https://api.github.com/repos/yelmuratoff/exuno/git/ref/tags/*)
         file="$FAKE_RELEASES/tags/${url##*/}" ;;
-    https://github.com/yelmuratoff/agent_sync/releases/download/*)
+    https://github.com/yelmuratoff/exuno/releases/download/*)
         rest="${url#*/releases/download/}"; tag="${rest%%/*}"; name="${rest#*/}"
         case "$name" in
-            agentsync-*.sha256) name="archive.tar.xz.sha256" ;;
-            agentsync-*) name="archive.tar.xz" ;;
+            exuno-*.sha256) name="archive.tar.xz.sha256" ;;
+            exuno-*) name="archive.tar.xz" ;;
         esac
         file="$FAKE_RELEASES/$tag/$name" ;;
     *) printf '000'; exit 6 ;;
@@ -116,7 +116,7 @@ if [ -f "$file" ]; then cp "$file" "$out"; printf '200'; else printf '404'; fi
     }
 
     /// The installed binary, run against the curl stand-in.
-    fn agentsync(&self) -> Command {
+    fn exuno(&self) -> Command {
         let mut command = Command::new(&self.install_bin);
         command.current_dir(self.project.path());
         common::scrub(&mut command);
@@ -153,7 +153,7 @@ if [ -f "$file" ]; then cp "$file" "$out"; printf '200'; else printf '404'; fi
         let top = self
             .rel_root
             .join(format!("rel-{tag}"))
-            .join("agentsync-fixture");
+            .join("exuno-fixture");
         std::fs::create_dir_all(&top).unwrap();
         let release_dir = self.fake_releases.join(tag);
         std::fs::create_dir_all(&release_dir).unwrap();
@@ -164,9 +164,9 @@ if [ -f "$file" ]; then cp "$file" "$out"; printf '200'; else printf '404'; fi
         std::fs::write(top.join("catalog.dump"), &catalog).unwrap();
 
         let script = format!(
-            "#!/usr/bin/env bash\ncase \"${{1:-}}\" in\n    version) echo \"agentsync v{tag}\" ;;\n    __catalog) cat \"$(dirname \"$0\")/catalog.dump\" ;;\n    *) exit 1 ;;\nesac\n"
+            "#!/usr/bin/env bash\ncase \"${{1:-}}\" in\n    version) echo \"exuno v{tag}\" ;;\n    __catalog) cat \"$(dirname \"$0\")/catalog.dump\" ;;\n    *) exit 1 ;;\nesac\n"
         );
-        let bin_path = top.join("agentsync");
+        let bin_path = top.join("exuno");
         std::fs::write(&bin_path, script).unwrap();
         std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
 
@@ -184,11 +184,11 @@ if [ -f "$file" ]; then cp "$file" "$out"; printf '200'; else printf '404'; fi
             .arg(&archive)
             .arg("-C")
             .arg(self.rel_root.join(format!("rel-{tag}")))
-            .arg("agentsync-fixture")
+            .arg("exuno-fixture")
             .status()
             .unwrap();
         assert!(status.success());
-        let sum = agentsync::transaction::manifest::sha256_hex(&std::fs::read(&archive).unwrap());
+        let sum = exuno::transaction::manifest::sha256_hex(&std::fs::read(&archive).unwrap());
         std::fs::write(
             release_dir.join("archive.tar.xz.sha256"),
             format!("{sum}  archive.tar.xz\n"),
@@ -216,7 +216,7 @@ fn write(path: &Path, content: &str) {
 fn help_prints_the_usage_without_touching_the_network() {
     let install = Install::new();
     install
-        .agentsync()
+        .exuno()
         .args(["update", "--help"])
         .assert()
         .success()
@@ -228,7 +228,7 @@ fn help_prints_the_usage_without_touching_the_network() {
 fn an_unknown_flag_is_refused_with_status_2() {
     let install = Install::new();
     install
-        .agentsync()
+        .exuno()
         .args(["update", "--bogus"])
         .assert()
         .code(2)
@@ -242,7 +242,7 @@ fn the_latest_release_replaces_the_binary_and_prints_its_changelog() {
     install.write_latest_json("9.9.9");
     let engine_version = engine_version();
     install
-        .agentsync()
+        .exuno()
         .arg("update")
         .assert()
         .success()
@@ -253,7 +253,7 @@ fn the_latest_release_replaces_the_binary_and_prints_its_changelog() {
         .stdout(predicate::str::contains("What's new in v9.9.9"))
         .stdout(predicate::str::contains("• Something with code."))
         .stdout(predicate::str::contains("Upstream touched").not());
-    assert_eq!(install.version(), "agentsync v9.9.9");
+    assert_eq!(install.version(), "exuno v9.9.9");
     assert!(!install.project.join("install/.update_cache").exists());
     assert!(
         !install
@@ -269,7 +269,7 @@ fn the_running_version_is_already_up_to_date() {
     let engine_version = engine_version();
     install.write_latest_json(&engine_version);
     install
-        .agentsync()
+        .exuno()
         .arg("update")
         .assert()
         .success()
@@ -285,24 +285,24 @@ fn version_pins_to_that_release() {
     let install = Install::new();
     install.publish_release("9.9.9", None);
     install
-        .agentsync()
+        .exuno()
         .args(["update", "9.9.9"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Pinning to v9.9.9..."));
-    assert_eq!(install.version(), "agentsync v9.9.9");
+    assert_eq!(install.version(), "exuno v9.9.9");
 }
 
 #[test]
 fn a_tag_that_is_not_a_release_is_refused() {
     let install = Install::new();
     install
-        .agentsync()
+        .exuno()
         .args(["update", "999.0.0"])
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "No AgentSync release is tagged 999.0.0.",
+            "No Exuno release is tagged 999.0.0.",
         ));
     assert!(install.installed_unchanged());
 }
@@ -315,13 +315,13 @@ fn a_tag_older_than_the_binary_releases_points_at_the_installer() {
         "{\"ref\":\"refs/tags/0.1.0\"}\n",
     );
     install
-        .agentsync()
+        .exuno()
         .args(["update", "0.1.0"])
         .assert()
         .code(1)
         .stderr(predicate::str::contains("0.1.0 predates the binary releases"))
         .stderr(predicate::str::contains(
-            "AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh | bash",
+            "EXUNO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash",
         ));
     assert!(install.installed_unchanged());
 }
@@ -335,7 +335,7 @@ fn a_checksum_mismatch_keeps_the_old_binary() {
         "0000  archive.tar.xz\n",
     );
     install
-        .agentsync()
+        .exuno()
         .args(["update", "9.9.9"])
         .assert()
         .code(1)
@@ -349,7 +349,7 @@ fn an_unreachable_github_is_reported() {
     let empty_path = install.project.join("nobin");
     std::fs::create_dir_all(&empty_path).unwrap();
     install
-        .agentsync()
+        .exuno()
         .env("PATH", &empty_path)
         .args(["update", "9.9.9"])
         .assert()
@@ -377,7 +377,7 @@ fn a_changed_overridden_field_is_reported_queued_and_fails_strict() {
 
     let engine_version = engine_version();
     install
-        .agentsync()
+        .exuno()
         .args(["update", "9.9.9"])
         .assert()
         .success()
@@ -399,17 +399,17 @@ fn a_changed_overridden_field_is_reported_queued_and_fails_strict() {
 
     install_binary(&install.native_bin, &install.install_bin);
     install
-        .agentsync()
+        .exuno()
         .args(["update", "9.9.9", "--strict"])
         .assert()
         .code(1);
-    assert_eq!(install.version(), "agentsync v9.9.9");
+    assert_eq!(install.version(), "exuno v9.9.9");
 }
 
 #[test]
 fn catalog_frames_every_shipped_tool_by_byte_length() {
     let install = Install::new();
-    let assert = install.agentsync().arg("__catalog").assert().success();
+    let assert = install.exuno().arg("__catalog").assert().success();
     let output = assert.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let framed = stdout

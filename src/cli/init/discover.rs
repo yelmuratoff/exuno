@@ -116,7 +116,7 @@ pub(super) fn backup_targets(
 ) -> Result<Vec<String>, Error> {
     let mut targets = vec![
         format!("{target}/.ai/src"),
-        format!("{target}/.ai/agent_sync.yaml"),
+        format!("{target}/.ai/exuno.yaml"),
         format!("{target}/.ai/.template-manifest"),
     ];
     let paths = Paths::on_disk(target);
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(
             no_templates.out,
             format!(
-                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules (no starter templates)\n  Tools:    (none — opt in later via 'agentsync enable')\n\nDry run — nothing was written.\n"
+                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules (no starter templates)\n  Tools:    (none — opt in later via 'exuno enable')\n\nDry run — nothing was written.\n"
             )
         );
         let empty = call(

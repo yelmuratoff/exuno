@@ -1,13 +1,13 @@
-//! `lib/helpers/project_config.sh`: which `agent_sync.yaml` a project uses.
+//! `lib/helpers/project_config.sh`: which project config a project uses.
 
-use crate::config::yaml_subset;
+use crate::config::{names, yaml_subset};
 
 /// What `project_config_path_r` answered.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Selection {
     /// The config file to read.
     Found(String),
-    /// No explicit path, and neither `.ai/agent_sync.yaml` nor `agent_sync.yaml`.
+    /// No explicit path, and none of [`names::CONFIG_CANDIDATES`].
     None,
     /// `AGENTSYNC_CONFIG_PATH` names this path, which is not a regular file.
     Missing(String),
@@ -15,7 +15,7 @@ pub enum Selection {
 
 /// `project_config_path_r`: an explicit path, relative to `root` unless
 /// absolute, is authoritative and never falls back; otherwise
-/// `.ai/agent_sync.yaml`, then `agent_sync.yaml`. `is_file` answers `[[ -f ]]`.
+/// the first of [`names::CONFIG_CANDIDATES`]. `is_file` answers `[[ -f ]]`.
 pub fn select(root: &str, explicit: Option<&str>, is_file: &dyn Fn(&str) -> bool) -> Selection {
     if let Some(raw) = explicit.filter(|raw| !raw.is_empty()) {
         let path = if crate::paths::is_absolute(raw) {
@@ -29,18 +29,16 @@ pub fn select(root: &str, explicit: Option<&str>, is_file: &dyn Fn(&str) -> bool
             Selection::Missing(path)
         };
     }
-    [
-        format!("{root}/.ai/agent_sync.yaml"),
-        format!("{root}/agent_sync.yaml"),
-    ]
-    .into_iter()
-    .find(|path| is_file(path))
-    .map_or(Selection::None, Selection::Found)
+    names::CONFIG_CANDIDATES
+        .iter()
+        .map(|rel| format!("{root}/{rel}"))
+        .find(|path| is_file(path))
+        .map_or(Selection::None, Selection::Found)
 }
 
 /// The sentence every command prints for [`Selection::Missing`].
 pub fn missing_message(path: &str) -> String {
-    format!("AGENTSYNC_CONFIG_PATH is set but file not found: {path}")
+    format!("EXUNO_CONFIG_PATH is set but file not found: {path}")
 }
 
 /// Where a config keeps its generated files: `outputs:` when it says
@@ -100,6 +98,19 @@ mod tests {
     }
 
     #[test]
+    fn the_exuno_config_wins_over_both_legacy_names() {
+        let files = probe(&[
+            "/q/agent_sync.yaml",
+            "/q/.ai/agent_sync.yaml",
+            "/q/.ai/exuno.yaml",
+        ]);
+        assert_eq!(
+            select("/q", None, &files),
+            Selection::Found("/q/.ai/exuno.yaml".into())
+        );
+    }
+
+    #[test]
     fn an_explicit_path_is_relative_to_the_root_unless_absolute() {
         let files = probe(&["/q/config/a.yaml", "/q/.ai/agent_sync.yaml"]);
         assert_eq!(
@@ -138,7 +149,7 @@ mod tests {
     fn the_missing_message_is_the_bash_sentence() {
         assert_eq!(
             missing_message("/q/missing.yaml"),
-            "AGENTSYNC_CONFIG_PATH is set but file not found: /q/missing.yaml"
+            "EXUNO_CONFIG_PATH is set but file not found: /q/missing.yaml"
         );
     }
 }

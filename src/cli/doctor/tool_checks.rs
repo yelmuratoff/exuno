@@ -95,7 +95,7 @@ impl Doctor<'_> {
                 if let Some(path) = hook {
                     let shown = self.rel(&path.disk_text());
                     self.advise(&format!(
-                        "Kimi hooks are global-only in $KIMI_CODE_HOME/config.toml; AgentSync leaves it untouched. Remove {shown} from project sources."
+                        "Kimi hooks are global-only in $KIMI_CODE_HOME/config.toml; Exuno leaves it untouched. Remove {shown} from project sources."
                     ))?;
                 }
             }

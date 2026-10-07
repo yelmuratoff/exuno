@@ -64,12 +64,9 @@ const COMMANDS: [(&str, &str); 31] = [
     ("refresh", "Pull new template files into existing .ai/src/"),
     (
         "update",
-        "Update AgentSync to the latest version, or pin one: update <version>",
+        "Update Exuno to the latest version, or pin one: update <version>",
     ),
-    (
-        "upgrade-config",
-        "Re-pin agentsync_version in agent_sync.yaml",
-    ),
+    ("upgrade-config", "Re-pin exuno_version in exuno.yaml"),
     ("release", "Bump version, tag, and push (maintainer)"),
     ("version", "Print version"),
     ("help", "Show this message"),
@@ -84,51 +81,51 @@ const SYNC_OPTIONS: &str = "    --only <tools>    Sync only these tools (comma-s
     --workspace       Run sync in every .ai/ below cwd (bottom-up alphabetical)
 ";
 
-const EXAMPLES: &str = "    agentsync init
-    agentsync list
-    agentsync skills list
-    agentsync skills show agentsync
-    agentsync skills check
-    agentsync skills catalog list --catalog cards.tsv
-    agentsync mcp list --library catalog/mcp
-    agentsync enable claude cursor
-    agentsync add rule testing
-    agentsync add skill deploy
-    agentsync customize cursor
-    agentsync simplify
-    agentsync simplify cursor --apply
-    agentsync show cursor
-    agentsync diff
-    agentsync doctor
-    agentsync resolve
-    agentsync adopt .cursor/rules/core.mdc
-    agentsync adopt --all
-    agentsync profile add hub
-    agentsync sync
-    agentsync sync --only claude,cursor
-    agentsync sync --profile hub
-    agentsync sync --dry-run
-    agentsync sync --if-stale
-    agentsync rollback
-    agentsync rollback --list
-    agentsync check
-    agentsync setup-hooks --pre-commit
-    eval \"$(agentsync shell-init zsh)\"   # add to ~/.zshrc
-    agentsync generate
-    agentsync generate React + TypeScript + Next.js project with Prisma ORM
-    agentsync migrate
-    agentsync export
-    agentsync import https://github.com/user/repo
-    agentsync refresh
-    agentsync refresh --only rules,skills
-    agentsync refresh --dry-run
+const EXAMPLES: &str = "    exuno init
+    exuno list
+    exuno skills list
+    exuno skills show agentsync
+    exuno skills check
+    exuno skills catalog list --catalog cards.tsv
+    exuno mcp list --library catalog/mcp
+    exuno enable claude cursor
+    exuno add rule testing
+    exuno add skill deploy
+    exuno customize cursor
+    exuno simplify
+    exuno simplify cursor --apply
+    exuno show cursor
+    exuno diff
+    exuno doctor
+    exuno resolve
+    exuno adopt .cursor/rules/core.mdc
+    exuno adopt --all
+    exuno profile add hub
+    exuno sync
+    exuno sync --only claude,cursor
+    exuno sync --profile hub
+    exuno sync --dry-run
+    exuno sync --if-stale
+    exuno rollback
+    exuno rollback --list
+    exuno check
+    exuno setup-hooks --pre-commit
+    eval \"$(exuno shell-init zsh)\"   # add to ~/.zshrc
+    exuno generate
+    exuno generate React + TypeScript + Next.js project with Prisma ORM
+    exuno migrate
+    exuno export
+    exuno import https://github.com/user/repo
+    exuno refresh
+    exuno refresh --only rules,skills
+    exuno refresh --dry-run
 ";
 
 /// `print_usage`.
 pub fn usage(style: &Style) -> String {
     let mut text = format!(
-        "\n{} v{}\n{}\n\n  {}\n    agentsync <command> [options]\n\n  {}\n",
-        style.bold("  AgentSync"),
+        "\n{} v{}\n{}\n\n  {}\n    exuno <command> [options]\n\n  {}\n",
+        style.bold("  Exuno"),
         engine_version(),
         style.dim("  Sync AI agent instructions to every tool from one source."),
         style.green("USAGE"),
@@ -187,15 +184,15 @@ mod tests {
     fn the_usage_matches_print_usage() {
         let text = usage(&Style::plain());
         assert!(text.starts_with(&format!(
-            "\n  AgentSync v{}\n  Sync AI agent instructions to every tool from one source.\n\n  USAGE\n    agentsync <command> [options]\n\n  COMMANDS\n    init           Create .ai/ structure in current project\n",
+            "\n  Exuno v{}\n  Sync AI agent instructions to every tool from one source.\n\n  USAGE\n    exuno <command> [options]\n\n  COMMANDS\n    init           Create .ai/ structure in current project\n",
             engine_version()
         )));
         assert!(text.contains(
-            "\n    upgrade-config Re-pin agentsync_version in agent_sync.yaml\n    release        Bump version, tag, and push (maintainer)\n    version        Print version\n    help           Show this message\n\n  SYNC OPTIONS\n    --only <tools>"
+            "\n    upgrade-config Re-pin exuno_version in exuno.yaml\n    release        Bump version, tag, and push (maintainer)\n    version        Print version\n    help           Show this message\n\n  SYNC OPTIONS\n    --only <tools>"
         ));
-        assert!(text.contains("\n    eval \"$(agentsync shell-init zsh)\"   # add to ~/.zshrc\n"));
+        assert!(text.contains("\n    eval \"$(exuno shell-init zsh)\"   # add to ~/.zshrc\n"));
         assert!(text.ends_with(
-            "    agentsync refresh --dry-run\n\n  DOCS\n    https://github.com/yelmuratoff/agent\n\n"
+            "    exuno refresh --dry-run\n\n  DOCS\n    https://github.com/yelmuratoff/agent\n\n"
         ));
         assert_eq!(text.lines().count(), 92);
     }
@@ -204,7 +201,7 @@ mod tests {
     fn a_terminal_gets_the_cli_colors_escapes() {
         let text = usage(&Style::colored());
         assert!(text.starts_with(&format!(
-            "\n\x1b[1m  AgentSync\x1b[0m v{}\n\x1b[2m  Sync AI agent instructions to every tool from one source.\x1b[0m\n\n  \x1b[32mUSAGE\x1b[0m\n",
+            "\n\x1b[1m  Exuno\x1b[0m v{}\n\x1b[2m  Sync AI agent instructions to every tool from one source.\x1b[0m\n\n  \x1b[32mUSAGE\x1b[0m\n",
             engine_version()
         )));
         assert!(text.contains("\n    \x1b[36mshell-init\x1b[0m     Print a shell hook"));

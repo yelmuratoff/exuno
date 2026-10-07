@@ -1,4 +1,4 @@
-//! `tests/enable.bats`: `agentsync enable` / `disable`.
+//! `tests/enable.bats`: `exuno enable` / `disable`.
 
 mod common;
 
@@ -9,7 +9,7 @@ use predicates::prelude::*;
 fn enable_adds_tool_to_tools_enabled() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .arg("enable")
         .arg("claude")
         .assert()
@@ -17,7 +17,7 @@ fn enable_adds_tool_to_tools_enabled() {
         .stdout(predicate::str::contains("Enabled 1 tool(s)"));
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|line| line == "    - claude")
     );
@@ -27,11 +27,11 @@ fn enable_adds_tool_to_tools_enabled() {
 fn enable_multiple_tools_at_once() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude", "cursor"])
         .assert()
         .success();
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.lines().any(|line| line == "    - claude"));
     assert!(config.lines().any(|line| line == "    - cursor"));
 }
@@ -40,17 +40,17 @@ fn enable_multiple_tools_at_once() {
 fn enable_is_idempotent_no_duplicates() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
     let count = project
-        .read(".ai/agent_sync.yaml")
+        .read(".ai/exuno.yaml")
         .lines()
         .filter(|line| *line == "    - claude")
         .count();
@@ -61,7 +61,7 @@ fn enable_is_idempotent_no_duplicates() {
 fn enable_unknown_tool_shows_warning() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "bogus_tool_xyz"])
         .assert()
         .code(1)
@@ -72,16 +72,16 @@ fn enable_unknown_tool_shows_warning() {
 fn disable_removes_tool_from_tools_enabled() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude", "cursor"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "claude"])
         .assert()
         .success();
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(!config.lines().any(|line| line == "    - claude"));
     assert!(config.lines().any(|line| line == "    - cursor"));
 }
@@ -90,7 +90,7 @@ fn disable_removes_tool_from_tools_enabled() {
 fn disable_unknown_tool_is_a_no_op() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "claude"])
         .assert()
         .success()
@@ -101,7 +101,7 @@ fn disable_unknown_tool_is_a_no_op() {
 fn enable_with_no_args_fails_with_usage() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .arg("enable")
         .assert()
         .failure()
@@ -112,7 +112,7 @@ fn enable_with_no_args_fails_with_usage() {
 fn enable_scaffolds_per_tool_payload_dir_by_default_non_tty() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success()
@@ -121,7 +121,7 @@ fn enable_scaffolds_per_tool_payload_dir_by_default_non_tty() {
             ".ai/src/tools/claude/settings.json",
         ))
         // Shared MCP not configured yet -> hint points at add mcp, not a phantom path.
-        .stdout(predicate::str::contains("agentsync add mcp"));
+        .stdout(predicate::str::contains("exuno add mcp"));
     assert!(project.exists(".ai/src/tools/claude/settings.json"));
 }
 
@@ -130,7 +130,7 @@ fn enable_mcp_line_shows_shared_file_once_ai_src_mcp_json_exists() {
     let project = Project::seeded(&[]);
     project.write(".ai/src/mcp.json", "{\"mcpServers\":{}}\n");
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success()
@@ -143,14 +143,12 @@ fn enable_mcp_line_shows_shared_file_once_ai_src_mcp_json_exists() {
 fn enable_no_scaffold_skips_per_tool_dir_but_still_prints_hints() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude", "--no-scaffold"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Edit settings:").not())
-        .stdout(predicate::str::contains(
-            "agentsync customize claude settings",
-        ));
+        .stdout(predicate::str::contains("exuno customize claude settings"));
     assert!(!project.join(".ai/src/tools/claude").is_dir());
 }
 
@@ -158,18 +156,18 @@ fn enable_no_scaffold_skips_per_tool_dir_but_still_prints_hints() {
 fn enable_is_idempotent_for_scaffolded_files() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
     project.write(".ai/src/tools/claude/settings.json", "{\"custom\": true}\n");
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
@@ -184,7 +182,7 @@ fn enable_is_idempotent_for_scaffolded_files() {
 fn enable_scaffolds_hooks_when_tool_has_hooks_base() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "windsurf"])
         .assert()
         .success()
@@ -197,7 +195,7 @@ fn enable_respects_legacy_flat_layout_overrides_no_shadow() {
     let project = Project::seeded(&[]);
     project.write(".ai/src/settings/claude.json", "{\"legacy\": true}\n");
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
@@ -213,20 +211,20 @@ fn enable_respects_legacy_flat_layout_overrides_no_shadow() {
 fn disable_leaves_other_lists_that_name_the_tool_alone() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude", "cursor"])
         .assert()
         .success();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "profiles:\n  hub:\n    tools:\n      - claude\n",
     );
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "claude"])
         .assert()
         .success();
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(!config.lines().any(|line| line == "    - claude"));
     assert!(config.lines().any(|line| line == "      - claude"));
 }
@@ -234,41 +232,54 @@ fn disable_leaves_other_lists_that_name_the_tool_alone() {
 #[test]
 fn disable_removes_a_tool_from_an_inline_tools_enabled_list() {
     let project = Project::seeded(&[]);
-    project.write(
-        ".ai/agent_sync.yaml",
-        "tools:\n  enabled: [claude, cursor]\n",
-    );
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude, cursor]\n");
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "claude"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Claude Code (claude)"));
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.lines().any(|line| line == "  enabled: [cursor]"));
 }
 
 #[test]
 fn enable_and_disable_write_the_config_agentsync_config_path_names() {
     let project = Project::seeded(&[]);
-    let before = project.read(".ai/agent_sync.yaml");
+    let before = project.read(".ai/exuno.yaml");
     project.write("selected.yaml", "tools:\n  enabled: []\n");
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "selected.yaml")
         .args(["enable", "cursor", "--no-scaffold"])
         .assert()
         .success();
     assert!(project.read("selected.yaml").contains("cursor"));
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_CONFIG_PATH", "selected.yaml")
         .args(["disable", "cursor"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Disabled 1 tool(s)"));
     assert!(!project.read("selected.yaml").contains("cursor"));
-    assert_eq!(project.read(".ai/agent_sync.yaml"), before);
+    assert_eq!(project.read(".ai/exuno.yaml"), before);
+}
+
+#[test]
+fn enable_writes_the_config_exuno_config_path_names_over_the_legacy_one() {
+    let project = Project::seeded(&[]);
+    project.write("new.yaml", "tools:\n  enabled: []\n");
+    project.write("old.yaml", "tools:\n  enabled: []\n");
+    project
+        .exuno()
+        .env("EXUNO_CONFIG_PATH", "new.yaml")
+        .env("AGENTSYNC_CONFIG_PATH", "old.yaml")
+        .args(["enable", "cursor", "--no-scaffold"])
+        .assert()
+        .success();
+    assert!(project.read("new.yaml").contains("cursor"));
+    assert_eq!(project.read("old.yaml"), "tools:\n  enabled: []\n");
 }
 
 #[test]
@@ -277,11 +288,28 @@ fn disable_without_a_config_creates_none() {
     project.write(".ai/src/AGENTS.md", "# Agent\n");
     project.write(".ai/src/tools/kimi.yaml", "enabled: true\n");
     project
-        .agentsync()
+        .exuno()
         .args(["disable", "kimi"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Disabled 1 tool(s)"));
     assert_eq!(project.read(".ai/src/tools/kimi.yaml"), "enabled: false\n");
-    assert!(!project.exists(".ai/agent_sync.yaml"));
+    assert!(!project.exists(".ai/exuno.yaml"));
+}
+
+#[test]
+fn enable_edits_a_legacy_agent_sync_yaml_and_creates_no_exuno_yaml() {
+    let project = Project::seeded(&[]);
+    std::fs::rename(
+        project.join(".ai/exuno.yaml"),
+        project.join(".ai/agent_sync.yaml"),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .args(["enable", "cursor", "--no-scaffold"])
+        .assert()
+        .success();
+    assert!(project.read(".ai/agent_sync.yaml").contains("cursor"));
+    assert!(!project.exists(".ai/exuno.yaml"));
 }

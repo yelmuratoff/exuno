@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::config::yaml_subset;
+use crate::config::{names, yaml_subset};
 
 const ENGINE_FORMAT_FILE: &str = include_str!("../../FORMAT");
 
@@ -28,15 +28,16 @@ pub fn project(config: &str) -> u32 {
 pub fn pending_notes(from: u32, to: u32) -> Vec<String> {
     (from.saturating_add(1)..=to)
         .map(|step| match step {
-            2 => "r2  The agentsync skill is engine-owned now. A copy under .ai/src/skills/agentsync/ shadows it, so engine upgrades never reach your agents.".to_string(),
+            2 => "r2  The exuno skill is engine-owned now. A copy under .ai/src/skills/exuno/ (or the older skills/agentsync/) keeps engine upgrades from your agents.".to_string(),
+            3 => "r3  AgentSync is Exuno now: .ai/exuno.yaml, exuno_version, metadata.exuno-*, skills/exuno/, exuno-check.yml.".to_string(),
             _ => format!("r{step}  See CHANGELOG.md for what changed."),
         })
         .collect()
 }
 
-/// `format_config_path`: `.ai/agent_sync.yaml`, else `agent_sync.yaml`, when a file.
+/// `format_config_path`: the first of [`names::CONFIG_CANDIDATES`] that is a file.
 pub fn config_path(project_dir: &Path) -> Option<PathBuf> {
-    [".ai/agent_sync.yaml", "agent_sync.yaml"]
+    names::CONFIG_CANDIDATES
         .iter()
         .map(|rel| project_dir.join(rel))
         .find(|path| path.is_file())
@@ -51,9 +52,13 @@ mod tests {
         assert_eq!(
             pending_notes(1, 3),
             [
-                "r2  The agentsync skill is engine-owned now. A copy under .ai/src/skills/agentsync/ shadows it, so engine upgrades never reach your agents.",
-                "r3  See CHANGELOG.md for what changed.",
+                "r2  The exuno skill is engine-owned now. A copy under .ai/src/skills/exuno/ (or the older skills/agentsync/) keeps engine upgrades from your agents.",
+                "r3  AgentSync is Exuno now: .ai/exuno.yaml, exuno_version, metadata.exuno-*, skills/exuno/, exuno-check.yml.",
             ]
+        );
+        assert_eq!(
+            pending_notes(3, 4),
+            ["r4  See CHANGELOG.md for what changed."]
         );
         assert!(pending_notes(2, 2).is_empty());
         assert!(pending_notes(3, 2).is_empty());
@@ -74,11 +79,16 @@ mod tests {
             config_path(dir.path()),
             Some(dir.path().join(".ai/agent_sync.yaml"))
         );
+        std::fs::write(dir.path().join(".ai/exuno.yaml"), "").unwrap();
+        assert_eq!(
+            config_path(dir.path()),
+            Some(dir.path().join(".ai/exuno.yaml"))
+        );
     }
 
     #[test]
     fn revisions_read_as_format_sh_reads_them() {
-        assert_eq!(engine(), 2);
+        assert_eq!(engine(), 3);
         assert_eq!(project("format: 2\n"), 2);
         assert_eq!(project("format: \"3\"\n"), 3);
         assert_eq!(project("tools:\n  enabled: []\n"), 1);

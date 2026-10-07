@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use super::{mcp_merge, put};
 use crate::Error;
-use crate::config::{mcp_catalog, payload, tool::Tool, yaml_subset};
+use crate::config::{mcp_catalog, names, payload, tool::Tool, yaml_subset};
 use crate::engine::staging;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
@@ -25,8 +25,8 @@ pub const HELP: Help = Help {
     ],
     description: &[
         "Reads bounded JSON manifests from an explicit library or the configured\nlibrary.mcp.path. It never starts servers or contacts endpoints.",
-        "list prints ID and title. show prints the original manifest bytes.\nvalidate checks one entry or the complete library, including all variants.\nrender prints one selected connection as AgentSync MCP source JSON.",
-        "use previews a per-tool source; --apply writes it. --merge extends an\nexisting per-tool JSON source; --replace <id> permits one explicit replacement.\nRun agentsync sync separately to update client files.",
+        "list prints ID and title. show prints the original manifest bytes.\nvalidate checks one entry or the complete library, including all variants.\nrender prints one selected connection as Exuno MCP source JSON.",
+        "use previews a per-tool source; --apply writes it. --merge extends an\nexisting per-tool JSON source; --replace <id> permits one explicit replacement.\nRun exuno sync separately to update client files.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -280,7 +280,7 @@ impl McpUse<'_> {
         if let Some(status) = written {
             return Ok(status);
         }
-        put(self.out, format!("Created {rel} from {selection} for {slug}\nReview the source, then run agentsync sync to update client files.\n").as_bytes())?;
+        put(self.out, format!("Created {rel} from {selection} for {slug}\nReview the source, then run exuno sync to update client files.\n").as_bytes())?;
         Ok(0)
     }
 
@@ -335,7 +335,7 @@ impl McpUse<'_> {
         if let Some(status) = written {
             return Ok(status);
         }
-        put(self.out, format!("Merged {selection} into {rel} for {slug}\nReview the source, then run agentsync sync to update client files.\n").as_bytes())?;
+        put(self.out, format!("Merged {selection} into {rel} for {slug}\nReview the source, then run exuno sync to update client files.\n").as_bytes())?;
         Ok(0)
     }
 
@@ -396,8 +396,9 @@ impl McpUse<'_> {
                     e,
                 )
             })?;
-        let limit = std::env::var("AGENTSYNC_BACKUP_LIMIT").ok();
-        let age = std::env::var("AGENTSYNC_BACKUP_MAX_AGE_DAYS").ok();
+        let lookup = |name: &str| std::env::var(name).ok();
+        let limit = names::env("BACKUP_LIMIT", &lookup);
+        let age = names::env("BACKUP_MAX_AGE_DAYS", &lookup);
         let retention = backup::configure(
             config
                 .as_ref()
@@ -546,9 +547,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
         Some("render") => Action::Render,
         Some("use") => Action::Use,
         _ => {
-            return Err(
-                "Usage: agentsync mcp <list|show|validate|render|use> [options]".to_string(),
-            );
+            return Err("Usage: exuno mcp <list|show|validate|render|use> [options]".to_string());
         }
     };
     let using = matches!(action, Action::Use);

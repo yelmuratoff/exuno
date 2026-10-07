@@ -1,4 +1,4 @@
-//! `agentsync doctor`: `cmd_doctor` of `lib/helpers/doctor.sh`, which checks
+//! `exuno doctor`: `cmd_doctor` of `lib/helpers/doctor.sh`, which checks
 //! a project's layout, tools, overrides, sources, drift, secrets, skills,
 //! rules, tool outputs, and parent duplicates, and exits 0, 1, or 2.
 
@@ -18,7 +18,10 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::paths::{DiskText, ExplicitSource, Paths};
 use crate::project::Project;
-use crate::{Error, config::catalog, config::edit_paths, config::format_rev, config::yaml_subset};
+use crate::{
+    Error, config::catalog, config::edit_paths, config::format_rev, config::leftovers,
+    config::yaml_subset,
+};
 
 pub const HELP: Help = Help {
     command: "doctor",
@@ -26,7 +29,7 @@ pub const HELP: Help = Help {
     synopsis: &["doctor"],
     description: &[
         "Checks the project section by section and prints one line per\nfinding: project layout, enabled tools, edit paths, user overrides,\nsource directories, drift, security, skills, rules, tool outputs, and\ncross-project duplicates. The report goes to stdout; the summary line\nnames every command to run next.",
-        "Honours AGENTSYNC_CONFIG_PATH for the project config and\nAGENTSYNC_EXTERNAL_SOURCE_ROOTS for source directories that live\noutside the project.",
+        "Honours EXUNO_CONFIG_PATH for the project config and\nEXUNO_EXTERNAL_SOURCE_ROOTS for source directories that live\noutside the project.",
     ],
     sections: &[
         Section {
@@ -44,11 +47,8 @@ pub const HELP: Help = Help {
         Section {
             title: "SEE ALSO",
             entries: &[
-                (
-                    "agentsync check",
-                    "Compare generated outputs with the source",
-                ),
-                ("agentsync init", "Create the .ai/ directory doctor checks"),
+                ("exuno check", "Compare generated outputs with the source"),
+                ("exuno init", "Create the .ai/ directory doctor checks"),
             ],
         },
     ],
@@ -198,7 +198,7 @@ pub fn doctor(
             put(
                 err,
                 format!(
-                    "{}: AGENTSYNC_CONFIG_PATH is set but file not found: {}\n",
+                    "{}: EXUNO_CONFIG_PATH is set but file not found: {}\n",
                     style.red("Error"),
                     path.display()
                 )
@@ -246,7 +246,7 @@ pub fn doctor(
     };
     d.say(&format!(
         "\n{}\n{}\n\n",
-        style.bold("  AgentSync Doctor"),
+        style.bold("  Exuno Doctor"),
         style.dim(&format!("  {root}"))
     ))?;
     if !d.check_layout()? {
@@ -290,7 +290,7 @@ impl Doctor<'_> {
         if !Path::new(&root).join(".ai").is_dir() {
             self.fail(&format!(
                 ".ai/ directory missing — run {}",
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             ))?;
             return Ok(false);
         }
@@ -309,9 +309,23 @@ impl Doctor<'_> {
         }
         match self.config.clone() {
             Some(config) => self.check_project_config(&config)?,
-            None => self.warn("No agent_sync.yaml — using defaults only")?,
+            None => self.warn("No exuno.yaml — using defaults only")?,
         }
+        self.check_leftovers(Path::new(&root))?;
         Ok(true)
+    }
+
+    fn check_leftovers(&mut self, root: &Path) -> Result<(), Error> {
+        let style = self.style;
+        for leftover in leftovers::scan(root) {
+            let line = leftover.describe(root);
+            if leftover.is_automatic() {
+                self.warn(&format!("{line} — run {}", style.cyan("exuno migrate")))?;
+            } else {
+                self.warn(&line)?;
+            }
+        }
+        Ok(())
     }
 
     /// The config's path, its pinned engine version, and its format revision.
@@ -319,13 +333,13 @@ impl Doctor<'_> {
         let style = self.style;
         let shown = self.config_shown.clone();
         self.ok(&format!("Project config: {}", style.dim(&shown)))?;
-        let pinned = yaml_subset::value(config, "agentsync_version").replace('"', "");
+        let pinned = crate::config::names::pinned_version(config);
         if !pinned.is_empty() && !self.version.is_empty() && pinned != self.version {
             self.warn(&format!(
                 "CLI version {} differs from pinned {} — run {} to align",
                 style.dim(&format!("v{}", self.version)),
                 style.dim(&format!("v{pinned}")),
-                style.cyan("agentsync upgrade-config")
+                style.cyan("exuno upgrade-config")
             ))?;
         }
         let engine_rev = format_rev::engine();
@@ -335,7 +349,7 @@ impl Doctor<'_> {
                 "Project format {} is behind the engine {} — run {} to preview",
                 style.dim(&format!("r{project_rev}")),
                 style.dim(&format!("r{engine_rev}")),
-                style.cyan("agentsync migrate")
+                style.cyan("exuno migrate")
             ))
         } else {
             self.ok(&format!(
@@ -351,7 +365,7 @@ impl Doctor<'_> {
         if enabled.is_empty() {
             self.info(&format!(
                 "No tools enabled — run {}",
-                style.cyan("agentsync enable <slug>")
+                style.cyan("exuno enable <slug>")
             ))?;
         }
         for slug in enabled {
@@ -418,13 +432,13 @@ impl Doctor<'_> {
             if yaml_subset::value(&text, "enabled") == "true" && !configured.contains(slug) {
                 self.warn(&format!(
                     "{slug}: uses legacy 'enabled: true' — migrate with {}",
-                    style.cyan(&format!("agentsync enable {slug}"))
+                    style.cyan(&format!("exuno enable {slug}"))
                 ))?;
             } else if catalog::base_tool_yaml(slug).is_some() {
                 let display = self.display_name(slug)?;
                 self.info(&format!(
                     "{display} — see {}",
-                    style.cyan(&format!("agentsync diff {slug}"))
+                    style.cyan(&format!("exuno diff {slug}"))
                 ))?;
             } else {
                 self.info(&format!("{slug} (custom tool, no base)"))?;
@@ -453,7 +467,7 @@ impl Doctor<'_> {
                 }
                 Some(external) if external.untrusted => {
                     self.fail(&format!(
-                        "source.{key} points outside the project and AGENTSYNC_EXTERNAL_SOURCE_ROOTS does not list it: {}",
+                        "source.{key} points outside the project and EXUNO_EXTERNAL_SOURCE_ROOTS does not list it: {}",
                         external.raw
                     ))?;
                     continue;
@@ -562,7 +576,7 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, HELP.render(&Style::plain()));
         assert!(out.starts_with(
-            "\n  agentsync doctor — validate setup and surface warnings\n\n  USAGE\n    agentsync doctor\n"
+            "\n  exuno doctor — validate setup and surface warnings\n\n  USAGE\n    exuno doctor\n"
         ));
     }
 
@@ -573,7 +587,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(err, "");
         let expected = format!(
-            "\n  AgentSync Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ! No agent_sync.yaml — using defaults only\n\n  Enabled tools\n    · No tools enabled — run agentsync enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    · .ai/src/rules not present (optional)\n    · .ai/src/skills not present (optional)\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    · No .sync-manifest yet — run agentsync sync to create it\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    · No .ai/src/skills/ — nothing to scan.\n\n  Rules\n    · No .ai/src/rules/ — nothing to scan.\n\n  Tool outputs\n    ✓ No orphan tool-output directories\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  OK with 1 warning(s)\n\n"
+            "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ! No exuno.yaml — using defaults only\n\n  Enabled tools\n    · No tools enabled — run exuno enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    · .ai/src/rules not present (optional)\n    · .ai/src/skills not present (optional)\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    · No .sync-manifest yet — run exuno sync to create it\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    · No .ai/src/skills/ — nothing to scan.\n\n  Rules\n    · No .ai/src/rules/ — nothing to scan.\n\n  Tool outputs\n    ✓ No orphan tool-output directories\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  OK with 1 warning(s)\n\n"
         );
         assert_eq!(out, expected);
     }
@@ -588,8 +602,8 @@ mod tests {
                     "---\npaths:\n  - \"**/*.ts\"\n---\n# Scoped\n",
                 ),
                 (
-                    ".ai/agent_sync.yaml",
-                    "agentsync_version: \"0.0.1\"\nformat: 1\ntools:\n  - cursor\n",
+                    ".ai/exuno.yaml",
+                    "exuno_version: \"0.0.1\"\nformat: 1\ntools:\n  - cursor\n",
                 ),
                 (
                     ".ai/.sync-manifest",
@@ -602,7 +616,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(err, "");
         let expected = format!(
-            "\n  AgentSync Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ✓ Project config: .ai/agent_sync.yaml\n    ! CLI version v0.36.0 differs from pinned v0.0.1 — run agentsync upgrade-config to align\n    ! Project format r1 is behind the engine r2 — run agentsync migrate to preview\n\n  Enabled tools\n    · No tools enabled — run agentsync enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    ✓ .ai/src/rules\n    ✓ .ai/src/skills\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    ! CLAUDE.md — missing (deleted manually)\n\n    Re-run agentsync sync to overwrite, or move edits into .ai/src/ first.\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    ! skills/empty/ — missing SKILL.md (empty skill — populate or remove)\n\n  Rules\n    ✓ No always-on rules (every rule is paths:-scoped)\n\n  Tool outputs\n    ! .claude/ — orphan (tool 'claude' not enabled; output left from prior run)\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  OK with 3 warning(s), 2 advisory(ies)\n\n"
+            "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ✓ Project config: .ai/exuno.yaml\n    ! CLI version v0.36.0 differs from pinned v0.0.1 — run exuno upgrade-config to align\n    ! Project format r1 is behind the engine r3 — run exuno migrate to preview\n\n  Enabled tools\n    · No tools enabled — run exuno enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    ✓ .ai/src/rules\n    ✓ .ai/src/skills\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    ! CLAUDE.md — missing (deleted manually)\n\n    Re-run exuno sync to overwrite, or move edits into .ai/src/ first.\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    ! skills/empty/ — missing SKILL.md (empty skill — populate or remove)\n\n  Rules\n    ✓ No always-on rules (every rule is paths:-scoped)\n\n  Tool outputs\n    ! .claude/ — orphan (tool 'claude' not enabled; output left from prior run)\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  OK with 3 warning(s), 2 advisory(ies)\n\n"
         );
         assert_eq!(out, expected);
     }
@@ -616,7 +630,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Doctor\n  {root}\n\n  Project layout\n    ✗ .ai/ directory missing — run agentsync init\n\n"
+                "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✗ .ai/ directory missing — run exuno init\n\n"
             )
         );
     }

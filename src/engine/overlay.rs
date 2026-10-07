@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(sources, Sources::default());
         setup_base_src(&mut s, None, "/proj/.ai/src", &mut sources).unwrap();
         assert_eq!(sources.skills, "/<agentsync-overlay>/base-src/src/skills");
-        assert!(s.ws.is_file("/<agentsync-overlay>/base-src/src/skills/agentsync/SKILL.md"));
+        assert!(s.ws.is_file("/<agentsync-overlay>/base-src/src/skills/exuno/SKILL.md"));
     }
 
     #[cfg(unix)]
@@ -551,13 +551,13 @@ mod tests {
         setup_base_src(&mut s, None, "/proj/.ai/src", &mut sources).unwrap();
         assert_eq!(sources.rules, "/<agentsync-overlay>/base-src/src/rules");
         assert!(s.ws.is_file("/<agentsync-overlay>/base-src/src/rules/r.md"));
-        assert!(s.ws.is_file("/<agentsync-overlay>/base-src/src/skills/agentsync/SKILL.md"));
+        assert!(s.ws.is_file("/<agentsync-overlay>/base-src/src/skills/exuno/SKILL.md"));
     }
 
     #[test]
     fn an_engine_skill_extension_in_a_category_adds_files_and_appends_to_skill_md() {
         let mut s = test_session();
-        let ext = "/proj/.ai/src/skills/meta/agentsync";
+        let ext = "/proj/.ai/src/skills/meta/exuno";
         file(
             &mut s.ws,
             &format!("{ext}/SKILL.append.md"),
@@ -580,9 +580,9 @@ mod tests {
         };
         setup_base_src(&mut s, None, "/proj/.ai/src", &mut sources).unwrap();
 
-        let skill = "/<agentsync-overlay>/base-src/src/skills/meta/agentsync";
+        let skill = "/<agentsync-overlay>/base-src/src/skills/meta/exuno";
         let bundled =
-            s.ws.read("/<agentsync>/lib/templates/base-src/skills/agentsync/SKILL.md")
+            s.ws.read("/<agentsync>/lib/templates/base-src/skills/exuno/SKILL.md")
                 .unwrap();
         let mut expected = bundled.trim_ascii_end().to_vec();
         expected.extend_from_slice(b"\n\n## Local\n\nOurs.\n");
@@ -600,7 +600,7 @@ mod tests {
         assert!(s.ws.is_file(&format!("{skill}/references/writing-skills.md")));
         assert!(
             !s.ws
-                .exists("/<agentsync-overlay>/base-src/src/skills/agentsync")
+                .exists("/<agentsync-overlay>/base-src/src/skills/exuno")
         );
         assert!(s.ws.is_file("/<agentsync-overlay>/base-src/src/skills/meta/sub/own/SKILL.md"));
     }
@@ -608,7 +608,7 @@ mod tests {
     #[test]
     fn an_engine_skill_copy_with_its_own_skill_md_in_a_category_replaces_it() {
         let mut s = test_session();
-        let copy = "/proj/.ai/src/skills/meta/agentsync";
+        let copy = "/proj/.ai/src/skills/meta/exuno";
         file(&mut s.ws, &format!("{copy}/SKILL.md"), "mine\n");
         file(
             &mut s.ws,
@@ -625,13 +625,12 @@ mod tests {
         assert_eq!(
             s.ws.files_under(skills),
             [
-                format!("{skills}/meta/agentsync/SKILL.append.md"),
-                format!("{skills}/meta/agentsync/SKILL.md"),
+                format!("{skills}/meta/exuno/SKILL.append.md"),
+                format!("{skills}/meta/exuno/SKILL.md"),
             ]
         );
         assert_eq!(
-            s.ws.read(&format!("{skills}/meta/agentsync/SKILL.md"))
-                .unwrap(),
+            s.ws.read(&format!("{skills}/meta/exuno/SKILL.md")).unwrap(),
             b"mine\n"
         );
     }

@@ -1,4 +1,4 @@
-//! `agentsync enable` and `agentsync disable`: `cmd_enable` and `cmd_disable`
+//! `exuno enable` and `exuno disable`: `cmd_enable` and `cmd_disable`
 //! of `lib/helpers/enable.sh`, editing `tools.enabled` with `yaml_edit`.
 
 use crate::paths::DiskText;
@@ -15,11 +15,11 @@ use crate::{Error, config::catalog, config::edit_paths, config::payload, config:
 
 pub const ENABLE_HELP: Help = Help {
     command: "enable",
-    tagline: "add tools to tools.enabled in agent_sync.yaml",
+    tagline: "add tools to tools.enabled in exuno.yaml",
     synopsis: &["enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]"],
     description: &[
-        "Add one or more tools to the tools.enabled list in agent_sync.yaml.\nAfter enabling, run agentsync sync to write that tool's outputs.",
-        "Run agentsync list to see available tool slugs.",
+        "Add one or more tools to the tools.enabled list in exuno.yaml.\nAfter enabling, run exuno sync to write that tool's outputs.",
+        "Run exuno list to see available tool slugs.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -45,10 +45,10 @@ pub const ENABLE_HELP: Help = Help {
 
 pub const DISABLE_HELP: Help = Help {
     command: "disable",
-    tagline: "remove tools from tools.enabled in agent_sync.yaml",
+    tagline: "remove tools from tools.enabled in exuno.yaml",
     synopsis: &["disable <slug> [<slug>...]"],
     description: &[
-        "Remove one or more tools from the tools.enabled list in agent_sync.yaml.\nA per-tool override with enabled: true is set to false as well. After\ndisabling, run agentsync sync to clean up that tool's outputs.",
+        "Remove one or more tools from the tools.enabled list in exuno.yaml.\nA per-tool override with enabled: true is set to false as well. After\ndisabling, run exuno sync to clean up that tool's outputs.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -70,11 +70,11 @@ fn resolve_or_create_config(project: &Project) -> Result<PathBuf, Error> {
         return Ok(config.clone());
     }
     let ai = project.root.join(".ai");
-    let config = ai.join("agent_sync.yaml");
+    let config = ai.join("exuno.yaml");
     std::fs::create_dir_all(&ai).map_err(|e| Error::io(&ai, e))?;
     std::fs::write(
         &config,
-        "# AgentSync — Project Configuration\ntools:\n  enabled: []\n",
+        "# Exuno — Project Configuration\ntools:\n  enabled: []\n",
     )
     .map_err(|e| Error::io(&config, e))?;
     Ok(config)
@@ -163,7 +163,7 @@ fn enable_report(project: &Project, style: &Style, enabled: &Enabled) -> Result<
         }
         text.push_str(&format!(
             "\nRun {} to see available tool slugs.\n",
-            style.cyan("agentsync list")
+            style.cyan("exuno list")
         ));
     }
     Ok(text)
@@ -204,7 +204,7 @@ pub fn enable(
                 "{}: {}\n\nRun {} to see available tools.\n",
                 style.red("Error"),
                 ENABLE_HELP.synopsis_line(),
-                style.cyan("agentsync list")
+                style.cyan("exuno list")
             )
             .as_bytes(),
         )?;
@@ -260,7 +260,7 @@ pub fn enable(
     }
     put(
         out,
-        format!("\nRun {} to apply.\n\n", style.cyan("agentsync sync")).as_bytes(),
+        format!("\nRun {} to apply.\n\n", style.cyan("exuno sync")).as_bytes(),
     )?;
     Ok(status)
 }
@@ -325,7 +325,7 @@ pub fn disable(
         }
         put(
             out,
-            format!("\nRun {} to apply cleanup.\n", style.cyan("agentsync sync")).as_bytes(),
+            format!("\nRun {} to apply cleanup.\n", style.cyan("exuno sync")).as_bytes(),
         )?;
     }
     if not_enabled > 0 && disabled.is_empty() {
@@ -352,7 +352,7 @@ mod tests {
         let root = std::fs::canonicalize(dir.path()).unwrap();
         std::fs::create_dir_all(root.join(".ai")).unwrap();
         std::fs::write(
-            root.join(".ai/agent_sync.yaml"),
+            root.join(".ai/exuno.yaml"),
             "tools:\n  enabled:\n    - cursor\n",
         )
         .unwrap();
@@ -392,10 +392,10 @@ mod tests {
         assert_eq!(run.err, "");
         assert_eq!(
             run.out,
-            "\nEnabled 1 tool(s)\n    ● Claude Code (claude)\n\n1 tool(s) were already enabled\n\nUnknown tool(s):\n    nope\n\nRun agentsync list to see available tool slugs.\n\n  Claude Code\n    Edit settings: .ai/src/tools/claude/settings.json\n    MCP:           agentsync add mcp <server>  (shared — not yet configured)\n\nRun agentsync sync to apply.\n\n"
+            "\nEnabled 1 tool(s)\n    ● Claude Code (claude)\n\n1 tool(s) were already enabled\n\nUnknown tool(s):\n    nope\n\nRun exuno list to see available tool slugs.\n\n  Claude Code\n    Edit settings: .ai/src/tools/claude/settings.json\n    MCP:           exuno add mcp <server>  (shared — not yet configured)\n\nRun exuno sync to apply.\n\n"
         );
         assert_eq!(
-            std::fs::read_to_string(root.join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(root.join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled:\n    - cursor\n    - claude\n"
         );
         assert!(root.join(".ai/src/tools/claude/settings.json").is_file());
@@ -404,13 +404,13 @@ mod tests {
         assert_eq!(usage.status, 1);
         assert_eq!(
             usage.err,
-            "Error: agentsync enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n\nRun agentsync list to see available tools.\n"
+            "Error: exuno enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n\nRun exuno list to see available tools.\n"
         );
         let flag = call(&root, "enable", &["claude", "--bogus"]);
         assert_eq!(flag.status, 1);
         assert_eq!(
             flag.err,
-            "Error: Unknown flag: --bogus\nUsage: agentsync enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n"
+            "Error: Unknown flag: --bogus\nUsage: exuno enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n"
         );
     }
 
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(run.status, 0);
         assert_eq!(
             run.out,
-            "\nDisabled 2 tool(s)\n    ○ Cursor (cursor)\n    ○ Kimi Code (kimi)\n\nRun agentsync sync to apply cleanup.\n\n"
+            "\nDisabled 2 tool(s)\n    ○ Cursor (cursor)\n    ○ Kimi Code (kimi)\n\nRun exuno sync to apply cleanup.\n\n"
         );
         assert_eq!(
             std::fs::read_to_string(root.join(".ai/src/tools/kimi.yaml")).unwrap(),
@@ -435,7 +435,7 @@ mod tests {
         );
         assert_eq!(
             call(&root, "disable", &[]).err,
-            "Error: agentsync disable <slug> [<slug>...]\n"
+            "Error: exuno disable <slug> [<slug>...]\n"
         );
     }
 
@@ -446,17 +446,17 @@ mod tests {
         assert_eq!((enable.status, enable.err.as_str()), (0, ""));
         assert_eq!(
             enable.out,
-            "\n  agentsync enable — add tools to tools.enabled in agent_sync.yaml\n\n  USAGE\n    agentsync enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n\n  DESCRIPTION\n    Add one or more tools to the tools.enabled list in agent_sync.yaml.\n    After enabling, run agentsync sync to write that tool's outputs.\n\n    Run agentsync list to see available tool slugs.\n\n  OPTIONS\n    --scaffold      Always scaffold payload files (settings/hooks/mcp)\n    --no-scaffold   Never scaffold; skip the payload prompt\n    -y, --yes       Accept any prompts (e.g. project-config creation)\n    -h, --help      Show this help\n\n  EXAMPLES\n    agentsync enable claude\n    agentsync enable claude cursor --no-scaffold\n    agentsync enable codex --scaffold --yes\n\n"
+            "\n  exuno enable — add tools to tools.enabled in exuno.yaml\n\n  USAGE\n    exuno enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n\n  DESCRIPTION\n    Add one or more tools to the tools.enabled list in exuno.yaml.\n    After enabling, run exuno sync to write that tool's outputs.\n\n    Run exuno list to see available tool slugs.\n\n  OPTIONS\n    --scaffold      Always scaffold payload files (settings/hooks/mcp)\n    --no-scaffold   Never scaffold; skip the payload prompt\n    -y, --yes       Accept any prompts (e.g. project-config creation)\n    -h, --help      Show this help\n\n  EXAMPLES\n    exuno enable claude\n    exuno enable claude cursor --no-scaffold\n    exuno enable codex --scaffold --yes\n\n"
         );
 
         let disable = call(&root, "disable", &["cursor", "-h"]);
         assert_eq!((disable.status, disable.err.as_str()), (0, ""));
         assert_eq!(
             disable.out,
-            "\n  agentsync disable — remove tools from tools.enabled in agent_sync.yaml\n\n  USAGE\n    agentsync disable <slug> [<slug>...]\n\n  DESCRIPTION\n    Remove one or more tools from the tools.enabled list in agent_sync.yaml.\n    A per-tool override with enabled: true is set to false as well. After\n    disabling, run agentsync sync to clean up that tool's outputs.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync disable cursor\n    agentsync disable claude cursor\n\n"
+            "\n  exuno disable — remove tools from tools.enabled in exuno.yaml\n\n  USAGE\n    exuno disable <slug> [<slug>...]\n\n  DESCRIPTION\n    Remove one or more tools from the tools.enabled list in exuno.yaml.\n    A per-tool override with enabled: true is set to false as well. After\n    disabling, run exuno sync to clean up that tool's outputs.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno disable cursor\n    exuno disable claude cursor\n\n"
         );
         assert_eq!(
-            std::fs::read_to_string(root.join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(root.join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled:\n    - cursor\n"
         );
     }

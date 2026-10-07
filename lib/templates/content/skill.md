@@ -28,7 +28,7 @@ description: >-
 - [Edge case or non-obvious project-specific fact.]
 
 <!--
-AgentSync skills follow agentskills.io. Hard limits enforced by spec:
+Exuno skills follow agentskills.io. Hard limits enforced by spec:
   - `name`: ≤64 chars, lowercase a-z/digits/hyphens only, must match folder name.
   - `description`: ≤1024 chars.
   - SKILL.md body: ≤500 lines / ≤5000 tokens. Move detail to references/.

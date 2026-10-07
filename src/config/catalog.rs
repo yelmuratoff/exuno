@@ -46,9 +46,8 @@ pub fn base_payloads(resource: &str, slug: &str) -> Vec<&'static File<'static>> 
     matches
 }
 
-/// `lib/templates/ci/github-agentsync-check.yml`, the gate `init --ci github` writes.
-pub const CI_GITHUB_WORKFLOW: &str =
-    include_str!("../../lib/templates/ci/github-agentsync-check.yml");
+/// `lib/templates/ci/github-exuno-check.yml`, the gate `init --ci github` writes.
+pub const CI_GITHUB_WORKFLOW: &str = include_str!("../../lib/templates/ci/github-exuno-check.yml");
 
 /// The template set `refresh` and `dedupe` walk: the shipped `AGENTS.md`, the
 /// `*.md` files of `rules`, `commands`, and `agents`, and every file below
@@ -77,7 +76,7 @@ pub fn template_sources() -> Vec<String> {
     template_files().into_iter().map(|(path, _)| path).collect()
 }
 
-/// `lib/prompts/migrate.md`, the upgrade prompt `agentsync migrate` prints.
+/// `lib/prompts/migrate.md`, the upgrade prompt `exuno migrate` prints.
 pub const MIGRATE_PROMPT: &str = include_str!("../../lib/prompts/migrate.md");
 
 /// The engine-owned skills under `lib/templates/base-src/skills/`, in byte order.
@@ -158,12 +157,12 @@ mod tests {
         assert!(base_payload("hooks", "claude-hub").is_none());
         assert_eq!(base_payloads("settings", "claude").len(), 1);
         assert_eq!(base_payloads("hooks", "code").len(), 0);
-        assert!(CI_GITHUB_WORKFLOW.contains("AGENTSYNC_VERSION=__AGENTSYNC_VERSION__ bash"));
+        assert!(CI_GITHUB_WORKFLOW.contains("EXUNO_VERSION=__EXUNO_VERSION__ bash"));
     }
 
     #[test]
-    fn the_engine_owns_the_agentsync_skill_and_ships_the_migrate_prompt() {
-        assert_eq!(base_src_skills(), ["agentsync"]);
+    fn the_engine_owns_the_exuno_skill_and_ships_the_migrate_prompt() {
+        assert_eq!(base_src_skills(), ["exuno"]);
         assert!(MIGRATE_PROMPT.starts_with("I need you to safely migrate"));
     }
 
@@ -188,6 +187,33 @@ mod tests {
                 .iter()
                 .all(|(path, bytes)| path == "AGENTS.md" || !bytes.is_empty())
         );
+    }
+
+    // Claude Code runs an exclamation mark before an inline-code command and
+    // substitutes $ARGUMENTS in a SKILL.md body before the model reads it.
+    #[test]
+    fn no_skill_template_carries_load_time_claude_code_syntax() {
+        let offenders: Vec<String> = engine_files()
+            .into_iter()
+            .filter(|(path, _)| path.ends_with("/SKILL.md"))
+            .flat_map(|(path, bytes)| {
+                let text = String::from_utf8_lossy(bytes).into_owned();
+                text.lines()
+                    .enumerate()
+                    .filter(|(_, line)| {
+                        let runs_shell = line.match_indices("!`").any(|(at, _)| {
+                            line[..at]
+                                .chars()
+                                .next_back()
+                                .is_none_or(char::is_whitespace)
+                        });
+                        runs_shell || line.contains("$ARGUMENTS")
+                    })
+                    .map(|(index, _)| format!("{path}:{}", index + 1))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(offenders.is_empty(), "{offenders:?}");
     }
 
     #[test]

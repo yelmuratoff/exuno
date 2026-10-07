@@ -1,4 +1,4 @@
-//! `tests/customize.bats`: `agentsync customize` / `show` / `diff`.
+//! `tests/customize.bats`: `exuno customize` / `show` / `diff`.
 
 mod common;
 
@@ -9,7 +9,7 @@ use predicates::prelude::*;
 fn customize_creates_empty_override_stub() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude"])
         .assert()
         .success();
@@ -20,14 +20,14 @@ fn customize_creates_empty_override_stub() {
 fn customize_stub_mentions_show_base() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude"])
         .assert()
         .success();
     assert!(
         project
             .read(".ai/src/tools/claude.yaml")
-            .contains("agentsync show claude --base")
+            .contains("exuno show claude --base")
     );
 }
 
@@ -35,7 +35,7 @@ fn customize_stub_mentions_show_base() {
 fn customize_full_copies_entire_base() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "cursor", "--full"])
         .assert()
         .success();
@@ -53,12 +53,12 @@ fn customize_full_copies_entire_base() {
 fn customize_is_idempotent_warns_if_exists() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude"])
         .assert()
         .stdout(predicate::str::contains("Override already exists"));
@@ -68,7 +68,7 @@ fn customize_is_idempotent_warns_if_exists() {
 fn customize_unknown_tool_with_full_fails() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "bogus_tool_xyz", "--full"])
         .assert()
         .failure()
@@ -79,12 +79,12 @@ fn customize_unknown_tool_with_full_fails() {
 fn show_displays_effective_config() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["enable", "claude"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["show", "claude"])
         .assert()
         .success()
@@ -96,7 +96,7 @@ fn show_displays_effective_config() {
 fn show_base_prints_the_base_yaml() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["show", "claude", "--base"])
         .assert()
         .success()
@@ -107,12 +107,12 @@ fn show_base_prints_the_base_yaml() {
 fn show_marks_user_overrides_with_star() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude", "--full"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["show", "claude"])
         .assert()
         .success()
@@ -123,7 +123,7 @@ fn show_marks_user_overrides_with_star() {
 fn diff_with_no_overrides_shows_message() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .arg("diff")
         .assert()
         .success()
@@ -134,12 +134,12 @@ fn diff_with_no_overrides_shows_message() {
 fn diff_lists_tools_with_overrides() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "claude", "--full"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .arg("diff")
         .assert()
         .success()
@@ -152,7 +152,7 @@ fn diff_lists_tools_with_overrides() {
 fn customize_cursor_hooks_writes_to_ai_src_tools_cursor_hooks_json() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "cursor", "hooks", "--yes"])
         .assert()
         .success();
@@ -166,7 +166,7 @@ fn customize_migrates_an_existing_legacy_flat_file_to_per_tool_dir() {
     let project = Project::seeded(&[]);
     project.write(".ai/src/mcp/cursor.json", "{\"marker\":\"USER\"}\n");
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "cursor", "mcp"])
         .assert()
         .success()
@@ -185,12 +185,12 @@ fn customize_migrates_an_existing_legacy_flat_file_to_per_tool_dir() {
 fn show_cursor_hooks_reflects_per_tool_dir_override_with_star() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["customize", "cursor", "hooks", "--yes"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["show", "cursor", "hooks"])
         .assert()
         .success()

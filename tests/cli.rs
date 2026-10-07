@@ -5,39 +5,55 @@ fn engine_version() -> &'static str {
     include_str!("../VERSION").trim()
 }
 
-fn agentsync() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_agentsync"))
+fn exuno() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_exuno"))
 }
 
 #[test]
 fn version_prints_the_engine_version() {
-    agentsync()
+    exuno()
         .arg("version")
         .assert()
         .success()
-        .stdout(format!("agentsync v{}\n", engine_version()));
+        .stdout(format!("exuno v{}\n", engine_version()));
+}
+
+#[test]
+fn version_names_the_binary_it_was_run_as() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["agentsync", "exuno"] {
+        let copy = dir
+            .path()
+            .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        std::fs::copy(env!("CARGO_BIN_EXE_exuno"), &copy).unwrap();
+        Command::new(&copy)
+            .arg("version")
+            .assert()
+            .success()
+            .stdout(format!("{name} v{}\n", engine_version()));
+    }
 }
 
 #[test]
 fn version_flags_match_the_bash_cli() {
     for flag in ["--version", "-v"] {
-        agentsync()
+        exuno()
             .arg(flag)
             .assert()
             .success()
-            .stdout(format!("agentsync v{}\n", engine_version()));
+            .stdout(format!("exuno v{}\n", engine_version()));
     }
 }
 
 #[test]
 fn list_works_without_a_project_config() {
     let dir = tempfile::tempdir().unwrap();
-    agentsync()
+    exuno()
         .current_dir(dir.path())
         .arg("list")
         .assert()
         .success()
-        .stdout(predicate::str::contains("  AgentSync Tools\n"))
+        .stdout(predicate::str::contains("  Exuno Tools\n"))
         .stdout(predicate::str::contains("Claude Code"))
         .stdout(predicate::str::contains("  0 of 15 enabled\n"))
         .stdout(predicate::str::contains("Enable a tool:"));
@@ -46,28 +62,28 @@ fn list_works_without_a_project_config() {
 #[test]
 fn ls_is_an_alias_for_list() {
     let dir = tempfile::tempdir().unwrap();
-    agentsync()
+    exuno()
         .current_dir(dir.path())
         .arg("ls")
         .assert()
         .success()
-        .stdout(predicate::str::contains("  AgentSync Tools\n"));
+        .stdout(predicate::str::contains("  Exuno Tools\n"));
 }
 
 #[test]
 fn list_and_version_ignore_extra_arguments_like_bash() {
     let dir = tempfile::tempdir().unwrap();
-    agentsync()
+    exuno()
         .current_dir(dir.path())
         .args(["list", "--bogus"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("  AgentSync Tools\n"));
-    agentsync()
+        .stdout(predicate::str::contains("  Exuno Tools\n"));
+    exuno()
         .args(["version", "extra"])
         .assert()
         .success()
-        .stdout(format!("agentsync v{}\n", engine_version()));
+        .stdout(format!("exuno v{}\n", engine_version()));
 }
 
 #[test]
@@ -75,11 +91,11 @@ fn list_counts_configured_tools_and_honours_the_repo_root_variable() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join(".ai")).unwrap();
     std::fs::write(
-        dir.path().join(".ai/agent_sync.yaml"),
+        dir.path().join(".ai/exuno.yaml"),
         "tools:\n  enabled:\n    - claude\n",
     )
     .unwrap();
-    agentsync()
+    exuno()
         .env("AGENTSYNC_REPO_ROOT", dir.path())
         .arg("list")
         .assert()
@@ -96,7 +112,7 @@ fn sync_project(tool_yaml: Option<&str>) -> tempfile::TempDir {
     std::fs::write(dir.path().join(".ai/src/AGENTS.md"), "# Agents\n").unwrap();
     std::fs::write(dir.path().join(".ai/src/rules/core.md"), "# Core\n").unwrap();
     std::fs::write(
-        dir.path().join(".ai/agent_sync.yaml"),
+        dir.path().join(".ai/exuno.yaml"),
         "outputs: committed\ntools:\n  enabled: [claude]\n",
     )
     .unwrap();
@@ -109,7 +125,7 @@ fn sync_project(tool_yaml: Option<&str>) -> tempfile::TempDir {
 
 #[cfg(unix)]
 fn sync_in(dir: &tempfile::TempDir) -> Command {
-    let mut command = agentsync();
+    let mut command = exuno();
     command
         .env("AGENTSYNC_REPO_ROOT", dir.path())
         .env_remove("AGENTSYNC_ALLOW_POST_SYNC")
@@ -128,7 +144,7 @@ fn sync_options_are_checked_before_anything_runs() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::starts_with(
-            "[ERROR] Unknown option: --bogus\n\n  agentsync sync — sync .ai/src/ to every enabled tool\n\n  USAGE\n    agentsync sync [OPTIONS]\n",
+            "[ERROR] Unknown option: --bogus\n\n  exuno sync — sync .ai/src/ to every enabled tool\n\n  USAGE\n    exuno sync [OPTIONS]\n",
         ));
     sync_in(&dir)
         .args(["--", "--dry-run"])
@@ -187,7 +203,7 @@ fn a_terminated_sync_restores_the_pre_sync_state_and_dies_of_the_signal() {
 
     let dir = sync_project(Some("post_sync: \"sleep 1\"\n"));
     std::fs::write(dir.path().join("CLAUDE.md"), "before-sync\n").unwrap();
-    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_agentsync"))
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_exuno"))
         .env("AGENTSYNC_REPO_ROOT", dir.path())
         .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
         .env_remove("AGENTSYNC_SKIP_POST_SYNC")
@@ -252,6 +268,68 @@ fn a_failing_post_sync_hook_restores_the_pre_sync_state() {
 #[cfg(unix)]
 #[test]
 fn sync_writes_a_plain_log_to_a_redirected_stderr_even_when_stdout_is_a_terminal() {
+    let dir = sync_project(None);
+    let log = dir.path().join("sync.log");
+    let inner = format!(
+        "AGENTSYNC_REPO_ROOT={} AGENTSYNC_NO_UPDATE_CHECK=1 NO_COLOR= {} sync --dry-run 2>{} </dev/null",
+        dir.path().display(),
+        env!("CARGO_BIN_EXE_exuno"),
+        log.display()
+    );
+    let Some(status) = in_pty(&inner, std::path::Path::new("/dev/null")) else {
+        eprintln!("script(1) not available; skipping");
+        return;
+    };
+    assert!(status.success());
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(text.contains("[INFO] Syncing Claude Code\n"), "{text}");
+    assert!(
+        !text.contains('\x1b'),
+        "escape codes reached the file: {text:?}"
+    );
+}
+
+// The project notice prints only when stdout is a terminal. A stub `curl`
+// keeps the background release check off the network.
+#[cfg(unix)]
+#[test]
+fn a_binary_run_as_agentsync_names_agentsync_in_the_migration_notice() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    let project = dir.path().join("project");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::create_dir_all(project.join(".ai")).unwrap();
+    std::fs::write(project.join(".ai/agent_sync.yaml"), "format: 2\n").unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_exuno"), bin.join("agentsync")).unwrap();
+    std::fs::write(bin.join("curl"), "#!/bin/sh\nexit 1\n").unwrap();
+    std::fs::set_permissions(
+        bin.join("curl"),
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    let transcript = dir.path().join("transcript");
+    let inner = format!(
+        "cd {} && PATH={}:$PATH EXUNO_NO_UPDATE_CHECK= AGENTSYNC_NO_UPDATE_CHECK= NO_COLOR=1 agentsync list 2>/dev/null </dev/null; exit 0",
+        project.display(),
+        bin.display()
+    );
+    let Some(status) = in_pty(&inner, &transcript) else {
+        eprintln!("script(1) not available; skipping");
+        return;
+    };
+    assert!(status.success());
+    let text = std::fs::read_to_string(&transcript).unwrap_or_default();
+    assert!(
+        text.contains("Preview it with agentsync migrate, apply with agentsync migrate --apply"),
+        "{text}"
+    );
+    assert!(text.contains("rerun the installer to add it"), "{text}");
+}
+
+/// Runs `sh -c inner` with stdout on a pty, `script(1)` writing the terminal
+/// to `transcript`; `None` when `script` is missing.
+#[cfg(unix)]
+fn in_pty(inner: &str, transcript: &std::path::Path) -> Option<std::process::ExitStatus> {
     use std::process::Command as StdCommand;
 
     let gnu = StdCommand::new("script")
@@ -265,36 +343,21 @@ fn sync_writes_a_plain_log_to_a_redirected_stderr_even_when_stdout_is_a_terminal
             .output()
             .is_ok_and(|o| !o.status.success())
     {
-        eprintln!("script(1) not available; skipping");
-        return;
+        return None;
     }
-    let dir = sync_project(None);
-    let log = dir.path().join("sync.log");
-    let inner = format!(
-        "AGENTSYNC_REPO_ROOT={} AGENTSYNC_NO_UPDATE_CHECK=1 NO_COLOR= {} sync --dry-run 2>{} </dev/null",
-        dir.path().display(),
-        env!("CARGO_BIN_EXE_agentsync"),
-        log.display()
-    );
-    let status = if gnu {
-        StdCommand::new("script")
-            .args(["-q", "-c", &inner, "/dev/null"])
-            .stdout(std::process::Stdio::null())
-            .status()
+    let transcript = transcript.to_str().unwrap();
+    let mut command = StdCommand::new("script");
+    if gnu {
+        command.args(["-q", "-c", inner, transcript]);
     } else {
-        StdCommand::new("script")
-            .args(["-q", "/dev/null", "sh", "-c", &inner])
+        command.args(["-q", transcript, "sh", "-c", inner]);
+    }
+    Some(
+        command
             .stdout(std::process::Stdio::null())
             .status()
-    }
-    .unwrap();
-    assert!(status.success());
-    let text = std::fs::read_to_string(&log).unwrap();
-    assert!(text.contains("[INFO] Syncing Claude Code\n"), "{text}");
-    assert!(
-        !text.contains('\x1b'),
-        "escape codes reached the file: {text:?}"
-    );
+            .unwrap(),
+    )
 }
 
 mod common;
@@ -306,11 +369,11 @@ mod common;
 #[test]
 fn help_shows_usage() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .arg("help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("AgentSync"))
+        .stdout(predicate::str::contains("Exuno"))
         .stdout(predicate::str::contains("COMMANDS"))
         .stdout(predicate::str::contains("init"))
         .stdout(predicate::str::contains("sync"))
@@ -320,7 +383,7 @@ fn help_shows_usage() {
 #[test]
 fn help_flag_shows_usage() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .arg("--help")
         .assert()
         .success()
@@ -330,7 +393,7 @@ fn help_flag_shows_usage() {
 #[test]
 fn unknown_command_fails_with_error() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .arg("nonexistent")
         .assert()
         .code(1)
@@ -340,7 +403,7 @@ fn unknown_command_fails_with_error() {
 #[test]
 fn no_arguments_shows_help() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .assert()
         .success()
         .stdout(predicate::str::contains("COMMANDS"));
@@ -350,9 +413,9 @@ fn no_arguments_shows_help() {
 fn every_command_with_its_own_usage_answers_help_without_running() {
     let project = common::Project::seeded(&[]);
     let stale = project
-        .read(".ai/agent_sync.yaml")
+        .read(".ai/exuno.yaml")
         .replace(engine_version(), "0.0.1");
-    project.write(".ai/agent_sync.yaml", &stale);
+    project.write(".ai/exuno.yaml", &stale);
     for command in [
         "init",
         "sync",
@@ -383,17 +446,17 @@ fn every_command_with_its_own_usage_answers_help_without_running() {
         "release",
     ] {
         project
-            .agentsync()
+            .exuno()
             .args([command, "--help"])
             .assert()
             .success()
             .stdout(predicate::str::starts_with(format!(
-                "\n  agentsync {command} — "
+                "\n  exuno {command} — "
             )))
             .stderr("");
     }
     assert_eq!(
-        project.read(".ai/agent_sync.yaml"),
+        project.read(".ai/exuno.yaml"),
         stale,
         "upgrade-config --help must not touch the pin"
     );
@@ -402,7 +465,7 @@ fn every_command_with_its_own_usage_answers_help_without_running() {
 #[test]
 fn rollback_help_documents_safe_restore_options() {
     common::Project::empty()
-        .agentsync()
+        .exuno()
         .args(["rollback", "--help"])
         .assert()
         .success()

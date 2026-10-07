@@ -1,4 +1,4 @@
-//! `agentsync migrate`: `cmd_migrate` of `lib/helpers/migrate.sh`, which prints
+//! `exuno migrate`: `cmd_migrate` of `lib/helpers/migrate.sh`, which prints
 //! an upgrade prompt or, with `--legacy`, retires pre-0.11 layouts.
 
 use crate::paths::DiskText;
@@ -7,19 +7,20 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use super::{files_below, put, sorted_entries};
+use crate::config::leftovers::{self, Kind, Leftover};
 use crate::config::template_manifest::{self, TemplateManifest};
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::project::Project;
-use crate::{Error, config::catalog, config::format_rev, config::yaml_edit, config::yaml_subset};
+use crate::{Error, config::catalog, config::format_rev, config::names, config::yaml_edit};
 
 pub const HELP: Help = Help {
     command: "migrate",
     tagline: "upgrade a project to the current format",
     synopsis: &["migrate", "migrate --legacy [--apply] [--yes]"],
     description: &[
-        "Prints an AI prompt for safely upgrading an existing AgentSync project to\nthe latest documented format and copies it to the system clipboard.",
+        "Prints an AI prompt for safely upgrading an existing Exuno project to\nthe latest documented format and copies it to the system clipboard.",
         "With --legacy, moves legacy flat-layout overrides to the canonical\nper-tool layout. When every legacy MCP file is byte-identical, migrate\noffers to consolidate them into the shared .ai/src/mcp.json. Dry-run by\ndefault: re-run with --apply to move files.",
     ],
     sections: &[
@@ -113,7 +114,7 @@ fn prompt(
             put(
                 err,
                 format!(
-                    "{}: Unknown flag: {flag}\nUsage: agentsync migrate [--legacy [--apply] [--yes]]\n",
+                    "{}: Unknown flag: {flag}\nUsage: exuno migrate [--legacy [--apply] [--yes]]\n",
                     style.red("Error")
                 )
                 .as_bytes(),
@@ -124,7 +125,7 @@ fn prompt(
     }
 
     let text = format!(
-        "## AgentSync migration context\n\n- AgentSync CLI that generated this prompt: {}\n- Project-pinned AgentSync version: {}\n\n---\n\n{}",
+        "## Exuno migration context\n\n- Exuno CLI that generated this prompt: {}\n- Project-pinned Exuno version: {}\n\n---\n\n{}",
         env.version,
         project_version(&env.prompt_root),
         catalog::MIGRATE_PROMPT.trim_end_matches('\n')
@@ -181,15 +182,13 @@ fn prompt(
 
 /// `_migrate_project_version`.
 fn project_version(root: &str) -> String {
-    let pinned = [
-        format!("{root}/.ai/agent_sync.yaml"),
-        format!("{root}/agent_sync.yaml"),
-    ]
-    .into_iter()
-    .find(|path| Path::new(path).is_file())
-    .and_then(|path| std::fs::read(path).ok())
-    .map(|bytes| yaml_subset::value(&String::from_utf8_lossy(&bytes), "agentsync_version"))
-    .unwrap_or_default();
+    let pinned = names::CONFIG_CANDIDATES
+        .iter()
+        .map(|rel| format!("{root}/{rel}"))
+        .find(|path| Path::new(path).is_file())
+        .and_then(|path| std::fs::read(path).ok())
+        .map(|bytes| names::pinned_version(&String::from_utf8_lossy(&bytes)))
+        .unwrap_or_default();
     if pinned.is_empty() {
         "not detected".to_string()
     } else {
@@ -371,7 +370,10 @@ fn scan_base_skills(root: &Path) -> Result<Vec<BaseSkillCopy>, Error> {
     let skills_text = skills.disk_text();
     let tree = skill_tree::discover(&Workspace::on_disk(&skills_text), &skills_text);
     let mut copies = Vec::new();
-    for name in catalog::base_src_skills() {
+    let legacy = names::LEGACY_ENGINE_SKILLS
+        .iter()
+        .map(|name| name.to_string());
+    for name in catalog::base_src_skills().into_iter().chain(legacy) {
         let Some(skill) = tree.find(&name) else {
             continue;
         };
@@ -454,7 +456,7 @@ fn legacy(
             put(
                 err,
                 format!(
-                    "{}: Unknown flag: {flag}\nUsage: agentsync migrate --legacy [--apply] [--yes]\n",
+                    "{}: Unknown flag: {flag}\nUsage: exuno migrate --legacy [--apply] [--yes]\n",
                     style.red("Error")
                 )
                 .as_bytes(),
@@ -477,22 +479,22 @@ fn legacy(
     let agent_dir = root_path.join(".agent");
     let has_agent_dir = agent_dir.is_dir();
     let skills = scan_base_skills(&root_path)?;
+    let renames = pending_renames(&root_path, &skills);
     let engine_rev = format_rev::engine();
     let current_rev = project_format(&project)?;
 
     run.say(&format!(
         "\n{}\n{}\n\n",
-        style.bold("  AgentSync Migrate"),
+        style.bold("  Exuno Migrate"),
         style.dim(&format!("  {}", run.root))
     ))?;
-    if legacy.is_empty() && !has_agent_dir && skills.is_empty() && current_rev >= engine_rev {
-        run.say(&format!(
-            "{}\n{}\n\n",
-            style.green("  Nothing to migrate."),
-            style.dim(&format!(
-                "  Canonical layout, no engine-owned skill copies, format r{current_rev} is current."
-            ))
-        ))?;
+    if legacy.is_empty()
+        && !has_agent_dir
+        && skills.is_empty()
+        && renames.is_empty()
+        && current_rev >= engine_rev
+    {
+        run.nothing_to_migrate(current_rev)?;
         return Ok(0);
     }
     if apply && !legacy.is_empty() && !project.tools_dir_in_project() {
@@ -505,6 +507,9 @@ fn legacy(
     }
     if current_rev < engine_rev {
         run.bump_format(current_rev, engine_rev, apply)?;
+    }
+    if !renames.is_empty() {
+        rename_leftovers(&mut run, apply, &renames)?;
     }
     if legacy.is_empty() && !has_agent_dir {
         let hint = run.closing_hint(apply);
@@ -590,7 +595,7 @@ impl MoveTally {
         summary.push_str(&format!(
             "\n{} {}{}\n\n",
             style.dim("  Run"),
-            style.cyan("agentsync sync"),
+            style.cyan("exuno sync"),
             style.dim(" to confirm outputs are unchanged.")
         ));
         summary
@@ -598,6 +603,17 @@ impl MoveTally {
 }
 
 impl Run<'_, '_> {
+    fn nothing_to_migrate(&mut self, current_rev: u32) -> Result<(), Error> {
+        let style = self.style;
+        self.say(&format!(
+            "{}\n{}\n\n",
+            style.green("  Nothing to migrate."),
+            style.dim(&format!(
+                "  Canonical layout, no engine-owned skill copies, format r{current_rev} is current."
+            ))
+        ))
+    }
+
     fn bump_format(&mut self, current: u32, engine: u32, apply: bool) -> Result<(), Error> {
         let style = self.style;
         self.say(&format!(
@@ -630,7 +646,7 @@ impl Run<'_, '_> {
         self.say(&format!(
             "{} {}{}\n\n",
             style.dim("  Dry-run. Re-run with"),
-            style.cyan("agentsync migrate --apply"),
+            style.cyan("exuno migrate --apply"),
             style.dim(what)
         ))
     }
@@ -643,7 +659,7 @@ impl Run<'_, '_> {
         format!(
             "{} {}{}\n\n",
             style.dim("  Dry-run — re-run with"),
-            style.cyan("agentsync migrate --apply"),
+            style.cyan("exuno migrate --apply"),
             style.dim(" to apply.")
         )
     }
@@ -838,6 +854,37 @@ fn retire_base_skills(run: &mut Run, apply: bool, copies: &[BaseSkillCopy]) -> R
     Ok(())
 }
 
+/// The leftovers r3 renames, without a skill copy the r2 step retires anyway.
+fn pending_renames(root: &Path, skills: &[BaseSkillCopy]) -> Vec<Leftover> {
+    let retired: Vec<PathBuf> = skills
+        .iter()
+        .filter(|copy| !copy.edited)
+        .map(|copy| root.join(".ai/src/skills").join(&copy.rel))
+        .collect();
+    leftovers::scan(root)
+        .into_iter()
+        .filter(|leftover| !(leftover.kind == Kind::SkillDir && retired.contains(&leftover.path)))
+        .collect()
+}
+
+fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<(), Error> {
+    let style = run.style;
+    let root = PathBuf::from(&run.root);
+    run.say(&format!("  {}:\n", style.bold("Renamed to Exuno")))?;
+    for leftover in renames {
+        let line = leftover.describe(&root);
+        if !leftover.is_automatic() {
+            run.say(&format!("{}          {line}\n", style.yellow("  keep")))?;
+        } else if apply {
+            leftovers::apply(&root, leftover)?;
+            run.say(&format!("{}       {line}\n", style.green("  renamed")))?;
+        } else {
+            run.say(&format!("{}  {line}\n", style.cyan("  would rename")))?;
+        }
+    }
+    run.say("\n")
+}
+
 /// Category directories above a removed skill that it left empty, up to `skills`.
 fn remove_empty_categories(removed: &Path, skills: &Path) -> Result<(), Error> {
     for dir in removed.ancestors().skip(1).take_while(|dir| *dir != skills) {
@@ -926,12 +973,23 @@ mod tests {
     }
 
     #[test]
+    fn the_prompt_reads_an_exuno_version_pin() {
+        let (_dir, root) = project(&[(".ai/exuno.yaml", "exuno_version: \"0.8.0\"\n")]);
+        let copied = call(&root, &[], false, false, Some(0));
+        assert!(
+            copied
+                .out
+                .contains("- Project-pinned Exuno version: 0.8.0\n")
+        );
+    }
+
+    #[test]
     fn the_prompt_names_both_versions_and_reports_the_clipboard_like_bash() {
         let (_dir, root) = project(&[(".ai/agent_sync.yaml", "agentsync_version: \"0.7.0\"\n")]);
         let copied = call(&root, &[], false, false, Some(0));
         assert_eq!(copied.status, 0);
         assert!(copied.out.starts_with(
-            "## AgentSync migration context\n\n- AgentSync CLI that generated this prompt: 9.9.9\n- Project-pinned AgentSync version: 0.7.0\n\n---\n\nI need you to safely migrate"
+            "## Exuno migration context\n\n- Exuno CLI that generated this prompt: 9.9.9\n- Project-pinned Exuno version: 0.7.0\n\n---\n\nI need you to safely migrate"
         ));
         assert!(copied.out.ends_with(&format!(
             "{}\n",
@@ -950,20 +1008,20 @@ mod tests {
         assert!(
             call(&root, &[], false, false, Some(0))
                 .out
-                .contains("- Project-pinned AgentSync version: not detected\n")
+                .contains("- Project-pinned Exuno version: not detected\n")
         );
     }
 
     #[test]
     fn arguments_are_refused_with_the_bash_statuses() {
-        let (_dir, root) = project(&[(".ai/agent_sync.yaml", "format: 2\n")]);
+        let (_dir, root) = project(&[(".ai/exuno.yaml", "format: 3\n")]);
         let bogus = call(&root, &["--bogus", "extra"], false, false, None);
         assert_eq!(
             (bogus.status, bogus.out.as_str(), bogus.err.as_str()),
             (
                 1,
                 "",
-                "Error: Unknown flag: --bogus\nUsage: agentsync migrate [--legacy [--apply] [--yes]]\n"
+                "Error: Unknown flag: --bogus\nUsage: exuno migrate [--legacy [--apply] [--yes]]\n"
             )
         );
         let legacy = call(&root, &["--legacy", "--bogus"], false, false, None);
@@ -971,14 +1029,14 @@ mod tests {
             (legacy.status, legacy.err.as_str()),
             (
                 1,
-                "Error: Unknown flag: --bogus\nUsage: agentsync migrate --legacy [--apply] [--yes]\n"
+                "Error: Unknown flag: --bogus\nUsage: exuno migrate --legacy [--apply] [--yes]\n"
             )
         );
         let help = call(&root, &["-h"], false, false, None);
         assert_eq!((help.status, help.err.as_str()), (0, ""));
         assert_eq!(
             help.out,
-            "\n  agentsync migrate — upgrade a project to the current format\n\n  USAGE\n    agentsync migrate\n    agentsync migrate --legacy [--apply] [--yes]\n\n  DESCRIPTION\n    Prints an AI prompt for safely upgrading an existing AgentSync project to\n    the latest documented format and copies it to the system clipboard.\n\n    With --legacy, moves legacy flat-layout overrides to the canonical\n    per-tool layout. When every legacy MCP file is byte-identical, migrate\n    offers to consolidate them into the shared .ai/src/mcp.json. Dry-run by\n    default: re-run with --apply to move files.\n\n  LEGACY MOVES\n    .ai/src/hooks/<tool>.<ext>      → .ai/src/tools/<tool>/hooks.<ext>\n    .ai/src/mcp/<tool>.<ext>        → .ai/src/tools/<tool>/mcp.<ext>\n    .ai/src/settings/<tool>.<ext>   → .ai/src/tools/<tool>/settings.<ext>\n\n  OPTIONS\n    --legacy     Preview old flat-layout file moves without changing files\n    --apply      Apply those moves (backwards-compatible historical behavior)\n    -y, --yes    Accept safe legacy consolidation without prompting\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync migrate\n    agentsync migrate --legacy\n    agentsync migrate --legacy --apply --yes\n\n"
+            "\n  exuno migrate — upgrade a project to the current format\n\n  USAGE\n    exuno migrate\n    exuno migrate --legacy [--apply] [--yes]\n\n  DESCRIPTION\n    Prints an AI prompt for safely upgrading an existing Exuno project to\n    the latest documented format and copies it to the system clipboard.\n\n    With --legacy, moves legacy flat-layout overrides to the canonical\n    per-tool layout. When every legacy MCP file is byte-identical, migrate\n    offers to consolidate them into the shared .ai/src/mcp.json. Dry-run by\n    default: re-run with --apply to move files.\n\n  LEGACY MOVES\n    .ai/src/hooks/<tool>.<ext>      → .ai/src/tools/<tool>/hooks.<ext>\n    .ai/src/mcp/<tool>.<ext>        → .ai/src/tools/<tool>/mcp.<ext>\n    .ai/src/settings/<tool>.<ext>   → .ai/src/tools/<tool>/settings.<ext>\n\n  OPTIONS\n    --legacy     Preview old flat-layout file moves without changing files\n    --apply      Apply those moves (backwards-compatible historical behavior)\n    -y, --yes    Accept safe legacy consolidation without prompting\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno migrate\n    exuno migrate --legacy\n    exuno migrate --legacy --apply --yes\n\n"
         );
         assert_eq!(
             call(&root, &["--legacy", "--help"], false, false, None).out,
@@ -987,15 +1045,15 @@ mod tests {
         assert_eq!(
             call(&root, &["--apply"], false, false, None).out,
             format!(
-                "\n  AgentSync Migrate\n  {root}\n\n  Nothing to migrate.\n  Canonical layout, no engine-owned skill copies, format r2 is current.\n\n"
+                "\n  Exuno Migrate\n  {root}\n\n  Nothing to migrate.\n  Canonical layout, no engine-owned skill copies, format r3 is current.\n\n"
             )
         );
     }
 
     const LEGACY: [(&str, &str); 9] = [
         (
-            ".ai/agent_sync.yaml",
-            "format: 2\ntools:\n  enabled:\n    - claude\n",
+            ".ai/exuno.yaml",
+            "format: 3\ntools:\n  enabled:\n    - claude\n",
         ),
         (".ai/src/hooks/cursor.json", "{\"hooks\": {}}\n"),
         (".ai/src/tools/cursor/settings.json", "{\"taken\": true}\n"),
@@ -1011,7 +1069,7 @@ mod tests {
     fn legacy_files_are_planned_moved_consolidated_and_skipped_like_bash() {
         let (_dir, root) = project(&LEGACY);
         let header = format!(
-            "\n  AgentSync Migrate\n  {root}\n\n  Legacy pre-v0.6 layout:\n    .agent/ — orphan directory from before tool-specific outputs.\n      · AGENTS.md\n\n"
+            "\n  Exuno Migrate\n  {root}\n\n  Legacy pre-v0.6 layout:\n    .agent/ — orphan directory from before tool-specific outputs.\n      · AGENTS.md\n\n"
         );
         let plan = "  Planned moves:\n  .ai/src/hooks/cursor.json  →  .ai/src/tools/cursor/hooks.json\n  .ai/src/settings/claude.json  →  .ai/src/tools/claude/settings.json\n  .ai/src/settings/cursor.json  →  .ai/src/tools/cursor/settings.json\n\n  MCP consolidation:\n    All 2 .ai/src/mcp/*.json are byte-identical — can consolidate into .ai/src/mcp.json.\n    Source file: .ai/src/mcp/claude.json\n\n";
 
@@ -1019,7 +1077,7 @@ mod tests {
         assert_eq!(
             dry.out,
             format!(
-                "{header}  Dry-run. Re-run with agentsync migrate --apply to remove .agent/.\n\n{plan}  Dry-run. Re-run with agentsync migrate --apply to move files.\n\n"
+                "{header}  Dry-run. Re-run with exuno migrate --apply to remove .agent/.\n\n{plan}  Dry-run. Re-run with exuno migrate --apply to move files.\n\n"
             )
         );
         assert_eq!(tree(&root).len(), LEGACY.len());
@@ -1028,13 +1086,13 @@ mod tests {
         assert_eq!(
             applied.out,
             format!(
-                "{header}  removed .agent/ (pre-v0.6 layout)\n\n{plan}  consolidated .ai/src/mcp/claude.json → .ai/src/mcp.json\n  consolidated .ai/src/mcp/cursor.json → .ai/src/mcp.json\n  moved .ai/src/hooks/cursor.json → .ai/src/tools/cursor/hooks.json\n  moved .ai/src/settings/claude.json → .ai/src/tools/claude/settings.json\n  skipped (target already exists) .ai/src/tools/cursor/settings.json\n\n  Migration complete.\n    moved:        4\n    skipped:      1 (target already existed)\n    consolidated: .ai/src/mcp.json\n\n  Run agentsync sync to confirm outputs are unchanged.\n\n"
+                "{header}  removed .agent/ (pre-v0.6 layout)\n\n{plan}  consolidated .ai/src/mcp/claude.json → .ai/src/mcp.json\n  consolidated .ai/src/mcp/cursor.json → .ai/src/mcp.json\n  moved .ai/src/hooks/cursor.json → .ai/src/tools/cursor/hooks.json\n  moved .ai/src/settings/claude.json → .ai/src/tools/claude/settings.json\n  skipped (target already exists) .ai/src/tools/cursor/settings.json\n\n  Migration complete.\n    moved:        4\n    skipped:      1 (target already existed)\n    consolidated: .ai/src/mcp.json\n\n  Run exuno sync to confirm outputs are unchanged.\n\n"
             )
         );
         assert_eq!(
             tree(&root),
             [
-                ".ai/agent_sync.yaml",
+                ".ai/exuno.yaml",
                 ".ai/src/mcp.json",
                 ".ai/src/settings/README",
                 ".ai/src/settings/cursor.json",
@@ -1102,22 +1160,22 @@ mod tests {
         ]);
         let refused = call(&root, &["--legacy", "--apply"], false, false, None);
         assert_eq!(refused.status, 1);
-        assert_eq!(refused.out, format!("\n  AgentSync Migrate\n  {root}\n\n"));
+        assert_eq!(refused.out, format!("\n  Exuno Migrate\n  {root}\n\n"));
         assert_eq!(
             refused.err,
             format!(
-                "Error: source.tools resolves outside the project: {root}/../elsewhere\nAgentSync only reads that catalog; edit its tool overrides where they live.\n"
+                "Error: source.tools resolves outside the project: {root}/../elsewhere\nExuno only reads that catalog; edit its tool overrides where they live.\n"
             )
         );
         assert!(Path::new(&root).join(".ai/src/hooks/claude.json").is_file());
     }
 
     #[test]
-    fn engine_owned_skill_copies_are_retired_unless_edited_and_the_format_is_recorded() {
+    fn legacy_agentsync_skill_copies_are_retired_unless_edited_and_the_format_is_recorded() {
         let skill = |rel: &str| {
             catalog::engine_files()
                 .into_iter()
-                .find(|(path, _)| path == &format!("lib/templates/base-src/skills/agentsync/{rel}"))
+                .find(|(path, _)| path == &format!("lib/templates/base-src/skills/exuno/{rel}"))
                 .map(|(_, bytes)| String::from_utf8(bytes.to_vec()).unwrap())
                 .unwrap()
         };
@@ -1152,7 +1210,7 @@ mod tests {
         assert_eq!(
             dry.out,
             format!(
-                "\n  AgentSync Migrate\n  {root}\n\n  Engine-owned skills:\n  would remove  .ai/src/skills/agentsync/ (unedited — the engine supplies it)\n\n  Project format r1 → r2:\n  would set     format: 2 in .ai/agent_sync.yaml\n\n  Dry-run — re-run with agentsync migrate --apply to apply.\n\n"
+                "\n  Exuno Migrate\n  {root}\n\n  Engine-owned skills:\n  would remove  .ai/src/skills/agentsync/ (unedited — the engine supplies it)\n\n  Project format r1 → r3:\n  would set     format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  would rename  .ai/agent_sync.yaml → .ai/exuno.yaml\n\n  Dry-run — re-run with exuno migrate --apply to apply.\n\n"
             )
         );
         let applied = call(&root, &["--apply"], false, false, None);
@@ -1162,19 +1220,16 @@ mod tests {
             )
         );
         assert!(applied.out.ends_with(
-            "  set           format: 2 in .ai/agent_sync.yaml\n\n  Migration complete.\n\n"
+            "  set           format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  renamed       .ai/agent_sync.yaml → .ai/exuno.yaml\n\n  Migration complete.\n\n"
         ));
-        assert_eq!(
-            tree(&root),
-            [".ai/.template-manifest", ".ai/agent_sync.yaml"]
-        );
+        assert_eq!(tree(&root), [".ai/.template-manifest", ".ai/exuno.yaml"]);
         assert_eq!(
             std::fs::read_to_string(Path::new(&root).join(".ai/.template-manifest")).unwrap(),
             "rules/core.md\tabc\n"
         );
         assert_eq!(
-            std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap(),
-            "tools:\n  enabled:\n    - claude\nformat: 2\n"
+            std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap(),
+            "tools:\n  enabled:\n    - claude\nformat: 3\n"
         );
 
         let (_dir, root) = project(&fixture);
@@ -1186,9 +1241,13 @@ mod tests {
         let kept = call(&root, &["--apply"], false, false, None);
         assert!(kept.out.contains("  keep          .ai/src/skills/agentsync/ (edited — stays your override; delete it to follow the engine)\n"));
         assert!(
-            Path::new(&root)
-                .join(".ai/src/skills/agentsync/SKILL.md")
-                .is_file()
+            kept.out
+                .contains("  renamed       .ai/src/skills/agentsync/ → .ai/src/skills/exuno/\n")
+        );
+        assert_eq!(
+            std::fs::read_to_string(Path::new(&root).join(".ai/src/skills/exuno/SKILL.md"))
+                .unwrap(),
+            "edited\n"
         );
     }
 
@@ -1197,7 +1256,7 @@ mod tests {
         let files: Vec<(String, String)> = catalog::engine_files()
             .into_iter()
             .filter_map(|(path, bytes)| {
-                let rel = path.strip_prefix("lib/templates/base-src/skills/agentsync/")?;
+                let rel = path.strip_prefix("lib/templates/base-src/skills/exuno/")?;
                 Some((rel.to_string(), String::from_utf8(bytes.to_vec()).unwrap()))
             })
             .collect();
@@ -1205,7 +1264,7 @@ mod tests {
             .iter()
             .map(|(rel, text)| {
                 (
-                    format!(".ai/src/skills/meta/sub/agentsync/{rel}"),
+                    format!(".ai/src/skills/meta/sub/exuno/{rel}"),
                     text.as_str(),
                 )
             })
@@ -1214,7 +1273,7 @@ mod tests {
             .iter()
             .map(|(rel, text)| {
                 format!(
-                    "skills/agentsync/{rel}\t{}\n",
+                    "skills/exuno/{rel}\t{}\n",
                     crate::transaction::manifest::sha256_hex(text.as_bytes())
                 )
             })
@@ -1225,23 +1284,23 @@ mod tests {
             ".ai/src/skills/meta/other/SKILL.md",
             "---\nname: other\n---\n",
         ));
-        fixture.push((".ai/agent_sync.yaml", "format: 2\n"));
+        fixture.push((".ai/exuno.yaml", "format: 3\n"));
         fixture.push((".ai/.template-manifest", &manifest));
 
         let (_dir, root) = project(&fixture);
         let dry = call(&root, &["--legacy"], false, false, None);
         assert!(dry.out.contains(
-            "  would remove  .ai/src/skills/meta/sub/agentsync/ (unedited — the engine supplies it)\n"
+            "  would remove  .ai/src/skills/meta/sub/exuno/ (unedited — the engine supplies it)\n"
         ));
         let applied = call(&root, &["--apply"], false, false, None);
         assert!(applied.out.contains(
-            "  removed       .ai/src/skills/meta/sub/agentsync/ (the engine supplies it now)\n"
+            "  removed       .ai/src/skills/meta/sub/exuno/ (the engine supplies it now)\n"
         ));
         assert_eq!(
             tree(&root),
             [
                 ".ai/.template-manifest",
-                ".ai/agent_sync.yaml",
+                ".ai/exuno.yaml",
                 ".ai/src/skills/meta/other/SKILL.md"
             ]
         );
@@ -1253,11 +1312,11 @@ mod tests {
 
         let (_dir, root) = project(&fixture);
         std::fs::write(
-            Path::new(&root).join(".ai/src/skills/meta/sub/agentsync/SKILL.md"),
+            Path::new(&root).join(".ai/src/skills/meta/sub/exuno/SKILL.md"),
             "edited\n",
         )
         .unwrap();
         let kept = call(&root, &["--apply"], false, false, None);
-        assert!(kept.out.contains("  keep          .ai/src/skills/meta/sub/agentsync/ (edited — stays your override; delete it to follow the engine)\n"));
+        assert!(kept.out.contains("  keep          .ai/src/skills/meta/sub/exuno/ (edited — stays your override; delete it to follow the engine)\n"));
     }
 }

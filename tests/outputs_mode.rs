@@ -25,9 +25,9 @@ fn absent_git_config() -> std::path::PathBuf {
     std::env::temp_dir().join("agentsync-tests-absent-gitconfig")
 }
 
-/// Rewrite the `outputs:` line in `.ai/agent_sync.yaml`.
+/// Rewrite the `outputs:` line in `.ai/exuno.yaml`.
 fn set_outputs_mode(project: &Project, mode: &str) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .map(|line| {
@@ -39,23 +39,23 @@ fn set_outputs_mode(project: &Project, mode: &str) {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    project.write(".ai/agent_sync.yaml", &format!("{rewritten}\n"));
+    project.write(".ai/exuno.yaml", &format!("{rewritten}\n"));
 }
 
 fn drop_outputs_key(project: &Project) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .filter(|line| !line.starts_with("outputs:"))
         .collect::<Vec<_>>()
         .join("\n");
-    project.write(".ai/agent_sync.yaml", &format!("{rewritten}\n"));
+    project.write(".ai/exuno.yaml", &format!("{rewritten}\n"));
 }
 
 fn init_no_sync(project: &Project, extra: &[&str]) {
     let mut args = vec!["init", "--tools", "claude", "--yes", "--no-sync"];
     args.extend_from_slice(extra);
-    project.agentsync().args(args).assert().success();
+    project.exuno().args(args).assert().success();
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn outputs_init_defaults_new_projects_to_committed() {
     init_no_sync(&project, &[]);
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .contains("outputs: committed")
     );
 }
@@ -73,18 +73,14 @@ fn outputs_init_defaults_new_projects_to_committed() {
 fn outputs_init_outputs_local_writes_local() {
     let project = Project::empty();
     init_no_sync(&project, &["--outputs", "local"]);
-    assert!(
-        project
-            .read(".ai/agent_sync.yaml")
-            .contains("outputs: local")
-    );
+    assert!(project.read(".ai/exuno.yaml").contains("outputs: local"));
 }
 
 #[test]
 fn outputs_init_rejects_an_unknown_mode() {
     let project = Project::empty();
     project
-        .agentsync()
+        .exuno()
         .args([
             "init",
             "--tools",
@@ -104,7 +100,7 @@ fn outputs_init_rejects_an_unknown_mode() {
 fn outputs_committed_sync_leaves_generated_files_and_the_manifest_visible_to_git() {
     let project = Project::empty();
     init_no_sync(&project, &[]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.exists("CLAUDE.md"));
     assert!(!is_ignored(&project, "CLAUDE.md"));
     assert!(!is_ignored(&project, ".ai/.sync-manifest"));
@@ -122,7 +118,7 @@ fn outputs_committed_sync_leaves_generated_files_and_the_manifest_visible_to_git
 fn outputs_local_sync_gitignores_generated_files_and_the_manifest() {
     let project = Project::empty();
     init_no_sync(&project, &["--outputs", "local"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(is_ignored(&project, "CLAUDE.md"));
     assert!(is_ignored(&project, ".ai/.sync-manifest"));
 }
@@ -131,11 +127,11 @@ fn outputs_local_sync_gitignores_generated_files_and_the_manifest() {
 fn outputs_switching_local_to_committed_empties_the_managed_block() {
     let project = Project::empty();
     init_no_sync(&project, &["--outputs", "local"]);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(is_ignored(&project, "CLAUDE.md"));
 
     set_outputs_mode(&project, "committed");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(!is_ignored(&project, "CLAUDE.md"));
     assert!(!is_ignored(&project, ".ai/.sync-manifest"));
     assert!(
@@ -150,7 +146,7 @@ fn outputs_a_missing_key_keeps_the_pre_existing_local_behaviour() {
     let project = Project::empty();
     init_no_sync(&project, &[]);
     drop_outputs_key(&project);
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(is_ignored(&project, "CLAUDE.md"));
     assert!(is_ignored(&project, ".ai/.sync-manifest"));
 }
@@ -160,11 +156,11 @@ fn outputs_a_missing_key_with_gitignore_update_false_means_committed() {
     let project = Project::empty();
     init_no_sync(&project, &[]);
     drop_outputs_key(&project);
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten = config.replace("  update: true", "  update: false");
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
     project.write(".gitignore", "keep-me\n");
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".gitignore"), "keep-me\n");
     assert!(!is_ignored(&project, "CLAUDE.md"));
 }
@@ -175,7 +171,7 @@ fn outputs_an_unknown_value_fails_sync_before_writing_anything() {
     init_no_sync(&project, &[]);
     set_outputs_mode(&project, "bogus");
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -188,11 +184,11 @@ fn outputs_committed_mode_still_gitignores_profile_config_homes() {
     let project = Project::empty();
     init_no_sync(&project, &[]);
     project
-        .agentsync()
+        .exuno()
         .args(["profile", "add", "hub", "--tools", "claude"])
         .assert()
         .success();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     assert!(project.read(".gitignore").contains("claude-hub"));
     assert!(!is_ignored(&project, "CLAUDE.md"));
 }

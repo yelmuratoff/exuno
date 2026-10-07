@@ -1,4 +1,4 @@
-//! `tests/migrate.bats`: `agentsync migrate` — the upgrade-prompt path and
+//! `tests/migrate.bats`: `exuno migrate` — the upgrade-prompt path and
 //! `--legacy` flat-layout retirement. Deeper coverage of the legacy-move
 //! planning, MCP consolidation, and engine-owned skill retirement logic
 //! lives in the `#[cfg(all(test, unix))]` unit tests at the bottom of
@@ -20,11 +20,11 @@ fn seeded() -> Project {
 fn migrate_outputs_a_grounded_upgrade_prompt() {
     let project = seeded();
     let mut config: String = project
-        .read(".ai/agent_sync.yaml")
+        .read(".ai/exuno.yaml")
         .lines()
         .map(|line| {
-            if line.starts_with("agentsync_version:") {
-                "agentsync_version: \"0.7.0\"".to_string()
+            if line.starts_with("exuno_version:") {
+                "exuno_version: \"0.7.0\"".to_string()
             } else {
                 line.to_string()
             }
@@ -32,22 +32,22 @@ fn migrate_outputs_a_grounded_upgrade_prompt() {
         .collect::<Vec<_>>()
         .join("\n");
     config.push('\n');
-    project.write(".ai/agent_sync.yaml", &config);
+    project.write(".ai/exuno.yaml", &config);
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_NO_CLIPBOARD", "1")
         .arg("migrate")
         .assert()
         .success()
-        .stdout(predicate::str::contains("AgentSync migration context"))
+        .stdout(predicate::str::contains("Exuno migration context"))
         .stdout(predicate::str::contains(
-            "Project-pinned AgentSync version: 0.7.0",
+            "Project-pinned Exuno version: 0.7.0",
         ))
         .stdout(predicate::str::contains("CHANGELOG.md"))
-        .stdout(predicate::str::contains("latest stable AgentSync release"))
-        .stdout(predicate::str::contains("agentsync doctor"))
-        .stdout(predicate::str::contains("agentsync check"));
+        .stdout(predicate::str::contains("latest stable Exuno release"))
+        .stdout(predicate::str::contains("exuno doctor"))
+        .stdout(predicate::str::contains("exuno check"));
 }
 
 // The pbcopy stand-in is a shell script the binary cannot spawn on Windows.
@@ -73,7 +73,7 @@ fn migrate_copies_the_full_prompt_with_an_available_clipboard_tool() {
     let new_path = format!("{}:{path}", mock_bin.display());
 
     project
-        .agentsync()
+        .exuno()
         .env("PATH", new_path)
         .env("AGENTSYNC_NO_CLIPBOARD", "0")
         .env("MIGRATE_CLIPBOARD_CAPTURE", &clipboard_capture)
@@ -86,30 +86,30 @@ fn migrate_copies_the_full_prompt_with_an_available_clipboard_tool() {
 
     let captured = std::fs::read_to_string(&clipboard_capture).unwrap();
     assert!(!captured.is_empty());
-    assert!(captured.contains("AgentSync migration context"));
-    assert!(captured.contains("latest stable AgentSync release"));
+    assert!(captured.contains("Exuno migration context"));
+    assert!(captured.contains("latest stable Exuno release"));
 }
 
 #[test]
 fn migrate_uses_an_explicit_fallback_when_the_project_version_is_absent() {
     let project = seeded();
-    std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
+    std::fs::remove_file(project.join(".ai/exuno.yaml")).unwrap();
 
     project
-        .agentsync()
+        .exuno()
         .env("AGENTSYNC_NO_CLIPBOARD", "1")
         .arg("migrate")
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Project-pinned AgentSync version: not detected",
+            "Project-pinned Exuno version: not detected",
         ));
 }
 
 #[test]
 fn migrate_legacy_reports_nothing_when_layout_is_already_clean() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -123,7 +123,7 @@ fn migrate_legacy_dry_run_shows_planned_moves_but_does_not_touch_files() {
     project.write(".ai/src/settings/claude.json", "{\"m\":\"S\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -144,7 +144,7 @@ fn migrate_apply_moves_hooks_and_settings_to_per_tool_dirs() {
     project.write(".ai/src/settings/claude.json", "{\"m\":\"S\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success();
@@ -181,7 +181,7 @@ fn migrate_apply_consolidates_identical_mcp_files_into_shared_mcp_json() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
@@ -200,7 +200,7 @@ fn migrate_apply_migrates_mcp_per_tool_when_files_differ() {
     project.write(".ai/src/mcp/cursor.json", "{\"m\":\"B\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success();
@@ -227,7 +227,7 @@ fn migrate_apply_skips_collisions_without_overwriting_target() {
     project.write(".ai/src/tools/cursor/hooks.json", "{\"m\":\"EXISTING\"}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success()
@@ -247,16 +247,16 @@ fn doctor_hint_points_at_migrate_apply_when_legacy_files_exist() {
     project.write(".ai/src/hooks/cursor.json", "{}\n");
 
     project
-        .agentsync()
+        .exuno()
         .arg("doctor")
         .assert()
-        .stdout(predicate::str::contains("agentsync migrate --apply"));
+        .stdout(predicate::str::contains("exuno migrate --apply"));
 }
 
 #[test]
 fn migrate_rejects_unknown_flag() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--bogus"])
         .assert()
         .failure()
@@ -266,7 +266,7 @@ fn migrate_rejects_unknown_flag() {
 #[test]
 fn migrate_help_prints_usage() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--help"])
         .assert()
         .success()
@@ -278,12 +278,12 @@ fn migrate_help_prints_usage() {
 #[test]
 fn migrate_legacy_help_documents_the_legacy_route() {
     seeded()
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "\n  USAGE\n    agentsync migrate\n    agentsync migrate --legacy [--apply] [--yes]\n",
+            "\n  USAGE\n    exuno migrate\n    exuno migrate --legacy [--apply] [--yes]\n",
         ))
         .stdout(predicate::str::contains("moves legacy flat-layout"));
 }
@@ -298,7 +298,7 @@ fn migrate_legacy_dry_run_lists_legacy_agent_dir_contents() {
     project.write(".agent/AGENTS.md", "legacy AGENTS\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -316,7 +316,7 @@ fn migrate_apply_yes_removes_legacy_agent_dir() {
     project.write(".agent/AGENTS.md", "legacy\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success()
@@ -332,7 +332,7 @@ fn migrate_apply_without_yes_and_without_tty_leaves_agent_dir_in_place() {
 
     // assert_cmd spawns without a controlling TTY, matching bats' non-interactive `run`.
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply"])
         .assert()
         .success()
@@ -349,14 +349,14 @@ fn migrate_flags_agent_dir_even_when_antigravity_is_enabled() {
     project.write(".agent/AGENTS.md", "stale\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Legacy pre-v0.6"));
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success()
@@ -372,7 +372,7 @@ fn migrate_detects_agent_dir_even_alongside_flat_layout_overrides() {
     project.write(".ai/src/hooks/cursor.json", "{}\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--legacy"])
         .assert()
         .success()
@@ -388,12 +388,12 @@ fn migrate_apply_moves_overrides_into_the_source_tools_directory() {
     // Overwrite wholesale, as the bats fixture does, so the sole `source:`
     // block is the one under test rather than the one `init` already wrote.
     project.write(
-        ".ai/agent_sync.yaml",
-        "format: 2\ntools:\n  enabled: []\nsource:\n  tools: \"catalog\"\n",
+        ".ai/exuno.yaml",
+        "format: 3\ntools:\n  enabled: []\nsource:\n  tools: \"catalog\"\n",
     );
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();
@@ -416,7 +416,7 @@ fn migrate_apply_keeps_a_non_json_mcp_override_next_to_identical_json_ones() {
     project.write(".ai/src/mcp/codex.toml", "[mcp_servers]\n");
 
     project
-        .agentsync()
+        .exuno()
         .args(["migrate", "--apply", "--yes"])
         .assert()
         .success();

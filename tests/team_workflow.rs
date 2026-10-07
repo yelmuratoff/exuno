@@ -67,8 +67,8 @@ fn git_output(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-fn agentsync_at(dir: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+fn exuno_at(dir: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command
@@ -122,11 +122,11 @@ fn seed_team(team_dir: &Path, mode: &str) -> (PathBuf, PathBuf) {
 
     let a = team_dir.join("a");
     git_clone(team_dir, &origin, &a);
-    agentsync_at(&a)
+    exuno_at(&a)
         .args(["init", "--tools", "claude", "--yes", "--outputs", mode])
         .assert()
         .success();
-    agentsync_at(&a).arg("sync").assert().success();
+    exuno_at(&a).arg("sync").assert().success();
     git(&a, &["add", "-A"]);
     git(&a, &["commit", "--quiet", "-m", "init agentsync"]);
     git(&a, &["push", "--quiet", "-u", "origin", "HEAD"]);
@@ -142,7 +142,7 @@ fn push_rule_edit(a: &Path) {
         &a.join(".ai/src/rules/core.md"),
         "\n- Team rule added by a.\n",
     );
-    agentsync_at(a).arg("sync").assert().success();
+    exuno_at(a).arg("sync").assert().success();
     git(a, &["add", "-A"]);
     git(a, &["commit", "--quiet", "-m", "rules: add team rule"]);
     git(a, &["push", "--quiet"]);
@@ -187,10 +187,10 @@ fn team_local_teammates_rule_edit_syncs_after_git_pull_without_a_drift_refusal()
     let team = team_dir();
     let team_path = team.path();
     let (a, b) = seed_team(team_path, "local");
-    agentsync_at(&b).arg("sync").assert().success();
+    exuno_at(&b).arg("sync").assert().success();
     push_rule_edit(&a);
     git(&b, &["pull", "--quiet"]);
-    agentsync_at(&b).arg("sync").assert().success();
+    exuno_at(&b).arg("sync").assert().success();
     assert!(read(&b.join(".claude/rules/core.md")).contains("Team rule added by a"));
 }
 
@@ -199,12 +199,12 @@ fn team_local_manual_edit_of_a_generated_file_is_still_refused_after_a_pull() {
     let team = team_dir();
     let team_path = team.path();
     let (a, b) = seed_team(team_path, "local");
-    agentsync_at(&b).arg("sync").assert().success();
+    exuno_at(&b).arg("sync").assert().success();
     push_rule_edit(&a);
     git(&b, &["pull", "--quiet"]);
-    agentsync_at(&b).arg("sync").assert().success();
+    exuno_at(&b).arg("sync").assert().success();
     append(&b.join(".claude/rules/core.md"), "\n# hand edit\n");
-    agentsync_at(&b)
+    exuno_at(&b)
         .arg("sync")
         .assert()
         .failure()
@@ -214,7 +214,7 @@ fn team_local_manual_edit_of_a_generated_file_is_still_refused_after_a_pull() {
 // ── committed mode ──────────────────────────────────────────────────────────
 
 #[test]
-fn team_committed_a_fresh_clone_has_generated_outputs_without_running_agentsync() {
+fn team_committed_a_fresh_clone_has_generated_outputs_without_running_exuno() {
     let team = team_dir();
     let team_path = team.path();
     let (_a, b) = seed_team(team_path, "committed");
@@ -243,7 +243,7 @@ fn team_committed_git_pull_alone_delivers_a_teammates_rule_edit() {
     push_rule_edit(&a);
     git(&b, &["pull", "--quiet"]);
     assert!(read(&b.join(".claude/rules/core.md")).contains("Team rule added by a"));
-    agentsync_at(&b).arg("check").assert().success();
+    exuno_at(&b).arg("check").assert().success();
 }
 
 #[test]
@@ -253,6 +253,6 @@ fn team_committed_sync_after_a_pull_is_a_clean_no_op() {
     let (a, b) = seed_team(team_path, "committed");
     push_rule_edit(&a);
     git(&b, &["pull", "--quiet"]);
-    agentsync_at(&b).arg("sync").assert().success();
+    exuno_at(&b).arg("sync").assert().success();
     assert!(git_output(&b, &["status", "--porcelain"]).trim().is_empty());
 }

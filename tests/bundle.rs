@@ -1,4 +1,4 @@
-//! `tests/bundle.bats`: `agentsync export` and `agentsync import` — a bundle
+//! `tests/bundle.bats`: `exuno export` and `exuno import` — a bundle
 //! round trip, a directory source, and a GitHub archive served by a curl
 //! stand-in on `PATH`.
 
@@ -13,8 +13,8 @@ use assert_cmd::Command;
 use common::Project;
 use predicates::prelude::*;
 
-fn agentsync_in(dir: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsync"));
+fn exuno_in(dir: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
     command
@@ -100,12 +100,12 @@ fn with_curl_stub(command: &mut Command, stub_dir: &Path, github_dir: &Path) {
 #[test]
 fn export_help_prints_usage() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["export", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync export — bundle source files into a shareable archive\n\n  USAGE\n    agentsync export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   ",
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   ",
         ))
         .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));
 }
@@ -113,12 +113,12 @@ fn export_help_prints_usage() {
 #[test]
 fn import_help_prints_usage() {
     Project::seeded(&[])
-        .agentsync()
+        .exuno()
         .args(["import", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  agentsync import — import config from GitHub, archive, or directory\n\n  USAGE\n    agentsync import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    -b, --branch <name>   "))
         .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));
@@ -128,37 +128,37 @@ fn import_help_prints_usage() {
 fn export_writes_the_bundle_and_lists_its_contents() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .arg("export")
         .assert()
         .success()
         .stdout(predicate::str::contains("AGENTS.md"))
         .stdout(predicate::str::contains("rules/ ("))
         .stdout(predicate::str::contains("Exported!"));
-    let archive = project.join("agentsync-bundle.tar.gz");
+    let archive = project.join("exuno-bundle.tar.gz");
     assert!(archive.is_file());
     let listing = tar_list(&archive);
     assert!(listing.lines().any(|l| l == ".ai/src/AGENTS.md"));
-    assert!(listing.lines().any(|l| l == ".ai/agent_sync.yaml"));
+    assert!(listing.lines().any(|l| l == ".ai/exuno.yaml"));
 }
 
 #[test]
 fn export_dry_run_writes_nothing() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["export", "--dry-run"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Dry run"));
-    assert!(!project.join("agentsync-bundle.tar.gz").exists());
+    assert!(!project.join("exuno-bundle.tar.gz").exists());
 }
 
 #[test]
 fn export_sizes_a_relative_archive_from_the_project_root() {
     let project = Project::seeded(&[]);
     std::fs::create_dir_all(project.join("sub")).unwrap();
-    agentsync_in(&project.join("sub"))
+    exuno_in(&project.join("sub"))
         .env("AGENTSYNC_REPO_ROOT", project.path())
         .args(["export", "-o", "rel.tgz"])
         .assert()
@@ -173,7 +173,7 @@ fn export_fails_without_ai() {
     let project = Project::seeded(&[]);
     std::fs::remove_dir_all(project.join(".ai")).unwrap();
     project
-        .agentsync()
+        .exuno()
         .arg("export")
         .assert()
         .code(1)
@@ -184,19 +184,19 @@ fn export_fails_without_ai() {
 fn import_copies_a_bundle_into_a_fresh_project() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["export", "-o", "bundle.tgz"])
         .assert()
         .success();
     std::fs::create_dir_all(project.join("fresh")).unwrap();
     std::fs::rename(project.join("bundle.tgz"), project.join("fresh/bundle.tgz")).unwrap();
-    agentsync_in(&project.join("fresh"))
+    exuno_in(&project.join("fresh"))
         .args(["import", "bundle.tgz"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Imported!"));
     assert!(project.join("fresh/.ai/src/AGENTS.md").is_file());
-    assert!(project.join("fresh/.ai/agent_sync.yaml").is_file());
+    assert!(project.join("fresh/.ai/exuno.yaml").is_file());
     assert_eq!(
         project.read(".ai/src/rules/core.md"),
         project.read("fresh/.ai/src/rules/core.md")
@@ -207,12 +207,12 @@ fn import_copies_a_bundle_into_a_fresh_project() {
 fn import_reports_an_up_to_date_project() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["export", "-o", "bundle.tgz"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["import", "bundle.tgz"])
         .assert()
         .success()
@@ -223,13 +223,13 @@ fn import_reports_an_up_to_date_project() {
 fn import_dry_run_previews_without_writing() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["export", "-o", "bundle.tgz"])
         .assert()
         .success();
     std::fs::create_dir_all(project.join("fresh")).unwrap();
     std::fs::rename(project.join("bundle.tgz"), project.join("fresh/bundle.tgz")).unwrap();
-    agentsync_in(&project.join("fresh"))
+    exuno_in(&project.join("fresh"))
         .args(["import", "bundle.tgz", "--dry-run"])
         .assert()
         .success()
@@ -243,7 +243,7 @@ fn import_only_limits_the_targets() {
     project.write("other/.ai/src/rules/other.md", "# Other rule\n");
     project.write("other/.ai/src/skills/new/SKILL.md", "# New skill\n");
     project
-        .agentsync()
+        .exuno()
         .args(["import", "other", "--only", "rules"])
         .assert()
         .success();
@@ -255,12 +255,12 @@ fn import_only_limits_the_targets() {
 fn import_only_that_matches_nothing_reports_an_up_to_date_project() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["export", "-o", "bundle.tgz"])
         .assert()
         .success();
     project
-        .agentsync()
+        .exuno()
         .args(["import", "bundle.tgz", "--only", "bogus"])
         .assert()
         .success()
@@ -271,16 +271,53 @@ fn import_only_that_matches_nothing_reports_an_up_to_date_project() {
 fn import_only_previews_a_config_only_change() {
     let project = Project::seeded(&[]);
     project.write("other/.ai/src/skills/new/SKILL.md", "# New skill\n");
-    project.write("other/.ai/agent_sync.yaml", "outputs: committed\n");
+    project.write("other/.ai/exuno.yaml", "outputs: committed\n");
     project
-        .agentsync()
+        .exuno()
         .args(["import", "other", "--only", "rules", "--dry-run"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("~ agent_sync.yaml (update)"))
+        .stdout(predicate::str::contains("~ exuno.yaml (update)"))
         .stdout(predicate::str::contains(
             "Summary: 0 new, 1 updated, 0 unchanged",
         ));
+}
+
+#[test]
+fn export_carries_a_legacy_ai_agent_sync_yaml() {
+    let project = Project::seeded(&[]);
+    std::fs::rename(
+        project.join(".ai/exuno.yaml"),
+        project.join(".ai/agent_sync.yaml"),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .arg("export")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("agent_sync.yaml"));
+    let listing = tar_list(&project.join("exuno-bundle.tar.gz"));
+    assert!(listing.lines().any(|l| l == ".ai/agent_sync.yaml"));
+}
+
+#[test]
+fn import_writes_into_a_legacy_agent_sync_yaml_the_project_already_has() {
+    let project = Project::seeded(&[]);
+    std::fs::rename(
+        project.join(".ai/exuno.yaml"),
+        project.join(".ai/agent_sync.yaml"),
+    )
+    .unwrap();
+    project.write("other/.ai/src/rules/core.md", "# Replaced core\n");
+    project.write("other/.ai/exuno.yaml", "outputs: committed\n");
+    project
+        .exuno()
+        .args(["import", "other", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/agent_sync.yaml"), "outputs: committed\n");
+    assert!(!project.exists(".ai/exuno.yaml"));
 }
 
 #[test]
@@ -288,7 +325,7 @@ fn import_from_a_directory_updates_changed_files() {
     let project = Project::seeded(&[]);
     project.write("other/.ai/src/rules/core.md", "# Replaced core\n");
     project
-        .agentsync()
+        .exuno()
         .args(["import", "other", "--force"])
         .assert()
         .success()
@@ -301,7 +338,7 @@ fn import_refuses_a_source_without_ai() {
     let project = Project::seeded(&[]);
     project.write("plain/docs/readme.md", "x\n");
     project
-        .agentsync()
+        .exuno()
         .args(["import", "plain"])
         .assert()
         .code(1)
@@ -314,7 +351,7 @@ fn import_refuses_a_source_without_ai() {
 fn import_rejects_an_unrecognized_source() {
     let project = Project::seeded(&[]);
     project
-        .agentsync()
+        .exuno()
         .args(["import", "nothing.txt"])
         .assert()
         .code(1)
@@ -328,7 +365,7 @@ fn import_downloads_a_github_archive_through_curl() {
     let project = Project::seeded(&[]);
     let (stub_dir, github_dir) = github_stub(&project);
     github_archive(&github_dir, "user/repo", "main");
-    let mut command = project.agentsync();
+    let mut command = project.exuno();
     with_curl_stub(&mut command, &stub_dir, &github_dir);
     command
         .args(["import", "https://github.com/user/repo", "--force"])
@@ -347,7 +384,7 @@ fn import_falls_back_to_master_when_main_is_missing() {
     let project = Project::seeded(&[]);
     let (stub_dir, github_dir) = github_stub(&project);
     github_archive(&github_dir, "user/repo2", "master");
-    let mut command = project.agentsync();
+    let mut command = project.exuno();
     with_curl_stub(&mut command, &stub_dir, &github_dir);
     command
         .args(["import", "https://github.com/user/repo2", "--force"])
@@ -362,7 +399,7 @@ fn import_falls_back_to_master_when_main_is_missing() {
 fn import_reports_a_branch_that_cannot_be_downloaded() {
     let project = Project::seeded(&[]);
     let (stub_dir, github_dir) = github_stub(&project);
-    let mut command = project.agentsync();
+    let mut command = project.exuno();
     with_curl_stub(&mut command, &stub_dir, &github_dir);
     command
         .args(["import", "https://github.com/user/repo", "--branch", "nope"])

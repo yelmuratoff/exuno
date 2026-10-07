@@ -1,4 +1,4 @@
-//! `agentsync update`: `lib/helpers/update.sh` for a binary install. The
+//! `exuno update`: `lib/helpers/update.sh` for a binary install. The
 //! release archive for this platform comes from GitHub Releases through
 //! `curl`, its sha256 is checked in-process, `tar` unpacks it, the new binary
 //! is asked for its version and its catalog, and then it is moved over the
@@ -18,21 +18,21 @@ use crate::output::changelog;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::transaction::manifest::sha256_hex;
-use crate::{Error, config::catalog, engine_version};
+use crate::{Error, config::catalog, config::names, engine_version};
 
 pub const HELP: Help = Help {
     command: "update",
     tagline: "replace the binary with a GitHub release",
     synopsis: &["update [<version>] [--strict]"],
     description: &[
-        "Downloads the release archive for this platform from GitHub Releases,\nverifies its sha256, and moves the new binary over the running one.\nConflicts between the new catalog and your overrides are queued for\nagentsync resolve.",
+        "Downloads the release archive for this platform from GitHub Releases,\nverifies its sha256, and moves the new binary over the running one.\nConflicts between the new catalog and your overrides are queued for\nexuno resolve.",
     ],
     sections: &[
         Section {
             title: "ARGUMENTS",
             entries: &[(
                 "<version>",
-                "Pin the install to that release tag (e.g. 0.35.0) instead of\nthe latest release — what a project's agentsync_version asks for",
+                "Pin the install to that release tag (e.g. 0.35.0) instead of\nthe latest release — what a project's exuno_version asks for",
             )],
         },
         Section {
@@ -86,11 +86,15 @@ const fn archive_extension() -> &'static str {
     if cfg!(windows) { "zip" } else { "tar.xz" }
 }
 
-const fn binary_name() -> &'static str {
+/// The names a release archive and its binary carry, newest first; releases
+/// before 0.45.0 ship as `agentsync-<target>`.
+const RELEASE_NAMES: [&str; 2] = [names::NAME, names::LEGACY_NAME];
+
+fn binary_file(name: &str) -> String {
     if cfg!(windows) {
-        "agentsync.exe"
+        format!("{name}.exe")
     } else {
-        "agentsync"
+        name.to_string()
     }
 }
 
@@ -208,17 +212,15 @@ fn cache_file(exe: &Path) -> Option<PathBuf> {
 /// `agentsync v<version>` as `version` prints it.
 fn version_of(answer: &str) -> Option<String> {
     let line = answer.split('\n').next()?;
-    let version = line.strip_prefix("agentsync v")?;
+    let version = line
+        .strip_prefix("exuno v")
+        .or_else(|| line.strip_prefix("agentsync v"))?;
     (!version.is_empty()).then(|| version.to_string())
 }
 
-/// The unpacked binary: `agentsync[.exe]` at the top or below the archive's
-/// one directory, as cargo-dist lays it out.
+/// The unpacked binary: `exuno[.exe]`, else `agentsync[.exe]`, at the top or
+/// below the archive's one directory, as cargo-dist lays it out.
 fn unpacked_binary(dir: &Path) -> Option<PathBuf> {
-    let flat = dir.join(binary_name());
-    if flat.is_file() {
-        return Some(flat);
-    }
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir)
         .ok()?
         .filter_map(|entry| entry.ok())
@@ -226,9 +228,13 @@ fn unpacked_binary(dir: &Path) -> Option<PathBuf> {
         .filter(|path| path.is_dir())
         .collect();
     dirs.sort();
-    dirs.into_iter()
-        .map(|top| top.join(binary_name()))
-        .find(|path| path.is_file())
+    RELEASE_NAMES.iter().find_map(|name| {
+        let file = binary_file(name);
+        std::iter::once(dir.to_path_buf())
+            .chain(dirs.iter().cloned())
+            .map(|top| top.join(&file))
+            .find(|path| path.is_file())
+    })
 }
 
 /// The staged copy renamed over the running binary. Windows cannot replace a
@@ -238,7 +244,7 @@ fn replace_binary(new: &Path, exe: &Path) -> Result<(), Error> {
     let name = exe
         .file_name()
         .map(|n| n.disk_text())
-        .unwrap_or_else(|| binary_name().to_string());
+        .unwrap_or_else(|| binary_file(names::NAME));
     let staged = dir.join(format!(".{name}.new"));
     std::fs::copy(new, &staged).map_err(|e| Error::io(&staged, e))?;
     #[cfg(unix)]
@@ -345,7 +351,7 @@ fn migration_banner(project_dir: &Path, style: &Style) -> String {
         style.cyan(".ai/src/tools/<tool>/<resource>.<ext>"),
         style.dim("."),
         style.dim("Run"),
-        style.cyan("agentsync migrate --apply"),
+        style.cyan("exuno migrate --apply"),
         style.dim("to move them. Legacy paths still read,"),
         style.dim("but will be dropped in 0.12.")
     )
@@ -461,22 +467,36 @@ impl Download<'_, '_> {
         }
     }
 
-    /// The release archive; a pinned tag without one is told apart from a
-    /// tag that predates the binary releases.
+    /// The release archive under the first of [`RELEASE_NAMES`] it is
+    /// published as, with that file name; a pinned tag without one is told
+    /// apart from a tag that predates the binary releases.
     fn archive(
         &mut self,
         tag: &str,
         pinned: bool,
-        url: &str,
-        name: &str,
-    ) -> Result<Result<PathBuf, u8>, Error> {
-        let archive = self.scratch.join(name);
-        let fetched = (self.env.fetch)(url, &archive);
-        if pinned && matches!(fetched, Ok(404)) {
+        base: &str,
+        target: &str,
+    ) -> Result<Result<(String, PathBuf), u8>, Error> {
+        let names = RELEASE_NAMES.map(|name| format!("{name}-{target}.{}", archive_extension()));
+        for name in &names {
+            let url = format!("{base}/{name}");
+            let archive = self.scratch.join(name);
+            let fetched = (self.env.fetch)(&url, &archive);
+            if !matches!(fetched, Ok(404)) {
+                return Ok(self
+                    .answered(&url, fetched)?
+                    .map(|()| (name.clone(), archive)));
+            }
+        }
+        if pinned {
             let message = self.missing_tag(tag);
             return Ok(Err(self.refuse(&message)?));
         }
-        Ok(self.answered(url, fetched)?.map(|()| archive))
+        let url = format!("{base}/{}", names[0]);
+        let archive = self.scratch.join(&names[0]);
+        Ok(self
+            .answered(&url, Ok(404))?
+            .map(|()| (names[0].clone(), archive)))
     }
 
     fn missing_tag(&mut self, tag: &str) -> String {
@@ -485,11 +505,11 @@ impl Download<'_, '_> {
         let tag_url = format!("https://api.github.com/repos/{REPO}/git/ref/tags/{tag}");
         match (self.env.fetch)(&tag_url, &probe) {
             Ok(200) => format!(
-                "AgentSync {tag} predates the binary releases, so update cannot install it.\n  {}\n    AGENTSYNC_VERSION={tag} curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash",
+                "Exuno {tag} predates the binary releases, so update cannot install it.\n  {}\n    EXUNO_VERSION={tag} curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash",
                 style.dim("Pin it with the installer instead:")
             ),
             _ => format!(
-                "No AgentSync release is tagged {tag}.\n  {} {}",
+                "No Exuno release is tagged {tag}.\n  {} {}",
                 style.dim("List releases at"),
                 style.cyan(&format!("https://github.com/{REPO}/releases"))
             ),
@@ -530,9 +550,10 @@ impl Download<'_, '_> {
         }
         match unpacked_binary(&unpacked) {
             Some(binary) => Ok(Ok(binary)),
-            None => Ok(Err(
-                self.refuse(&format!("{name} does not contain {}.", binary_name()))?
-            )),
+            None => Ok(Err(self.refuse(&format!(
+                "{name} does not contain {}.",
+                binary_file(names::NAME)
+            ))?)),
         }
     }
 
@@ -577,11 +598,9 @@ impl Download<'_, '_> {
         pinned: bool,
         target: &str,
     ) -> Result<Result<Fetched, u8>, Error> {
-        let archive_name = format!("agentsync-{target}.{}", archive_extension());
         let base = format!("https://github.com/{REPO}/releases/download/{tag}");
-        let archive_url = format!("{base}/{archive_name}");
-        let archive = match self.archive(tag, pinned, &archive_url, &archive_name)? {
-            Ok(archive) => archive,
+        let (archive_name, archive) = match self.archive(tag, pinned, &base, target)? {
+            Ok(found) => found,
             Err(status) => return Ok(Err(status)),
         };
         let sum_name = format!("{archive_name}.sha256");
@@ -651,7 +670,7 @@ fn queued_hint(style: &Style) -> String {
         style.dim("Queued in"),
         style.cyan(".ai/.pending-resolutions.yaml"),
         style.dim(" — run"),
-        style.cyan("agentsync resolve"),
+        style.cyan("exuno resolve"),
         style.dim(" to walk them.")
     )
 }
@@ -664,7 +683,7 @@ fn refresh_hint(project_dir: &Path, style: &Style) -> String {
     format!(
         "  {} {} {}\n\n",
         style.dim("Rule, skill, and command templates in .ai/src/ update separately — run"),
-        style.cyan("agentsync refresh"),
+        style.cyan("exuno refresh"),
         style.dim("to review them.")
     )
 }
@@ -685,7 +704,7 @@ pub fn update(
         out,
         format!(
             "\n{}\n\n  Checking for updates...\n",
-            style.bold("  AgentSync Update")
+            style.bold("  Exuno Update")
         )
         .as_bytes(),
     )?;
@@ -804,6 +823,8 @@ mod tests {
             Some("0.36.0".to_string())
         );
         assert_eq!(version_of("agentsync v"), None);
+        assert_eq!(version_of("exuno v1.2.3\n").as_deref(), Some("1.2.3"));
+        assert_eq!(version_of("exuno v"), None);
         assert_eq!(version_of("nope"), None);
     }
 
@@ -843,7 +864,7 @@ mod tests {
         std::fs::write(dir.path().join(".ai/src/mcp/claude.json"), "{}").unwrap();
         assert_eq!(
             migration_banner(dir.path(), &style),
-            "\n  Legacy payload layout detected\n  Your project has overrides under .ai/src/{hooks,mcp,settings}/. The canonical\n  layout since 0.11 is .ai/src/tools/<tool>/<resource>.<ext>.\n  Run agentsync migrate --apply to move them. Legacy paths still read,\n  but will be dropped in 0.12.\n\n"
+            "\n  Legacy payload layout detected\n  Your project has overrides under .ai/src/{hooks,mcp,settings}/. The canonical\n  layout since 0.11 is .ai/src/tools/<tool>/<resource>.<ext>.\n  Run exuno migrate --apply to move them. Legacy paths still read,\n  but will be dropped in 0.12.\n\n"
         );
     }
 
@@ -866,9 +887,9 @@ mod tests {
             std::fs::write(dir.path().join("install/bin/agentsync"), "old binary").unwrap();
             std::fs::write(dir.path().join("install/.update_cache"), "9.9.9\n").unwrap();
             std::fs::create_dir_all(dir.path().join("project/.ai/src/tools")).unwrap();
-            let release_dir = dir.path().join("release/agentsync-fixture");
+            let release_dir = dir.path().join("release/exuno-fixture");
             std::fs::create_dir_all(&release_dir).unwrap();
-            std::fs::write(release_dir.join("agentsync"), "new binary").unwrap();
+            std::fs::write(release_dir.join("exuno"), "new binary").unwrap();
             std::fs::write(
                 release_dir.join("CHANGELOG.md"),
                 format!("# Changelog\n\n## {version}\n\n### Fixed\n\n- **Something** with `code`.\n\n## 0.1.0\n\n- Ancient.\n"),
@@ -893,14 +914,23 @@ mod tests {
         }
 
         fn publish(&mut self, tag: &str) {
+            self.publish_as(tag, "exuno");
+        }
+
+        /// A release whose archive and the binary inside are named `name`.
+        fn publish_as(&mut self, tag: &str, name: &str) {
+            if name != "exuno" {
+                std::fs::rename(self.release_dir.join("exuno"), self.release_dir.join(name))
+                    .unwrap();
+            }
             let target = target().unwrap();
             let base = format!("https://github.com/{REPO}/releases/download/{tag}");
             let archive = b"an archive".to_vec();
-            let sum = format!("{}  agentsync-{target}.tar.xz\n", sha256_hex(&archive));
+            let sum = format!("{}  {name}-{target}.tar.xz\n", sha256_hex(&archive));
             self.served
-                .insert(format!("{base}/agentsync-{target}.tar.xz"), archive);
+                .insert(format!("{base}/{name}-{target}.tar.xz"), archive);
             self.served.insert(
-                format!("{base}/agentsync-{target}.tar.xz.sha256"),
+                format!("{base}/{name}-{target}.tar.xz.sha256"),
                 sum.into_bytes(),
             );
         }
@@ -923,17 +953,18 @@ mod tests {
             };
             let release_dir = self.release_dir.clone();
             let mut extract = |_archive: &Path, into: &Path| -> bool {
-                let top = into.join("agentsync-fixture");
+                let top = into.join("exuno-fixture");
                 std::fs::create_dir_all(&top).unwrap();
-                for name in ["agentsync", "CHANGELOG.md"] {
-                    std::fs::copy(release_dir.join(name), top.join(name)).unwrap();
+                for entry in std::fs::read_dir(&release_dir).unwrap() {
+                    let entry = entry.unwrap();
+                    std::fs::copy(entry.path(), top.join(entry.file_name())).unwrap();
                 }
                 true
             };
             let (version, catalog) = (self.version.clone(), self.catalog.clone());
             let mut ask = |_binary: &Path, arg: &str| -> Option<String> {
                 match arg {
-                    "version" => Some(format!("agentsync v{version}\n")),
+                    "version" => Some(format!("exuno v{version}\n")),
                     CATALOG_COMMAND => Some(catalog.clone()),
                     _ => None,
                 }
@@ -964,7 +995,7 @@ mod tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\n  agentsync update — replace the binary with a GitHub release\n\n  USAGE\n    agentsync update [<version>] [--strict]\n\n  DESCRIPTION\n    Downloads the release archive for this platform from GitHub Releases,\n    verifies its sha256, and moves the new binary over the running one.\n    Conflicts between the new catalog and your overrides are queued for\n    agentsync resolve.\n\n  ARGUMENTS\n    <version>   Pin the install to that release tag (e.g. 0.35.0) instead of\n                the latest release — what a project's agentsync_version asks for\n\n  OPTIONS\n    --strict     Exit non-zero if upstream changed a field you have overridden\n    -h, --help   Show this help\n\n  EXAMPLES\n    agentsync update\n    agentsync update 0.35.0\n    agentsync update --strict\n\n"
+            "\n  exuno update — replace the binary with a GitHub release\n\n  USAGE\n    exuno update [<version>] [--strict]\n\n  DESCRIPTION\n    Downloads the release archive for this platform from GitHub Releases,\n    verifies its sha256, and moves the new binary over the running one.\n    Conflicts between the new catalog and your overrides are queued for\n    exuno resolve.\n\n  ARGUMENTS\n    <version>   Pin the install to that release tag (e.g. 0.35.0) instead of\n                the latest release — what a project's exuno_version asks for\n\n  OPTIONS\n    --strict     Exit non-zero if upstream changed a field you have overridden\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno update\n    exuno update 0.35.0\n    exuno update --strict\n\n"
         );
         let (status, out, err) = fixture.run(&["--bogus"]);
         assert_eq!(
@@ -972,7 +1003,7 @@ mod tests {
             (
                 2,
                 "",
-                "Error: Unknown flag: --bogus\nUsage: agentsync update [<version>] [--strict]\n"
+                "Error: Unknown flag: --bogus\nUsage: exuno update [<version>] [--strict]\n"
             )
         );
         let (status, _, err) = fixture.run(&["1.0.0", "2.0.0"]);
@@ -980,7 +1011,7 @@ mod tests {
             (status, err.as_str()),
             (
                 2,
-                "Error: Unexpected argument: 2.0.0\nUsage: agentsync update [<version>] [--strict]\n"
+                "Error: Unexpected argument: 2.0.0\nUsage: exuno update [<version>] [--strict]\n"
             )
         );
     }
@@ -994,7 +1025,19 @@ mod tests {
         std::fs::write(dir.path().join(".ai/.template-manifest"), "").unwrap();
         assert_eq!(
             refresh_hint(dir.path(), &style),
-            "  Rule, skill, and command templates in .ai/src/ update separately — run agentsync refresh to review them.\n\n"
+            "  Rule, skill, and command templates in .ai/src/ update separately — run exuno refresh to review them.\n\n"
+        );
+    }
+
+    #[test]
+    fn a_pin_to_a_release_before_the_rename_installs_its_agentsync_archive() {
+        let mut fixture = Fixture::new("0.43.0", &catalog_dump());
+        fixture.publish_as("0.43.0", "agentsync");
+        let (status, out, err) = fixture.run(&["0.43.0"]);
+        assert_eq!((status, err.as_str()), (0, ""), "{out}");
+        assert_eq!(
+            std::fs::read_to_string(fixture.exe()).unwrap(),
+            "new binary"
         );
     }
 
@@ -1012,7 +1055,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Update\n\n  Checking for updates...\n  Updating...\n\n  Updated! v{0} → v9.9.9\n\n  What's new in v9.9.9:\n\n\n  Fixed\n    • Something with code.\n\n",
+                "\n  Exuno Update\n\n  Checking for updates...\n  Updating...\n\n  Updated! v{0} → v9.9.9\n\n  What's new in v9.9.9:\n\n\n  Fixed\n    • Something with code.\n\n",
                 engine_version()
             )
         );
@@ -1038,7 +1081,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Update\n\n  Checking for updates...\n  Already up to date! (v{})\n\n",
+                "\n  Exuno Update\n\n  Checking for updates...\n  Already up to date! (v{})\n\n",
                 engine_version()
             )
         );
@@ -1056,7 +1099,7 @@ mod tests {
         assert!(out.ends_with("  Pinning to v999.0.0...\n"));
         assert_eq!(
             err,
-            "  Error: No AgentSync release is tagged 999.0.0.\n  List releases at https://github.com/yelmuratoff/agent_sync/releases\n"
+            "  Error: No Exuno release is tagged 999.0.0.\n  List releases at https://github.com/yelmuratoff/exuno/releases\n"
         );
         fixture.served.insert(
             format!("https://api.github.com/repos/{REPO}/git/ref/tags/0.1.0"),
@@ -1066,20 +1109,20 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            "  Error: AgentSync 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh | bash\n"
+            "  Error: Exuno 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    EXUNO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n"
         );
         fixture.publish("9.9.9");
         let target = target().unwrap();
         fixture.served.insert(
             format!(
-                "https://github.com/{REPO}/releases/download/9.9.9/agentsync-{target}.tar.xz.sha256"
+                "https://github.com/{REPO}/releases/download/9.9.9/exuno-{target}.tar.xz.sha256"
             ),
             b"0000  nope\n".to_vec(),
         );
         let (status, _, err) = fixture.run(&["9.9.9"]);
         assert_eq!(status, 1);
         assert!(err.starts_with(&format!(
-            "  Error: checksum mismatch for agentsync-{target}.tar.xz.\n  expected 0000, got "
+            "  Error: checksum mismatch for exuno-{target}.tar.xz.\n  expected 0000, got "
         )));
         assert_eq!(
             std::fs::read_to_string(fixture.exe()).unwrap(),
@@ -1118,7 +1161,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            "  Error: Failed to fetch updates from GitHub.\n    HTTP 404 for https://api.github.com/repos/yelmuratoff/agent_sync/releases/latest\n  Check your network connection and that the remote is reachable.\n"
+            "  Error: Failed to fetch updates from GitHub.\n    HTTP 404 for https://api.github.com/repos/yelmuratoff/exuno/releases/latest\n  Check your network connection and that the remote is reachable.\n"
         );
         fixture.offline = true;
         let (status, _, err) = fixture.run(&["9.9.9"]);
@@ -1153,7 +1196,7 @@ mod tests {
         let (status, out, err) = fixture.run(&["9.9.9"]);
         assert_eq!(err, "");
         assert_eq!(status, 0);
-        assert!(out.contains("\n  Upstream touched fields you have overridden:\n\n    claude\n      ◆ targets.rules.dest\n          base: .claude/rules → .claude/rules-v2\n          your override: .claude/my-rules\n\n  Queued in .ai/.pending-resolutions.yaml — run agentsync resolve to walk them.\n\n\n"));
+        assert!(out.contains("\n  Upstream touched fields you have overridden:\n\n    claude\n      ◆ targets.rules.dest\n          base: .claude/rules → .claude/rules-v2\n          your override: .claude/my-rules\n\n  Queued in .ai/.pending-resolutions.yaml — run exuno resolve to walk them.\n\n\n"));
         let queue =
             std::fs::read_to_string(fixture.project().join(".ai/.pending-resolutions.yaml"))
                 .unwrap();

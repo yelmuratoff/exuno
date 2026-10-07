@@ -30,7 +30,7 @@ fn opencode_shared_local_mcp_is_composed_into_settings() {
         "{\"mcpServers\":{\"github\":{\"command\":\"npx\",\"args\":[\"-y\",\"@github/mcp\"],\"env\":{\"TOKEN\":\"${GITHUB_TOKEN}\"}}}}",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert_eq!(
         project.read("opencode.json"),
@@ -50,7 +50,7 @@ fn opencode_per_tool_mcp_overrides_the_shared_source() {
         "{\"mcpServers\":{\"private\":{\"command\":\"private\"}}}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     let composed = project.read("opencode.json");
     assert!(composed.contains("\"private\""));
@@ -65,7 +65,7 @@ fn opencode_settings_owned_mcp_is_preserved_without_a_canonical_source() {
         "{\"mcp\":{\"native\":{\"type\":\"local\",\"command\":[\"native\"]}}}\n",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert_eq!(
         project.read(".ai/src/tools/opencode/settings.json"),
@@ -81,7 +81,7 @@ fn opencode_remote_mcp_preserves_supported_options() {
         "{\"mcpServers\":{\"docs\":{\"type\":\"sse\",\"url\":\"https://example.test/mcp\",\"headers\":{\"Authorization\":\"Bearer {env:TOKEN}\"},\"enabled\":false,\"timeout\":9000,\"oauth\":false}}}",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert_eq!(
         project.read("opencode.json"),
@@ -95,7 +95,7 @@ fn opencode_rejects_non_object_mcp_servers() {
     write_shared_mcp(&project, "{\"mcpServers\":[]}");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -108,7 +108,7 @@ fn opencode_rejects_a_non_object_server() {
     write_shared_mcp(&project, "{\"mcpServers\":{\"x\":[]}}");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -121,7 +121,7 @@ fn opencode_validates_server_field_types() {
     write_shared_mcp(&project, "{\"mcpServers\":{\"x\":{\"command\":7}}}");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -139,7 +139,7 @@ fn opencode_rejects_ambiguous_transport() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -157,7 +157,7 @@ fn opencode_rejects_unsupported_fields() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -198,7 +198,7 @@ fn opencode_validates_collection_and_option_types() {
     for (input, expected) in cases {
         write_shared_mcp(&project, input);
         project
-            .agentsync()
+            .exuno()
             .arg("sync")
             .assert()
             .failure()
@@ -234,7 +234,7 @@ fn opencode_enforces_transport_specific_fields_and_types() {
     for (input, expected) in cases {
         write_shared_mcp(&project, input);
         project
-            .agentsync()
+            .exuno()
             .arg("sync")
             .assert()
             .failure()
@@ -250,7 +250,7 @@ fn opencode_preserves_valid_json_escapes() {
         "{\"mcp\\u0053ervers\":{\"escaped\\u002dname\":{\"comm\\u0061nd\":\"tool\\\\bin\",\"args\":[\"line\\nvalue\"],\"env\":{\"QUOTE\":\"a\\\"b\"}}}}",
     );
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     let composed = project.read("opencode.json");
     assert!(composed.contains("\"command\": [\"tool\\\\bin\", \"line\\nvalue\"]"));
@@ -263,7 +263,7 @@ fn opencode_rejects_unsupported_canonical_top_level_fields() {
     write_shared_mcp(&project, "{\"mcpServers\":{},\"version\":1}");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -281,7 +281,7 @@ fn opencode_rejects_duplicate_keys() {
     );
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -298,7 +298,7 @@ fn opencode_rejects_settings_and_canonical_mcp_ownership_conflict() {
     write_shared_mcp(&project, "{\"mcpServers\":{\"x\":{\"command\":\"x\"}}}");
 
     project
-        .agentsync()
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
@@ -314,16 +314,12 @@ fn opencode_rejects_settings_and_canonical_mcp_ownership_conflict() {
 #[test]
 fn opencode_malformed_mcp_leaves_destination_and_manifest_unchanged() {
     let project = seeded();
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     project.write("opencode.json", "ORIGINAL\n");
     let manifest_before = project.sha256(".ai/.sync-manifest");
     write_shared_mcp(&project, "{\"mcpServers\":");
 
-    project
-        .agentsync()
-        .args(["sync", "--force"])
-        .assert()
-        .failure();
+    project.exuno().args(["sync", "--force"]).assert().failure();
 
     assert_eq!(project.read("opencode.json"), "ORIGINAL\n");
     assert_eq!(project.sha256(".ai/.sync-manifest"), manifest_before);
@@ -335,7 +331,7 @@ fn opencode_dry_run_validates_malformed_mcp() {
     write_shared_mcp(&project, "{\"mcpServers\":");
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run"])
         .assert()
         .failure();
@@ -349,7 +345,7 @@ fn opencode_dry_run_composes_without_writing() {
     write_shared_mcp(&project, "{\"mcpServers\":{\"x\":{\"command\":\"x\"}}}");
 
     project
-        .agentsync()
+        .exuno()
         .args(["sync", "--dry-run"])
         .assert()
         .success();
@@ -364,11 +360,11 @@ fn opencode_repeated_composition_is_byte_identical() {
         &project,
         "{\"mcpServers\":{\"x\":{\"command\":\"x\",\"enabled\":true,\"timeout\":12}}}",
     );
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
     let config_before = project.sha256("opencode.json");
     let manifest_before = project.sha256(".ai/.sync-manifest");
 
-    project.agentsync().arg("sync").assert().success();
+    project.exuno().arg("sync").assert().success();
 
     assert_eq!(project.sha256("opencode.json"), config_before);
     assert_eq!(project.sha256(".ai/.sync-manifest"), manifest_before);

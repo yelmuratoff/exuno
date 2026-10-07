@@ -111,15 +111,17 @@ while [ $# -gt 0 ]; do
     esac
 done
 case "$url" in
-    https://api.github.com/repos/yelmuratoff/agent_sync/releases/latest)
+    https://api.github.com/repos/yelmuratoff/exuno/releases/latest)
         file="$FAKE_RELEASES/latest.json" ;;
-    https://api.github.com/repos/yelmuratoff/agent_sync/git/ref/tags/*)
+    https://api.github.com/repos/yelmuratoff/exuno/git/ref/tags/*)
         file="$FAKE_RELEASES/tags/${url##*/}" ;;
-    https://github.com/yelmuratoff/agent_sync/releases/download/*)
+    https://github.com/yelmuratoff/exuno/releases/download/*)
         rest="${url#*/releases/download/}"; tag="${rest%%/*}"; name="${rest#*/}"
         case "$name" in
-            agentsync-*.sha256) name="archive.tar.xz.sha256" ;;
-            agentsync-*) name="archive.tar.xz" ;;
+            exuno-*.sha256) name="exuno.tar.xz.sha256" ;;
+            exuno-*) name="exuno.tar.xz" ;;
+            agentsync-*.sha256) name="agentsync.tar.xz.sha256" ;;
+            agentsync-*) name="agentsync.tar.xz" ;;
         esac
         file="$FAKE_RELEASES/$tag/$name" ;;
     *) printf '000'; exit 6 ;;
@@ -132,43 +134,42 @@ if [ -f "$file" ]; then cp "$file" "$out"; printf '200'; else printf '404'; fi
     make_executable(&curl_path);
 }
 
-/// A fixture binary release for `tag`: the archive holds a script that
-/// answers `version` with the tag, plus a `CHANGELOG.md`, under one
-/// directory.
-fn publish_release(fake_releases: &Path, rel_root: &Path, tag: &str) {
-    let top = rel_root
-        .join(format!("rel-{tag}"))
-        .join("agentsync-fixture");
+/// A fixture binary release for `tag` published as `name`: the archive holds
+/// a `name` script that answers `version` with the tag, plus a
+/// `CHANGELOG.md`, under one directory.
+fn publish_release(fake_releases: &Path, rel_root: &Path, tag: &str, name: &str) {
+    let staged = rel_root.join(format!("rel-{tag}-{name}"));
+    let top = staged.join(format!("{name}-fixture"));
     std::fs::create_dir_all(&top).unwrap();
     let release_dir = fake_releases.join(tag);
     std::fs::create_dir_all(&release_dir).unwrap();
 
     write(
-        &top.join("agentsync"),
+        &top.join(name),
         &format!(
-            "#!/usr/bin/env bash\ncase \"${{1:-}}\" in\n    version) echo \"agentsync v{tag}\" ;;\n    *) exit 1 ;;\nesac\n"
+            "#!/usr/bin/env bash\ncase \"${{1:-}}\" in\n    version) echo \"{name} v{tag}\" ;;\n    *) exit 1 ;;\nesac\n"
         ),
     );
-    make_executable(&top.join("agentsync"));
+    make_executable(&top.join(name));
     write(
         &top.join("CHANGELOG.md"),
         &format!("# Changelog\n\n## {tag}\n\n- Fixture.\n"),
     );
 
-    let archive = release_dir.join("archive.tar.xz");
+    let archive = release_dir.join(format!("{name}.tar.xz"));
     let status = StdCommand::new("tar")
         .arg("-cJf")
         .arg(&archive)
         .arg("-C")
-        .arg(rel_root.join(format!("rel-{tag}")))
-        .arg("agentsync-fixture")
+        .arg(&staged)
+        .arg(format!("{name}-fixture"))
         .status()
         .unwrap();
     assert!(status.success());
-    let sum = agentsync::transaction::manifest::sha256_hex(&std::fs::read(&archive).unwrap());
+    let sum = exuno::transaction::manifest::sha256_hex(&std::fs::read(&archive).unwrap());
     write(
-        &release_dir.join("archive.tar.xz.sha256"),
-        &format!("{sum}  archive.tar.xz\n"),
+        &release_dir.join(format!("{name}.tar.xz.sha256")),
+        &format!("{sum}  {name}.tar.xz\n"),
     );
 }
 
@@ -220,7 +221,12 @@ impl Fixture {
     }
 
     fn publish(&self, tag: &str) {
-        publish_release(&self.fake_releases, &self.rel_root, tag);
+        publish_release(&self.fake_releases, &self.rel_root, tag, "exuno");
+    }
+
+    /// A release from before the rename, published only as `agentsync-<target>`.
+    fn publish_legacy(&self, tag: &str) {
+        publish_release(&self.fake_releases, &self.rel_root, tag, "agentsync");
     }
 
     fn write_latest_json(&self, tag: &str) {
@@ -230,32 +236,48 @@ impl Fixture {
         );
     }
 
-    /// `bash install.sh`, `AGENTSYNC_VERSION` optionally pinned.
+    /// `bash install.sh`, `EXUNO_VERSION` optionally pinned.
     fn run_install(&self, version: Option<&str>) -> Output {
+        match version {
+            Some(version) => self.run_install_with(&[("EXUNO_VERSION", version)]),
+            None => self.run_install_with(&[]),
+        }
+    }
+
+    /// `bash install.sh` with `vars` set on top of the fixture's paths.
+    fn run_install_with(&self, vars: &[(&str, &str)]) -> Output {
         let mut command = StdCommand::new("bash");
         command
             .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/install.sh"))
             .env("HOME", &self.home)
-            .env("AGENTSYNC_REPO_URL", &self.origin)
-            .env("AGENTSYNC_INSTALL_DIR", &self.install_dir)
-            .env("AGENTSYNC_BIN_DIR", &self.bin_dir)
+            .env("EXUNO_REPO_URL", &self.origin)
+            .env("EXUNO_INSTALL_DIR", &self.install_dir)
+            .env("EXUNO_BIN_DIR", &self.bin_dir)
             .env("PATH", self.path())
             .env("FAKE_RELEASES", &self.fake_releases)
             .env("GIT_CONFIG_GLOBAL", absent_git_config())
-            .env("GIT_CONFIG_SYSTEM", absent_git_config())
-            .env_remove("AGENTSYNC_VERSION");
-        if let Some(version) = version {
-            command.env("AGENTSYNC_VERSION", version);
+            .env("GIT_CONFIG_SYSTEM", absent_git_config());
+        for suffix in ["VERSION", "REPO_URL", "INSTALL_DIR", "BIN_DIR"] {
+            command.env_remove(format!("AGENTSYNC_{suffix}"));
+        }
+        command.env_remove("EXUNO_VERSION");
+        for (key, value) in vars {
+            command.env(key, value);
         }
         command.output().unwrap()
     }
 
-    fn bin_link_version(&self) -> String {
-        let output = StdCommand::new(self.bin_dir.join("agentsync"))
+    /// What the `name` link on the fixture's PATH answers to `version`.
+    fn link_version(&self, name: &str) -> String {
+        let output = StdCommand::new(self.bin_dir.join(name))
             .arg("version")
             .output()
             .unwrap();
         String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn bin_link_version(&self) -> String {
+        self.link_version("exuno")
     }
 }
 
@@ -293,21 +315,21 @@ fn the_latest_binary_release_is_downloaded_verified_and_linked() {
     let out = stdout(&output);
     assert!(out.contains("Installed successfully!"));
     assert!(out.contains(&format!("v{FIXTURE_NEW}")));
-    assert!(fx.install_dir.join("bin/agentsync").is_file());
-    assert!(fx.bin_dir.join("agentsync").exists());
-    assert_eq!(fx.bin_link_version(), format!("agentsync v{FIXTURE_NEW}"));
+    assert!(fx.install_dir.join("bin/exuno").is_file());
+    assert!(fx.bin_dir.join("exuno").exists());
+    assert_eq!(fx.bin_link_version(), format!("exuno v{FIXTURE_NEW}"));
     assert!(!fx.install_dir.join(".git").exists());
     let zshrc = std::fs::read_to_string(fx.home.join(".zshrc")).unwrap();
     assert!(!zshrc.contains("AGENTSYNC_HOME"));
 }
 
 #[test]
-fn agentsync_version_pins_a_binary_release() {
+fn exuno_version_pins_a_binary_release() {
     let fx = Fixture::new();
     fx.publish(FIXTURE_NEW);
     let output = fx.run_install(Some(FIXTURE_NEW));
     assert!(output.status.success(), "{}", stderr(&output));
-    assert_eq!(fx.bin_link_version(), format!("agentsync v{FIXTURE_NEW}"));
+    assert_eq!(fx.bin_link_version(), format!("exuno v{FIXTURE_NEW}"));
     assert!(!fx.install_dir.join(".git").exists());
 }
 
@@ -317,13 +339,14 @@ fn a_checksum_mismatch_aborts_before_anything_is_linked() {
     fx.publish(FIXTURE_NEW);
     write(
         &fx.fake_releases
-            .join(format!("{FIXTURE_NEW}/archive.tar.xz.sha256")),
-        "0000  archive.tar.xz\n",
+            .join(format!("{FIXTURE_NEW}/exuno.tar.xz.sha256")),
+        "0000  exuno.tar.xz\n",
     );
     let output = fx.run_install(Some(FIXTURE_NEW));
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains("checksum mismatch"));
-    assert!(!fx.install_dir.join("bin/agentsync").exists());
+    assert!(!fx.install_dir.join("bin/exuno").exists());
+    assert!(!fx.bin_dir.join("exuno").exists());
     assert!(!fx.bin_dir.join("agentsync").exists());
 }
 
@@ -333,11 +356,11 @@ fn without_a_pin_an_unreachable_github_fails_clearly() {
     let output = fx.run_install(None);
     assert_eq!(output.status.code(), Some(1));
     assert!(stderr(&output).contains("could not read the latest release"));
-    assert!(!fx.bin_dir.join("agentsync").exists());
+    assert!(!fx.bin_dir.join("exuno").exists());
 }
 
 #[test]
-fn agentsync_version_pins_a_tag_without_a_binary_from_source() {
+fn exuno_version_pins_a_tag_without_a_binary_from_source() {
     let fx = Fixture::new();
     let output = fx.run_install(Some(FIXTURE_NEW));
     assert!(output.status.success(), "{}", stderr(&output));
@@ -346,13 +369,13 @@ fn agentsync_version_pins_a_tag_without_a_binary_from_source() {
         std::fs::read_to_string(fx.install_dir.join("VERSION")).unwrap(),
         format!("{FIXTURE_NEW}\n")
     );
-    assert!(fx.bin_dir.join("agentsync").exists());
+    assert!(fx.bin_dir.join("exuno").exists());
     let zshrc = std::fs::read_to_string(fx.home.join(".zshrc")).unwrap();
     assert!(zshrc.contains("AGENTSYNC_HOME"));
 }
 
 #[test]
-fn an_unknown_agentsync_version_fails_clearly() {
+fn an_unknown_exuno_version_fails_clearly() {
     let fx = Fixture::new();
     let output = fx.run_install(Some(FIXTURE_ABSENT));
     assert!(!output.status.success());
@@ -380,6 +403,64 @@ fn a_binary_release_replaces_an_existing_source_installs_link() {
     fx.publish(FIXTURE_NEW);
     let second = fx.run_install(Some(FIXTURE_NEW));
     assert!(second.status.success(), "{}", stderr(&second));
-    assert_eq!(fx.bin_link_version(), format!("agentsync v{FIXTURE_NEW}"));
+    assert_eq!(fx.bin_link_version(), format!("exuno v{FIXTURE_NEW}"));
     assert!(fx.install_dir.join(".git").exists());
+}
+
+#[test]
+fn both_links_reach_the_installed_binary_until_1_0() {
+    let fx = Fixture::new();
+    fx.publish(FIXTURE_NEW);
+    let output = fx.run_install(Some(FIXTURE_NEW));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(fx.link_version("exuno"), format!("exuno v{FIXTURE_NEW}"));
+    assert_eq!(
+        fx.link_version("agentsync"),
+        format!("exuno v{FIXTURE_NEW}")
+    );
+    assert!(stdout(&output).contains(&format!(
+        "rm -f {} {}",
+        fx.bin_dir.join("exuno").display(),
+        fx.bin_dir.join("agentsync").display()
+    )));
+}
+
+#[test]
+fn the_legacy_agentsync_version_variable_still_pins() {
+    let fx = Fixture::new();
+    fx.publish(FIXTURE_NEW);
+    let output = fx.run_install_with(&[("AGENTSYNC_VERSION", FIXTURE_NEW)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(fx.bin_link_version(), format!("exuno v{FIXTURE_NEW}"));
+}
+
+#[test]
+fn a_pin_before_the_rename_installs_the_agentsync_archive_as_exuno() {
+    let fx = Fixture::new();
+    fx.publish_legacy(FIXTURE_NEW);
+    let output = fx.run_install(Some(FIXTURE_NEW));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(fx.install_dir.join("bin/exuno").is_file());
+    assert!(!fx.install_dir.join(".git").exists());
+    assert_eq!(
+        fx.link_version("agentsync"),
+        format!("agentsync v{FIXTURE_NEW}")
+    );
+}
+
+#[test]
+fn an_agentsync_install_dir_hands_over_its_update_cache_and_is_named() {
+    let fx = Fixture::new();
+    fx.publish(FIXTURE_NEW);
+    let legacy = fx.home.join(".agentsync");
+    write(&legacy.join(".update_cache"), "9.9.2\n");
+    write(&legacy.join("bin/agentsync"), "old binary\n");
+    let output = fx.run_install(Some(FIXTURE_NEW));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(
+        std::fs::read_to_string(fx.install_dir.join(".update_cache")).unwrap(),
+        "9.9.2\n"
+    );
+    assert!(legacy.join("bin/agentsync").is_file());
+    assert!(stdout(&output).contains(&format!("rm -rf {}", legacy.display())));
 }

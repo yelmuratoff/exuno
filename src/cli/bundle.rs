@@ -1,4 +1,4 @@
-//! `agentsync export` and `agentsync import`: `cmd_export` of
+//! `exuno export` and `exuno import`: `cmd_export` of
 //! `lib/helpers/export.sh` and `cmd_import` of `lib/helpers/import.sh`, which
 //! bundle a project's sources into a `tar.gz` and bring a bundle, a directory,
 //! or a GitHub archive back in. Archives go through the `tar` and `curl`
@@ -12,14 +12,29 @@ use std::process::{Command, Stdio};
 use super::{files_below, put};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
-use crate::{Error, config::yaml_subset};
+use crate::{Error, config::names, config::yaml_subset};
 
 /// `_BUNDLE_DIR_TARGETS`, in the order `init` creates them.
 const DIR_TARGETS: [&str; 8] = [
     "rules", "skills", "commands", "agents", "settings", "mcp", "hooks", "tools",
 ];
-const CONFIG: &str = ".ai/agent_sync.yaml";
+const CONFIG: &str = names::CONFIG;
 const CONFIG_LEGACY: &str = "agent_sync.yaml";
+
+fn present_config(dir: &Path) -> Option<&'static str> {
+    names::CONFIG_CANDIDATES
+        .into_iter()
+        .find(|rel| dir.join(rel).is_file())
+}
+
+/// The `.ai/` config `dir` already has, else [`CONFIG`].
+fn ai_config(dir: &Path) -> &'static str {
+    names::CONFIG_CANDIDATES
+        .into_iter()
+        .filter(|rel| rel.starts_with(".ai/"))
+        .find(|rel| dir.join(rel).is_file())
+        .unwrap_or(CONFIG)
+}
 
 /// What `import` takes from the process.
 pub struct Env<'a> {
@@ -43,10 +58,10 @@ struct Sources {
 }
 
 fn resolve_sources(root: &str) -> Sources {
-    let mut config = format!("{root}/{CONFIG}");
-    if !Path::new(&config).is_file() {
-        config = format!("{root}/{CONFIG_LEGACY}");
-    }
+    let config = format!(
+        "{root}/{}",
+        present_config(Path::new(root)).unwrap_or(CONFIG_LEGACY)
+    );
     let base = if Path::new(root).join(".ai/src").is_dir() {
         ".ai/src"
     } else if Path::new(root).join(".ai").is_dir() {
@@ -113,7 +128,7 @@ pub const EXPORT_HELP: Help = Help {
         entries: &[
             (
                 "-o, --output <path>",
-                "Output file path (default: ./agentsync-bundle.tar.gz)",
+                "Output file path (default: ./exuno-bundle.tar.gz)",
             ),
             ("--dry-run", "Preview what would be exported"),
             ("-h, --help", "Show this help"),
@@ -170,11 +185,13 @@ fn export_items(root: &str, sources: &Sources, style: &Style) -> Vec<(String, St
             items.push((path.clone(), format!("{name}/ ({count} files)")));
         }
     }
-    if Path::new(root).join(CONFIG).is_file() {
-        items.push((CONFIG.to_string(), "agent_sync.yaml".to_string()));
-    } else if Path::new(root).join(CONFIG_LEGACY).is_file() {
-        let label = format!("agent_sync.yaml {}", style.dim("(legacy)"));
-        items.push((CONFIG_LEGACY.to_string(), label));
+    match present_config(Path::new(root)) {
+        Some(CONFIG_LEGACY) => {
+            let label = format!("{CONFIG_LEGACY} {}", style.dim("(legacy)"));
+            items.push((CONFIG_LEGACY.to_string(), label));
+        }
+        Some(rel) => items.push((rel.to_string(), crate::paths::leaf(rel))),
+        None => {}
     }
     items
 }
@@ -211,18 +228,18 @@ pub fn export(
             format!(
                 "{}: No .ai/ directory found in {root}\nRun {} first.\n",
                 style.red("Error"),
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             )
             .as_bytes(),
         )?;
         return Ok(1);
     }
     if output.is_empty() {
-        output = format!("{root}/agentsync-bundle.tar.gz");
+        output = format!("{root}/exuno-bundle.tar.gz");
     }
     put(
         out,
-        format!("\n{}\n\n", style.bold("  AgentSync Export")).as_bytes(),
+        format!("\n{}\n\n", style.bold("  Exuno Export")).as_bytes(),
     )?;
 
     let (items, labels): (Vec<String>, Vec<String>) =
@@ -285,7 +302,7 @@ fn exported_text(style: &Style, root: &str, output: &str) -> String {
         style.green("Exported!"),
         style.cyan(output),
         human_size(size),
-        style.cyan("agentsync import"),
+        style.cyan("exuno import"),
         style.dim(base_name)
     )
 }
@@ -300,7 +317,7 @@ pub const IMPORT_HELP: Help = Help {
             title: "SOURCES",
             entries: &[
                 ("GitHub URL", "https://github.com/user/repo"),
-                ("Archive file", "path/to/agentsync-bundle.tar.gz"),
+                ("Archive file", "path/to/exuno-bundle.tar.gz"),
                 ("Local directory", "path/to/project/"),
             ],
         },
@@ -324,7 +341,7 @@ pub const IMPORT_HELP: Help = Help {
     examples: &[
         "import https://github.com/user/repo",
         "import https://github.com/user/repo/tree/develop",
-        "import agentsync-bundle.tar.gz",
+        "import exuno-bundle.tar.gz",
         "import ../other-project/",
         "import https://github.com/user/repo --only rules,skills",
         "import bundle.tar.gz --dry-run",
@@ -760,7 +777,10 @@ impl Importer<'_, '_> {
                 std::fs::copy(&from, &to).map_err(|e| Error::io(&from, e))?;
             }
         }
-        if !tmp.join(CONFIG).is_file() && src_dir.join(CONFIG_LEGACY).is_file() {
+        if ai_config(tmp) == CONFIG
+            && !tmp.join(CONFIG).is_file()
+            && src_dir.join(CONFIG_LEGACY).is_file()
+        {
             std::fs::create_dir_all(tmp.join(".ai")).map_err(|e| Error::io(tmp, e))?;
             std::fs::copy(src_dir.join(CONFIG_LEGACY), tmp.join(CONFIG))
                 .map_err(|e| Error::io(src_dir.join(CONFIG_LEGACY), e))?;
@@ -817,10 +837,7 @@ const SOURCE_KEYS: [(&str, &str); 6] = [
 /// and without a `source:` those removals empty; `None` when nothing is left.
 fn imported_config_text(project: &Path, dest_base_rel: &str) -> Option<String> {
     use crate::config::{yaml_edit::remove_key_text, yaml_subset};
-    let path = [CONFIG, CONFIG_LEGACY]
-        .iter()
-        .map(|rel| project.join(rel))
-        .find(|path| path.is_file())?;
+    let path = project.join(present_config(project)?);
     let mut text = String::from_utf8_lossy(&std::fs::read(&path).ok()?).into_owned();
     for (key, target) in SOURCE_KEYS {
         let key_path = format!("source.{key}");
@@ -877,7 +894,7 @@ fn plan_import(root: &str, src_root: PathBuf, only: &str) -> ImportPlan {
             diff.dir(src_path, &dest_path, target);
         }
     }
-    let config_dest = Path::new(root).join(CONFIG);
+    let config_dest = Path::new(root).join(ai_config(Path::new(root)));
     let config_action = match &imported_config {
         Some(_) if !config_dest.is_file() => "new",
         Some(text) if std::fs::read(&config_dest).ok().as_deref() != Some(text.as_bytes()) => {
@@ -918,14 +935,19 @@ fn plan_text(style: &Style, plan: &ImportPlan, dry_run: bool) -> String {
             Change::Dir(name) => text.push_str(&format!("    {} {name}\n", style.cyan("↳"))),
         }
     }
+    let config_name = plan
+        .config_dest
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default();
     match plan.config_action {
         "new" => text.push_str(&format!(
-            "    {} agent_sync.yaml {}\n",
+            "    {} {config_name} {}\n",
             style.green("+"),
             style.dim("(new)")
         )),
         "update" => text.push_str(&format!(
-            "    {} agent_sync.yaml {}\n",
+            "    {} {config_name} {}\n",
             style.yellow("~"),
             style.dim("(update)")
         )),
@@ -1008,7 +1030,7 @@ pub fn import(
     };
     put(
         out,
-        format!("\n{}\n\n", style.bold("  AgentSync Import")).as_bytes(),
+        format!("\n{}\n\n", style.bold("  Exuno Import")).as_bytes(),
     )?;
     out.flush().map_err(|e| Error::io("<stdout>", e))?;
     let scratch = Scratch::create("agentsync-import")?;
@@ -1032,7 +1054,7 @@ pub fn import(
             format!(
                 "  {}: No .ai/src/ (or .ai/) directory found in source.\n  The source must contain a structure created by {}.\n",
                 style.red("Error"),
-                style.cyan("agentsync init")
+                style.cyan("exuno init")
             )
             .as_bytes(),
         )?;
@@ -1071,7 +1093,7 @@ pub fn import(
             plan.diff.counts.new,
             plan.diff.counts.updated,
             style.cyan(&plan.dest_base_rel),
-            style.cyan("agentsync sync")
+            style.cyan("exuno sync")
         )
         .as_bytes(),
     )
@@ -1086,7 +1108,7 @@ mod tests {
     fn export_help_has_the_shared_shape() {
         assert_eq!(
             EXPORT_HELP.render(&Style::plain()),
-            "\n  agentsync export — bundle source files into a shareable archive\n\n  USAGE\n    agentsync export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./agentsync-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    agentsync export\n    agentsync export -o my-config.tar.gz\n    agentsync export --dry-run\n\n"
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./exuno-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --dry-run\n\n"
         );
     }
 
@@ -1094,7 +1116,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  agentsync import — import config from GitHub, archive, or directory\n\n  USAGE\n    agentsync import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/agentsync-bundle.tar.gz\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    agentsync import https://github.com/user/repo\n    agentsync import https://github.com/user/repo/tree/develop\n    agentsync import agentsync-bundle.tar.gz\n    agentsync import ../other-project/\n    agentsync import https://github.com/user/repo --only rules,skills\n    agentsync import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
@@ -1181,7 +1203,7 @@ mod tests {
         write(dir.path(), "custom/cmds/c.md", "# Command\n");
         write(
             dir.path(),
-            ".ai/agent_sync.yaml",
+            ".ai/exuno.yaml",
             "source:\n  commands: custom/cmds\n",
         );
         (dir, root)
@@ -1260,7 +1282,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • agent_sync.yaml\n\n  Dry run — no files written.\n  Would create: {root}/agentsync-bundle.tar.gz\n\n"
+                "\n  Exuno Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • exuno.yaml\n\n  Dry run — no files written.\n  Would create: {root}/exuno-bundle.tar.gz\n\n"
             )
         );
         let (status, out, err) = run_export(&root, &["--bogus"]);
@@ -1283,7 +1305,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            format!("Error: No .ai/ directory found in {empty_root}\nRun agentsync init first.\n")
+            format!("Error: No .ai/ directory found in {empty_root}\nRun exuno init first.\n")
         );
     }
 
@@ -1293,7 +1315,7 @@ mod tests {
         let (_source, source_root) = tiny_project();
         write(
             Path::new(&source_root),
-            ".ai/agent_sync.yaml",
+            ".ai/exuno.yaml",
             "tools:\n  enabled: [claude]\n\nsource:\n  commands: custom/cmds\n",
         );
         let target = tempfile::tempdir().unwrap();
@@ -1301,7 +1323,7 @@ mod tests {
         let (status, _, err) = run_import(&target_root, &[&source_root]);
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
-            std::fs::read_to_string(target.path().join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(target.path().join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled: [claude]\n\n"
         );
     }
@@ -1317,7 +1339,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  AgentSync Import\n\n  Reading from {source_root}...\n  Source: Directory: {source_root}\n\n  Changes:\n    + AGENTS.md (new)\n    ↳ rules (1 new)\n    ↳ skills (1 new)\n    ↳ commands (1 new)\n\n  Summary: 4 new, 0 updated, 0 unchanged\n\n  Imported! 4 new, 0 updated files.\n\n  Next steps:\n    1. Review imported files in .ai/src\n    2. Run agentsync sync to distribute to all tools\n\n"
+                "\n  Exuno Import\n\n  Reading from {source_root}...\n  Source: Directory: {source_root}\n\n  Changes:\n    + AGENTS.md (new)\n    ↳ rules (1 new)\n    ↳ skills (1 new)\n    ↳ commands (1 new)\n\n  Summary: 4 new, 0 updated, 0 unchanged\n\n  Imported! 4 new, 0 updated files.\n\n  Next steps:\n    1. Review imported files in .ai/src\n    2. Run exuno sync to distribute to all tools\n\n"
             )
         );
         assert_eq!(
@@ -1328,7 +1350,7 @@ mod tests {
             std::fs::read_to_string(target.path().join(".ai/src/commands/c.md")).unwrap(),
             "# Command\n"
         );
-        assert!(!target.path().join(".ai/agent_sync.yaml").exists());
+        assert!(!target.path().join(".ai/exuno.yaml").exists());
         let (status, out, _) = run_import(&target_root, &[&source_root]);
         assert_eq!(status, 0);
         assert!(out.ends_with("  Source: Directory: {source_root}\n\n  Already up to date! Nothing to import.\n\n".replace("{source_root}", &source_root).as_str()));
@@ -1347,7 +1369,7 @@ mod tests {
             "  Changes:\n    ↳ rules (1 new, 1 updated)\n\n  Summary: 1 new, 1 updated, 0 unchanged\n\n  Dry run — no files written.\n\n"
         ));
         let (status, out, err) = run_import(&target_root, &["nothing.txt"]);
-        assert_eq!((status, out.as_str()), (1, "\n  AgentSync Import\n\n"));
+        assert_eq!((status, out.as_str()), (1, "\n  Exuno Import\n\n"));
         assert_eq!(
             err,
             "  Error: Cannot recognize source: nothing.txt\n  Expected: GitHub URL, .tar.gz file, or directory path.\n"
