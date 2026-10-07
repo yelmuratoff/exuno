@@ -6,6 +6,12 @@ on:
       plan:
         required: true
         type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to republish agentsync-<target> archives for
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,6 +21,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
+        # Mirrors `targets` in dist-workspace.toml.
         include:
           - { target: aarch64-apple-darwin, ext: tar.xz }
           - { target: aarch64-unknown-linux-musl, ext: tar.xz }
@@ -24,10 +31,13 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
-      TAG: ${{ fromJson(inputs.plan).announcement_tag }}
+      INPUT_TAG: ${{ inputs.tag }}
+      PLAN: ${{ inputs.plan }}
       SOURCE: exuno-${{ matrix.target }}.${{ matrix.ext }}
       LEGACY: agentsync-${{ matrix.target }}.${{ matrix.ext }}
     steps:
+      - name: Resolve the release tag
+        run: echo "TAG=${INPUT_TAG:-$(printf '%s' "$PLAN" | jq -r .announcement_tag)}" >> "$GITHUB_ENV"
       - name: Download the exuno archive
         run: gh release download "$TAG" --pattern "$SOURCE"
       - name: Unpack a tar.xz archive
