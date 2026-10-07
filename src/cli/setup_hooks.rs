@@ -294,7 +294,9 @@ pub fn setup_hooks(
         hooks_dir = format!("{root}/{hooks_dir}");
     }
     let git_dir = git(&root, &["rev-parse", "--absolute-git-dir"]).unwrap_or_default();
+    let committed = outputs_mode(&root) == "committed";
     if physical(&hooks_dir) != physical(&format!("{git_dir}/hooks")) {
+        upgrade_legacy_blocks(&Path::new(&git_dir).join("hooks"), committed, out)?;
         put(
             out,
             HOOKS_PATH_ELSEWHERE
@@ -304,18 +306,46 @@ pub fn setup_hooks(
         return Ok(0);
     }
     let hooks_dir = PathBuf::from(hooks_dir);
-    if outputs_mode(&root) == "committed" {
-        install_hook(&hooks_dir, "pre-commit", GATE_BODY, out)?;
-        put(out, b"Git hooks configured for committed outputs.\n")?;
-    } else {
-        install_hook(&hooks_dir, "post-merge", &sync_body("sync"), out)?;
-        install_hook(&hooks_dir, "post-checkout", &sync_body("sync"), out)?;
-        if pre_commit {
-            install_hook(&hooks_dir, "pre-commit", &sync_body("sync --if-stale"), out)?;
-        }
-        put(out, b"Git hooks configured for local outputs.\n")?;
+    for (name, body) in hooks_for(committed, pre_commit) {
+        install_hook(&hooks_dir, name, &body, out)?;
     }
+    let mode = if committed { "committed" } else { "local" };
+    put(
+        out,
+        format!("Git hooks configured for {mode} outputs.\n").as_bytes(),
+    )?;
     Ok(0)
+}
+
+fn hooks_for(committed: bool, pre_commit: bool) -> Vec<(&'static str, String)> {
+    if committed {
+        return vec![("pre-commit", GATE_BODY.to_string())];
+    }
+    let mut hooks = vec![
+        ("post-merge", sync_body("sync")),
+        ("post-checkout", sync_body("sync")),
+    ];
+    if pre_commit {
+        hooks.push(("pre-commit", sync_body("sync --if-stale")));
+    }
+    hooks
+}
+
+/// Another `core.hooksPath` may still call these hooks, so old blocks are rewritten; none is created.
+fn upgrade_legacy_blocks(
+    git_hooks: &Path,
+    committed: bool,
+    out: &mut dyn Write,
+) -> Result<(), Error> {
+    let (legacy_start, _) = names::LEGACY_HOOK_BLOCK;
+    for (name, body) in hooks_for(committed, true) {
+        let holds_legacy = std::fs::read(git_hooks.join(name))
+            .is_ok_and(|hook| find(&hook, legacy_start.as_bytes(), 0).is_some());
+        if holds_legacy {
+            install_hook(git_hooks, name, &body, out)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(all(test, unix))]
@@ -435,6 +465,43 @@ mod tests {
         assert_eq!(outputs_mode(&root), "local");
         std::fs::write(dir.path().join(".ai/exuno.yaml"), "outputs: committed\n").unwrap();
         assert_eq!(outputs_mode(&root), "committed");
+    }
+
+    #[test]
+    fn another_hooks_path_still_upgrades_an_older_block_in_git_hooks() {
+        let (dir, root) = repo("outputs: local\n");
+        std::fs::create_dir_all(dir.path().join(".githooks")).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["-C", &root, "config", "core.hooksPath", ".githooks"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        let (legacy_start, legacy_end) = names::LEGACY_HOOK_BLOCK;
+        let post_merge = dir.path().join(".git/hooks/post-merge");
+        std::fs::write(
+            &post_merge,
+            format!("#!/bin/sh\n\n{legacy_start}\nagentsync sync\n{legacy_end}\n"),
+        )
+        .unwrap();
+
+        let (status, out, err) = run(&root, &[]);
+        assert_eq!((status, err.as_str()), (0, ""));
+        assert!(
+            out.starts_with("Updated Exuno hook in post-merge.\nConfigured post-merge hook.\n"),
+            "{out}"
+        );
+        assert!(out.contains("points core.hooksPath at another directory"));
+        assert_eq!(
+            std::fs::read_to_string(&post_merge).unwrap(),
+            format!(
+                "#!/bin/sh\n\n{BLOCK_START}\n{}\n{BLOCK_END}\n",
+                sync_body("sync")
+            )
+        );
+        assert!(!dir.path().join(".git/hooks/post-checkout").exists());
+        assert!(!dir.path().join(".githooks/post-merge").exists());
     }
 
     #[test]

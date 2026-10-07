@@ -5,6 +5,7 @@
 ### Fixed
 
 - **Migrate:** run as `agentsync`, suggests `agentsync migrate --apply` and `agentsync sync` rather than an `exuno` command that is not installed yet.
+- **Setup-hooks:** with `core.hooksPath` set elsewhere, still rewrites an agentsync block in the repository's own hooks, so the `exuno setup-hooks` that `doctor` suggests for it works.
 
 ## 0.45.1
 
