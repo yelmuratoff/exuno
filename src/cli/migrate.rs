@@ -479,15 +479,7 @@ fn legacy(
     let agent_dir = root_path.join(".agent");
     let has_agent_dir = agent_dir.is_dir();
     let skills = scan_base_skills(&root_path)?;
-    let retired: Vec<PathBuf> = skills
-        .iter()
-        .filter(|copy| !copy.edited)
-        .map(|copy| root_path.join(".ai/src/skills").join(&copy.rel))
-        .collect();
-    let renames: Vec<Leftover> = leftovers::scan(&root_path)
-        .into_iter()
-        .filter(|leftover| !(leftover.kind == Kind::SkillDir && retired.contains(&leftover.path)))
-        .collect();
+    let renames = pending_renames(&root_path, &skills);
     let engine_rev = format_rev::engine();
     let current_rev = project_format(&project)?;
 
@@ -502,13 +494,7 @@ fn legacy(
         && renames.is_empty()
         && current_rev >= engine_rev
     {
-        run.say(&format!(
-            "{}\n{}\n\n",
-            style.green("  Nothing to migrate."),
-            style.dim(&format!(
-                "  Canonical layout, no engine-owned skill copies, format r{current_rev} is current."
-            ))
-        ))?;
+        run.nothing_to_migrate(current_rev)?;
         return Ok(0);
     }
     if apply && !legacy.is_empty() && !project.tools_dir_in_project() {
@@ -617,6 +603,17 @@ impl MoveTally {
 }
 
 impl Run<'_, '_> {
+    fn nothing_to_migrate(&mut self, current_rev: u32) -> Result<(), Error> {
+        let style = self.style;
+        self.say(&format!(
+            "{}\n{}\n\n",
+            style.green("  Nothing to migrate."),
+            style.dim(&format!(
+                "  Canonical layout, no engine-owned skill copies, format r{current_rev} is current."
+            ))
+        ))
+    }
+
     fn bump_format(&mut self, current: u32, engine: u32, apply: bool) -> Result<(), Error> {
         let style = self.style;
         self.say(&format!(
@@ -857,8 +854,19 @@ fn retire_base_skills(run: &mut Run, apply: bool, copies: &[BaseSkillCopy]) -> R
     Ok(())
 }
 
-/// The r3 step: each leftover the old name left, renamed or previewed; one
-/// the new name already belongs to, or a git hook, is kept for the user.
+/// The leftovers r3 renames, without a skill copy the r2 step retires anyway.
+fn pending_renames(root: &Path, skills: &[BaseSkillCopy]) -> Vec<Leftover> {
+    let retired: Vec<PathBuf> = skills
+        .iter()
+        .filter(|copy| !copy.edited)
+        .map(|copy| root.join(".ai/src/skills").join(&copy.rel))
+        .collect();
+    leftovers::scan(root)
+        .into_iter()
+        .filter(|leftover| !(leftover.kind == Kind::SkillDir && retired.contains(&leftover.path)))
+        .collect()
+}
+
 fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<(), Error> {
     let style = run.style;
     let root = PathBuf::from(&run.root);
