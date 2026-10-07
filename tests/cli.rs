@@ -268,6 +268,68 @@ fn a_failing_post_sync_hook_restores_the_pre_sync_state() {
 #[cfg(unix)]
 #[test]
 fn sync_writes_a_plain_log_to_a_redirected_stderr_even_when_stdout_is_a_terminal() {
+    let dir = sync_project(None);
+    let log = dir.path().join("sync.log");
+    let inner = format!(
+        "AGENTSYNC_REPO_ROOT={} AGENTSYNC_NO_UPDATE_CHECK=1 NO_COLOR= {} sync --dry-run 2>{} </dev/null",
+        dir.path().display(),
+        env!("CARGO_BIN_EXE_exuno"),
+        log.display()
+    );
+    let Some(status) = in_pty(&inner, std::path::Path::new("/dev/null")) else {
+        eprintln!("script(1) not available; skipping");
+        return;
+    };
+    assert!(status.success());
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(text.contains("[INFO] Syncing Claude Code\n"), "{text}");
+    assert!(
+        !text.contains('\x1b'),
+        "escape codes reached the file: {text:?}"
+    );
+}
+
+// The project notice prints only when stdout is a terminal. A stub `curl`
+// keeps the background release check off the network.
+#[cfg(unix)]
+#[test]
+fn a_binary_run_as_agentsync_names_agentsync_in_the_migration_notice() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    let project = dir.path().join("project");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::create_dir_all(project.join(".ai")).unwrap();
+    std::fs::write(project.join(".ai/agent_sync.yaml"), "format: 2\n").unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_exuno"), bin.join("agentsync")).unwrap();
+    std::fs::write(bin.join("curl"), "#!/bin/sh\nexit 1\n").unwrap();
+    std::fs::set_permissions(
+        bin.join("curl"),
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    let transcript = dir.path().join("transcript");
+    let inner = format!(
+        "cd {} && PATH={}:$PATH EXUNO_NO_UPDATE_CHECK= AGENTSYNC_NO_UPDATE_CHECK= NO_COLOR=1 agentsync list 2>/dev/null </dev/null; exit 0",
+        project.display(),
+        bin.display()
+    );
+    let Some(status) = in_pty(&inner, &transcript) else {
+        eprintln!("script(1) not available; skipping");
+        return;
+    };
+    assert!(status.success());
+    let text = std::fs::read_to_string(&transcript).unwrap_or_default();
+    assert!(
+        text.contains("Preview it with agentsync migrate, apply with agentsync migrate --apply"),
+        "{text}"
+    );
+    assert!(text.contains("rerun the installer to add it"), "{text}");
+}
+
+/// Runs `sh -c inner` with stdout on a pty, `script(1)` writing the terminal
+/// to `transcript`; `None` when `script` is missing.
+#[cfg(unix)]
+fn in_pty(inner: &str, transcript: &std::path::Path) -> Option<std::process::ExitStatus> {
     use std::process::Command as StdCommand;
 
     let gnu = StdCommand::new("script")
@@ -281,36 +343,21 @@ fn sync_writes_a_plain_log_to_a_redirected_stderr_even_when_stdout_is_a_terminal
             .output()
             .is_ok_and(|o| !o.status.success())
     {
-        eprintln!("script(1) not available; skipping");
-        return;
+        return None;
     }
-    let dir = sync_project(None);
-    let log = dir.path().join("sync.log");
-    let inner = format!(
-        "AGENTSYNC_REPO_ROOT={} AGENTSYNC_NO_UPDATE_CHECK=1 NO_COLOR= {} sync --dry-run 2>{} </dev/null",
-        dir.path().display(),
-        env!("CARGO_BIN_EXE_exuno"),
-        log.display()
-    );
-    let status = if gnu {
-        StdCommand::new("script")
-            .args(["-q", "-c", &inner, "/dev/null"])
-            .stdout(std::process::Stdio::null())
-            .status()
+    let transcript = transcript.to_str().unwrap();
+    let mut command = StdCommand::new("script");
+    if gnu {
+        command.args(["-q", "-c", inner, transcript]);
     } else {
-        StdCommand::new("script")
-            .args(["-q", "/dev/null", "sh", "-c", &inner])
+        command.args(["-q", transcript, "sh", "-c", inner]);
+    }
+    Some(
+        command
             .stdout(std::process::Stdio::null())
             .status()
-    }
-    .unwrap();
-    assert!(status.success());
-    let text = std::fs::read_to_string(&log).unwrap();
-    assert!(text.contains("[INFO] Syncing Claude Code\n"), "{text}");
-    assert!(
-        !text.contains('\x1b'),
-        "escape codes reached the file: {text:?}"
-    );
+            .unwrap(),
+    )
 }
 
 mod common;

@@ -603,7 +603,8 @@ fn check_for_updates() -> Result<(), Error> {
     let style = Style::for_stdout();
     let root = repo_root()?;
     let mut out = std::io::stdout().lock();
-    out.write_all(cli::notice::format_notice(Path::new(&root), &style).as_bytes())
+    let program = program_name();
+    out.write_all(cli::notice::format_notice(Path::new(&root), program, &style).as_bytes())
         .map_err(|e| Error::io("<stdout>", e))?;
     let Some(cache) = current_exe()
         .ok()
@@ -612,8 +613,10 @@ fn check_for_updates() -> Result<(), Error> {
         return Ok(());
     };
     if let Ok(text) = std::fs::read_to_string(&cache) {
-        out.write_all(cli::notice::update_banner(&text, engine_version(), &style).as_bytes())
-            .map_err(|e| Error::io("<stdout>", e))?;
+        out.write_all(
+            cli::notice::update_banner(&text, engine_version(), program, &style).as_bytes(),
+        )
+        .map_err(|e| Error::io("<stdout>", e))?;
     }
     out.flush().map_err(|e| Error::io("<stdout>", e))?;
     if let Ok(exe) = std::env::current_exe() {
@@ -635,11 +638,14 @@ fn print_usage() -> Result<u8, Error> {
         .map_err(|e| Error::io("<stdout>", e))
 }
 
+fn program_name() -> &'static str {
+    let program = std::env::args_os().next().unwrap_or_default();
+    names::invoked_as(Path::new(&program))
+}
+
 fn print_version() -> Result<u8, Error> {
     let mut out = std::io::stdout().lock();
-    let program = std::env::args_os().next().unwrap_or_default();
-    let name = names::invoked_as(Path::new(&program));
-    writeln!(out, "{name} v{}", engine_version())
+    writeln!(out, "{} v{}", program_name(), engine_version())
         .map(|()| 0)
         .map_err(|e| Error::io("<stdout>", e))
 }

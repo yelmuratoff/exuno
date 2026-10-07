@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use crate::config::format_rev;
+use crate::config::{format_rev, names};
 use crate::output::style::Style;
 
 /// The GitHub repository releases come from.
@@ -50,8 +50,9 @@ pub fn wants_notice(command: &str) -> bool {
 }
 
 /// `_check_project_format`: the notice when the project is behind the engine's
-/// format revision, nothing otherwise.
-pub fn format_notice(project_dir: &Path, style: &Style) -> String {
+/// format revision, nothing otherwise. Commands are named as `program`, the
+/// name the binary was run as (`names::invoked_as`).
+pub fn format_notice(project_dir: &Path, program: &str, style: &Style) -> String {
     let Some(config) = format_rev::config_path(project_dir) else {
         return String::new();
     };
@@ -72,10 +73,20 @@ pub fn format_notice(project_dir: &Path, style: &Style) -> String {
         out.push_str(&format!("    {}\n", style.dim(&note)));
     }
     out.push_str(&format!(
-        "  Preview it with {}, apply with {}\n\n",
-        style.cyan("exuno migrate"),
-        style.cyan("exuno migrate --apply")
+        "  Preview it with {}, apply with {}\n",
+        style.cyan(&format!("{program} migrate")),
+        style.cyan(&format!("{program} migrate --apply"))
     ));
+    if program == names::LEGACY_NAME {
+        out.push_str(&format!(
+            "  The command is {} now; rerun the installer to add it ({program} keeps working until 1.0):\n    {}\n",
+            names::NAME,
+            style.cyan(&format!(
+                "curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash"
+            ))
+        ));
+    }
+    out.push('\n');
     out
 }
 
@@ -88,8 +99,9 @@ fn cached_tag(cache: &str) -> &str {
         .trim_matches([' ', '\t'])
 }
 
-/// The banner when the cache names a version newer than `version`.
-pub fn update_banner(cache: &str, version: &str, style: &Style) -> String {
+/// The banner when the cache names a version newer than `version`, naming
+/// the update command as `program`.
+pub fn update_banner(cache: &str, version: &str, program: &str, style: &Style) -> String {
     let latest = cached_tag(cache);
     if latest.is_empty()
         || latest == version
@@ -102,7 +114,7 @@ pub fn update_banner(cache: &str, version: &str, style: &Style) -> String {
         style.yellow("Update available"),
         style.dim(&format!("v{version}")),
         style.green(&format!("v{latest}")),
-        style.cyan("exuno update")
+        style.cyan(&format!("{program} update"))
     )
 }
 
@@ -168,7 +180,7 @@ mod tests {
     #[test]
     fn the_format_notice_lists_the_pending_migrations() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(format_notice(dir.path(), &Style::plain()), "");
+        assert_eq!(format_notice(dir.path(), "exuno", &Style::plain()), "");
         std::fs::create_dir(dir.path().join(".ai")).unwrap();
         std::fs::write(
             dir.path().join(".ai/agent_sync.yaml"),
@@ -176,25 +188,47 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            format_notice(dir.path(), &Style::plain()),
+            format_notice(dir.path(), "exuno", &Style::plain()),
             "\n  This project's agent config is a migration behind (format r1 → r3)\n    r2  The exuno skill is engine-owned now. A copy under .ai/src/skills/exuno/ (or the older skills/agentsync/) keeps engine upgrades from your agents.\n    r3  AgentSync is Exuno now: .ai/exuno.yaml, exuno_version, metadata.exuno-*, skills/exuno/, exuno-check.yml.\n  Preview it with exuno migrate, apply with exuno migrate --apply\n\n"
         );
         std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "format: 3\n").unwrap();
-        assert_eq!(format_notice(dir.path(), &Style::plain()), "");
+        assert_eq!(format_notice(dir.path(), "exuno", &Style::plain()), "");
+    }
+
+    #[test]
+    fn the_format_notice_names_the_command_an_agentsync_binary_was_run_as() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".ai")).unwrap();
+        std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "format: 2\n").unwrap();
+        let notice = format_notice(dir.path(), "agentsync", &Style::plain());
+        assert!(
+            notice.ends_with(
+                "  Preview it with agentsync migrate, apply with agentsync migrate --apply\n  The command is exuno now; rerun the installer to add it (agentsync keeps working until 1.0):\n    curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n\n"
+            ),
+            "{notice}"
+        );
+    }
+
+    #[test]
+    fn the_banner_names_the_command_it_was_run_as() {
+        assert!(
+            update_banner("0.46.0\n", "0.45.0", "agentsync", &Style::plain())
+                .contains("Run: agentsync update")
+        );
     }
 
     #[test]
     fn the_banner_shows_only_a_newer_cached_tag() {
         let style = Style::plain();
-        assert_eq!(update_banner("", "0.36.0", &style), "");
-        assert_eq!(update_banner("0.36.0\n", "0.36.0", &style), "");
-        assert_eq!(update_banner("0.35.2\n", "0.36.0", &style), "");
+        assert_eq!(update_banner("", "0.36.0", "exuno", &style), "");
+        assert_eq!(update_banner("0.36.0\n", "0.36.0", "exuno", &style), "");
+        assert_eq!(update_banner("0.35.2\n", "0.36.0", "exuno", &style), "");
         assert_eq!(
-            update_banner("  0.37.0\nignored\n", "0.36.0", &style),
+            update_banner("  0.37.0\nignored\n", "0.36.0", "exuno", &style),
             "\n  ╭──────────────────────────────────────────────────────╮\n  │  Update available: v0.36.0 → v0.37.0              \n  │  Run: exuno update                                \n  ╰──────────────────────────────────────────────────────╯\n\n"
         );
         assert!(
-            update_banner("0.37.0\n", "0.36.0", &Style::colored()).contains(
+            update_banner("0.37.0\n", "0.36.0", "exuno", &Style::colored()).contains(
                 "\x1b[33mUpdate available\x1b[0m: \x1b[2mv0.36.0\x1b[0m → \x1b[32mv0.37.0\x1b[0m"
             )
         );

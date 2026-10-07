@@ -162,6 +162,8 @@ exuno migrate --apply --yes   # renames them, re-pins a pin older than 0.45.0, a
 exuno setup-hooks             # rewrites git hooks that still run the agentsync block
 ```
 
+`agentsync update` brings the new release but not the `exuno` command; rerun the [installer](#installation) to add it, or run the steps above as `agentsync migrate`. Migrate once everyone on the team is on 0.45.0: older releases cannot read `.ai/exuno.yaml`.
+
 `exuno doctor` names whatever is left. A previous install in `~/.agentsync` is no longer used once you rerun the installer; it tells you how to remove it.
 
 ## Team Setup
