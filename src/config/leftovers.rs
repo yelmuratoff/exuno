@@ -15,11 +15,11 @@ use names::{
 
 const METADATA_KEYS: [&str; 3] = ["use-when", "not-for", "requirements"];
 const HOOKS: [&str; 3] = ["pre-commit", "post-merge", "post-checkout"];
-const FIRST_RELEASE: (u64, u64, u64) = (0, 45, 0);
+const FIRST_RELEASE: &str = "0.45.0";
 const CI_PIN: &str = "EXUNO_VERSION=";
 const CI_INSTALL_STEP: &str = "Install Exuno ";
 
-/// The kind of thing that still carries the old name.
+/// The kind of thing that still carries the old name or an old pin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     ConfigFile,
@@ -73,7 +73,7 @@ impl Leftover {
             Kind::ConfigFile => format!("{path} → {CONFIG}"),
             Kind::VersionKey => format!("{LEGACY_KEY} → {KEY} in {path}"),
             Kind::OldPin => format!(
-                "pin → {} in {path} — releases before 0.45.0 cannot read these names",
+                "pin → {} in {path} — releases before {FIRST_RELEASE} cannot read these names",
                 crate::engine_version()
             ),
             Kind::SkillMetadata => {
@@ -247,13 +247,15 @@ fn with_new_metadata(text: &str) -> String {
 }
 
 fn predates_rename(pin: &str) -> bool {
-    let pin = pin.trim_matches(['"', '\'']).trim_start_matches('v');
-    let mut parts = pin.split('.').map(|part| part.parse::<u64>().ok());
+    parse_version(pin).is_some_and(|pin| Some(pin) < parse_version(FIRST_RELEASE))
+}
+
+fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
+    let version = version.trim_matches(['"', '\'']).trim_start_matches('v');
+    let mut parts = version.split('.').map(|part| part.parse::<u64>().ok());
     match (parts.next(), parts.next(), parts.next()) {
-        (Some(Some(major)), Some(Some(minor)), Some(Some(patch))) => {
-            (major, minor, patch) < FIRST_RELEASE
-        }
-        _ => false,
+        (Some(Some(major)), Some(Some(minor)), Some(Some(patch))) => Some((major, minor, patch)),
+        _ => None,
     }
 }
 
