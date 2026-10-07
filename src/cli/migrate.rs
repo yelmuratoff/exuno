@@ -881,8 +881,24 @@ fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<
         } else {
             run.say(&format!("{}  {line}\n", style.cyan("  would rename")))?;
         }
+        if leftover.kind == Kind::ConfigFile && leftover.is_automatic() {
+            warn_old_releases(run)?;
+        }
     }
     run.say("\n")
+}
+
+fn warn_old_releases(run: &mut Run) -> Result<(), Error> {
+    let style = run.style;
+    run.say(&format!(
+            "  {}\n",
+            style.yellow(&format!(
+                "Releases before {} cannot read {}: update every machine and CI to {} before you commit this.",
+                leftovers::FIRST_RELEASE,
+                names::CONFIG,
+                leftovers::FIRST_RELEASE
+            ))
+        ))
 }
 
 /// Category directories above a removed skill that it left empty, up to `skills`.
@@ -1210,7 +1226,7 @@ mod tests {
         assert_eq!(
             dry.out,
             format!(
-                "\n  Exuno Migrate\n  {root}\n\n  Engine-owned skills:\n  would remove  .ai/src/skills/agentsync/ (unedited — the engine supplies it)\n\n  Project format r1 → r3:\n  would set     format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  would rename  .ai/agent_sync.yaml → .ai/exuno.yaml\n\n  Dry-run — re-run with exuno migrate --apply to apply.\n\n"
+                "\n  Exuno Migrate\n  {root}\n\n  Engine-owned skills:\n  would remove  .ai/src/skills/agentsync/ (unedited — the engine supplies it)\n\n  Project format r1 → r3:\n  would set     format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  would rename  .ai/agent_sync.yaml → .ai/exuno.yaml\n  Releases before 0.45.0 cannot read .ai/exuno.yaml: update every machine and CI to 0.45.0 before you commit this.\n\n  Dry-run — re-run with exuno migrate --apply to apply.\n\n"
             )
         );
         let applied = call(&root, &["--apply"], false, false, None);
@@ -1220,7 +1236,7 @@ mod tests {
             )
         );
         assert!(applied.out.ends_with(
-            "  set           format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  renamed       .ai/agent_sync.yaml → .ai/exuno.yaml\n\n  Migration complete.\n\n"
+            "  set           format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  renamed       .ai/agent_sync.yaml → .ai/exuno.yaml\n  Releases before 0.45.0 cannot read .ai/exuno.yaml: update every machine and CI to 0.45.0 before you commit this.\n\n  Migration complete.\n\n"
         ));
         assert_eq!(tree(&root), [".ai/.template-manifest", ".ai/exuno.yaml"]);
         assert_eq!(

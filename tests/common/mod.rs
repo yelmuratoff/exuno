@@ -158,6 +158,21 @@ pub fn path_list(parts: &[&str]) -> String {
 
 /// Whether the platform honours `chmod 000` for this user: not root, not
 /// Windows, where Git Bash ignores permission bits.
+/// The developer's PATH without any directory holding an installed `exuno`
+/// or `agentsync`, which a hook or snippet under test would run instead of
+/// the test's own stub.
+pub fn path_without_installed_engine() -> String {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .filter(|dir| {
+            !["exuno", "agentsync"]
+                .iter()
+                .any(|bin| dir.join(bin).exists())
+        })
+        .map(|dir| dir.display().to_string())
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 pub fn unreadable_dirs_are_possible() -> bool {
     if !cfg!(unix) {
         return false;

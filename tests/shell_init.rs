@@ -49,7 +49,7 @@ fn path_with(project: &Project, rel_dir: &str) -> String {
     format!(
         "{}:{}",
         project.join(rel_dir).display(),
-        std::env::var("PATH").unwrap_or_default()
+        common::path_without_installed_engine()
     )
 }
 

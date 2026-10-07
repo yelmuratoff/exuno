@@ -250,10 +250,34 @@ fn format_r3_previews_every_agentsync_leftover_without_touching_it() {
         .stdout(predicate::str::contains(
             "would rename  .github/workflows/agentsync-check.yml → .github/workflows/exuno-check.yml\n",
         ))
-        .stdout(predicate::str::contains("r2 → r3"));
+        .stdout(predicate::str::contains("r2 → r3"))
+        .stdout(predicate::str::contains(
+            "  Releases before 0.45.0 cannot read .ai/exuno.yaml: update every machine and CI to 0.45.0 before you commit this.\n",
+        ));
     assert!(project.exists(".ai/agent_sync.yaml"));
     assert!(project.exists(".ai/src/skills/agentsync/SKILL.md"));
     assert!(project.exists(".github/workflows/agentsync-check.yml"));
+}
+
+#[cfg(unix)]
+#[test]
+fn format_r3_apply_warns_about_the_moved_config_even_when_a_later_rename_fails() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = seed_r2_agentsync_project();
+    let deploy = project.join(".ai/src/skills/deploy");
+    common::chmod(&deploy, 0o555);
+    let assert = project
+        .exuno()
+        .args(["migrate", "--apply", "--yes"])
+        .assert()
+        .failure();
+    common::chmod(&deploy, 0o755);
+    assert.stdout(predicate::str::contains(
+        "renamed       .ai/agent_sync.yaml → .ai/exuno.yaml\n  Releases before 0.45.0 cannot read .ai/exuno.yaml",
+    ));
+    assert!(project.exists(".ai/exuno.yaml"));
 }
 
 #[test]
