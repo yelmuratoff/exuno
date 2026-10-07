@@ -1,11 +1,11 @@
 ---
 name: add-tool
-description: Add support for a new AI coding tool to AgentSync's sync engine — create the tool YAML, configure targets and converters, add base templates, and write tests. Use this skill when integrating a new AI assistant, IDE, or editor into AgentSync, when a user asks "can AgentSync sync to X", or when extending the sync surface to a new agent — even if the user names the tool by brand without saying "tool" or "integration".
+description: Add support for a new AI coding tool to Exuno's sync engine — create the tool YAML, configure targets and converters, add base templates, and write tests. Use this skill when integrating a new AI assistant, IDE, or editor into Exuno, when a user asks "can Exuno sync to X", or when extending the sync surface to a new agent — even if the user names the tool by brand without saying "tool" or "integration".
 ---
 
 # Add New Tool Support
 
-Add a new AI coding tool to AgentSync so `agentsync sync` distributes instructions to it.
+Add a new AI coding tool to Exuno so `exuno sync` distributes instructions to it.
 
 ## Steps
 
@@ -29,13 +29,13 @@ Add a new AI coding tool to AgentSync so `agentsync sync` distributes instructio
    - Safe Markdown/JSON composition for OpenCode-style shared files
 5. **Extend generic conversion only when required** — Add reusable behavior in `src/engine/convert.rs`, `src/engine/rules.rs`, or a focused composition module, with unit tests. Keep `src/engine/render/` as orchestration and avoid tool-name branches.
 6. **Add optional payload bases** — Put shipped settings, MCP, or hooks under the matching `lib/templates/<resource>/` directory only when the tool supports that surface.
-7. **Update documentation** — Keep README support tables, the bundled AgentSync skill, `lib/templates/tools/_TEMPLATE.yaml`, and CHANGELOG aligned with the new target.
+7. **Update documentation** — Keep README support tables, the bundled Exuno skill, `lib/templates/tools/_TEMPLATE.yaml`, and CHANGELOG aligned with the new target.
 8. **Write tests** — Add assertions in:
    - `tests/sync.rs` — verify output files exist
    - `tests/sync_options.rs` — verify `--only`/`--skip` filtering
-   - `tests/check.rs` — verify `agentsync check` detects drift
+   - `tests/check.rs` — verify `exuno check` detects drift
    - focused converter/composition tests when the tool changes formats
-9. **Verify locally** — Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (or `cargo test --test sync` while iterating), `cargo build --release`, a repeated sync idempotency check, and `agentsync check`. CI confirms all supported platforms.
+9. **Verify locally** — Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (or `cargo test --test sync` while iterating), `cargo build --release`, a repeated sync idempotency check, and `exuno check`. CI confirms all supported platforms.
 
 ## Gotchas
 

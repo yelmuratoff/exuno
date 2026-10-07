@@ -77,7 +77,7 @@ alternative for a bare glyph, the principle behind WCAG technique H86.
 - An error names what failed and what to do next. The GNU shape is
   `program: message`, lower case, no full stop; a hint belongs on its own line,
   the way rustc writes `error:` then `help:`.
-- Say the command to run, not the concept: `run agentsync sync`, never
+- Say the command to run, not the concept: `run exuno sync`, never
   "re-synchronise the project".
 - Never print an engine-internal path. The virtual roots (`/<agentsync>/…`,
   `/<agentsync-overlay>/…`) mean nothing to a reader: `Paths::display` names

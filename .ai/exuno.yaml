@@ -1,7 +1,7 @@
-# AgentSync — Project Configuration
+# Exuno — Project Configuration
 # All keys are optional — remove any that you leave at the default.
 
-agentsync_version: "0.44.2"
+exuno_version: "0.44.2"
 
 # Tools: which ones to sync for this project.
 # Each name must match a base tool (see `agentsync list`) or a custom override
@@ -33,4 +33,4 @@ post_sync:
 # .gitignore management.
 gitignore:
   update: true
-format: 2
+format: 3
