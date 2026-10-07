@@ -15,8 +15,8 @@ use crate::{Error, config::catalog, config::format_rev, config::names, engine::s
 /// `AGENTSYNC_REPO` of `lib/helpers/update.sh`, which the CI template's install
 /// URL names.
 const REPO: &str = "yelmuratoff/exuno";
-const CI_WORKFLOW: &str = ".github/workflows/exuno-check.yml";
-const LEGACY_CI_WORKFLOW: &str = ".github/workflows/agentsync-check.yml";
+const CI_WORKFLOW: &str = names::CI_WORKFLOW;
+const LEGACY_CI_WORKFLOW: &str = names::LEGACY_CI_WORKFLOW;
 
 pub(super) struct Scaffold<'a> {
     pub(super) target: &'a str,

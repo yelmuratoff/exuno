@@ -10,7 +10,7 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::{Error, config::names, engine::staging};
 
-const KEY: &str = "exuno_version";
+const KEY: &str = names::VERSION_KEY;
 
 pub const HELP: Help = Help {
     command: "upgrade-config",

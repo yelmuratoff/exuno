@@ -18,7 +18,7 @@ use crate::{Error, config::names, config::yaml_subset};
 const DIR_TARGETS: [&str; 8] = [
     "rules", "skills", "commands", "agents", "settings", "mcp", "hooks", "tools",
 ];
-const CONFIG: &str = ".ai/exuno.yaml";
+const CONFIG: &str = names::CONFIG;
 const CONFIG_LEGACY: &str = "agent_sync.yaml";
 
 /// The first config `dir` resolves, relative to `dir`.

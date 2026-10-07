@@ -120,12 +120,12 @@ fn created_lines(style: &Style, scaffold: &Scaffold, payload_lines: &[String]) -
     if outputs == "committed" {
         text.push_str(&format!(
             "   Created {}     — project config (outputs: committed — teammates need only git pull)\n",
-            style.cyan(".ai/exuno.yaml")
+            style.cyan(crate::config::names::CONFIG)
         ));
     } else {
         text.push_str(&format!(
             "   Created {}     — project config (outputs: local — every clone runs exuno sync)\n",
-            style.cyan(".ai/exuno.yaml")
+            style.cyan(crate::config::names::CONFIG)
         ));
     }
     let agents = src.join("AGENTS.md");

@@ -12,8 +12,8 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::{Error, config::names, config::project_config};
 
-const BLOCK_START: &str = names::HOOK_BLOCKS[0].0;
-const BLOCK_END: &str = names::HOOK_BLOCKS[0].1;
+const BLOCK_START: &str = names::HOOK_BLOCK.0;
+const BLOCK_END: &str = names::HOOK_BLOCK.1;
 
 pub const HELP: Help = Help {
     command: "setup-hooks",
@@ -213,7 +213,7 @@ fn without_legacy_blocks(hook: &[u8]) -> Vec<u8> {
     if find(&text, BLOCK_START.as_bytes(), 0).is_none() {
         return text;
     }
-    for (start, end) in &names::HOOK_BLOCKS[1..] {
+    for (start, end) in [names::LEGACY_HOOK_BLOCK] {
         while let Some(at) = find(&text, start.as_bytes(), 0) {
             let Some(stop) = find(&text, end.as_bytes(), at) else {
                 break;

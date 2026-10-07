@@ -7,28 +7,46 @@ use crate::config::yaml_subset;
 
 const ENV_PREFIXES: [&str; 2] = ["EXUNO_", "AGENTSYNC_"];
 
+/// The binary, release archive, and engine skill name.
+pub const NAME: &str = "exuno";
+/// The name all of those carried before the rename.
+pub const LEGACY_NAME: &str = "agentsync";
+
+/// The project config a project gets.
+pub const CONFIG: &str = ".ai/exuno.yaml";
+/// Where a project config lived before the rename, in the order it was read.
+pub const LEGACY_CONFIGS: [&str; 2] = [".ai/agent_sync.yaml", "agent_sync.yaml"];
 /// Project config files, in the order a project resolves them.
-pub const CONFIG_CANDIDATES: [&str; 3] =
-    [".ai/exuno.yaml", ".ai/agent_sync.yaml", "agent_sync.yaml"];
+pub const CONFIG_CANDIDATES: [&str; 3] = [CONFIG, LEGACY_CONFIGS[0], LEGACY_CONFIGS[1]];
 
-/// Keys that pin the engine version in a project config.
-pub const VERSION_KEYS: [&str; 2] = ["exuno_version", "agentsync_version"];
+/// The key that pins the engine version in a project config.
+pub const VERSION_KEY: &str = "exuno_version";
+/// The same key under the old name.
+pub const LEGACY_VERSION_KEY: &str = "agentsync_version";
+/// Keys that pin the engine version, in the order a config is read.
+pub const VERSION_KEYS: [&str; 2] = [VERSION_KEY, LEGACY_VERSION_KEY];
 
-/// Start and end markers of the auto-sync block in a git hook.
-pub const HOOK_BLOCKS: [(&str, &str); 2] = [
-    (
-        "# >>> EXUNO AUTO SYNC START >>>",
-        "# <<< EXUNO AUTO SYNC END <<<",
-    ),
-    (
-        "# >>> AGENTSYNC AUTO SYNC START >>>",
-        "# <<< AGENTSYNC AUTO SYNC END <<<",
-    ),
-];
+/// Start and end markers of the auto-sync block a git hook gets.
+pub const HOOK_BLOCK: (&str, &str) = (
+    "# >>> EXUNO AUTO SYNC START >>>",
+    "# <<< EXUNO AUTO SYNC END <<<",
+);
+/// The same markers under the old name.
+pub const LEGACY_HOOK_BLOCK: (&str, &str) = (
+    "# >>> AGENTSYNC AUTO SYNC START >>>",
+    "# <<< AGENTSYNC AUTO SYNC END <<<",
+);
+/// Auto-sync block markers, in the order a hook is searched.
+pub const HOOK_BLOCKS: [(&str, &str); 2] = [HOOK_BLOCK, LEGACY_HOOK_BLOCK];
+
+/// The CI gate `init --ci github` writes.
+pub const CI_WORKFLOW: &str = ".github/workflows/exuno-check.yml";
+/// The same gate under the old name.
+pub const LEGACY_CI_WORKFLOW: &str = ".github/workflows/agentsync-check.yml";
 
 /// Names an engine-owned skill shipped under before its current one; a
 /// project copy under one of them is retired like a copy of the skill itself.
-pub const LEGACY_ENGINE_SKILLS: [&str; 1] = ["agentsync"];
+pub const LEGACY_ENGINE_SKILLS: [&str; 1] = [LEGACY_NAME];
 
 /// Frontmatter key prefixes for a skill's card metadata.
 pub const SKILL_METADATA_PREFIXES: [&str; 2] = ["metadata.exuno-", "metadata.agentsync-"];
@@ -46,8 +64,8 @@ pub fn env(suffix: &str, lookup: &dyn Fn(&str) -> Option<String>) -> Option<Stri
 /// answer from the binary it downloads; `exuno` otherwise.
 pub fn invoked_as(program: &Path) -> &'static str {
     match program.file_stem().and_then(|stem| stem.to_str()) {
-        Some("agentsync") => "agentsync",
-        _ => "exuno",
+        Some(LEGACY_NAME) => LEGACY_NAME,
+        _ => NAME,
     }
 }
 

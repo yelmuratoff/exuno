@@ -18,7 +18,7 @@ use crate::output::changelog;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::transaction::manifest::sha256_hex;
-use crate::{Error, config::catalog, engine_version};
+use crate::{Error, config::catalog, config::names, engine_version};
 
 pub const HELP: Help = Help {
     command: "update",
@@ -88,7 +88,7 @@ const fn archive_extension() -> &'static str {
 
 /// The names a release archive and its binary carry, newest first; releases
 /// before 0.45.0 ship as `agentsync-<target>`.
-const RELEASE_NAMES: [&str; 2] = ["exuno", "agentsync"];
+const RELEASE_NAMES: [&str; 2] = [names::NAME, names::LEGACY_NAME];
 
 fn binary_file(name: &str) -> String {
     if cfg!(windows) {
@@ -244,7 +244,7 @@ fn replace_binary(new: &Path, exe: &Path) -> Result<(), Error> {
     let name = exe
         .file_name()
         .map(|n| n.disk_text())
-        .unwrap_or_else(|| binary_file(RELEASE_NAMES[0]));
+        .unwrap_or_else(|| binary_file(names::NAME));
     let staged = dir.join(format!(".{name}.new"));
     std::fs::copy(new, &staged).map_err(|e| Error::io(&staged, e))?;
     #[cfg(unix)]
@@ -552,7 +552,7 @@ impl Download<'_, '_> {
             Some(binary) => Ok(Ok(binary)),
             None => Ok(Err(self.refuse(&format!(
                 "{name} does not contain {}.",
-                binary_file(RELEASE_NAMES[0])
+                binary_file(names::NAME)
             ))?)),
         }
     }

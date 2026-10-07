@@ -6,15 +6,12 @@ use crate::Error;
 use crate::config::{names, yaml_edit};
 use crate::paths::DiskText;
 
-const CONFIG: &str = ".ai/exuno.yaml";
-const LEGACY_CONFIGS: [&str; 2] = [".ai/agent_sync.yaml", "agent_sync.yaml"];
-const LEGACY_KEY: &str = "agentsync_version";
-const KEY: &str = "exuno_version";
-const LEGACY_SKILL: &str = "agentsync";
-const SKILL: &str = "exuno";
+use names::{
+    CI_WORKFLOW, CONFIG, LEGACY_CI_WORKFLOW, LEGACY_CONFIGS, LEGACY_NAME as LEGACY_SKILL,
+    LEGACY_VERSION_KEY as LEGACY_KEY, NAME as SKILL, VERSION_KEY as KEY,
+};
+
 const METADATA_KEYS: [&str; 3] = ["use-when", "not-for", "requirements"];
-const CI_WORKFLOW: &str = ".github/workflows/exuno-check.yml";
-const LEGACY_CI_WORKFLOW: &str = ".github/workflows/agentsync-check.yml";
 const HOOKS: [&str; 3] = ["pre-commit", "post-merge", "post-checkout"];
 
 /// The kind of thing that still carries the old name.
@@ -118,7 +115,7 @@ pub fn scan(root: &Path) -> Vec<Leftover> {
         let blocked = ci.is_file().then_some(ci);
         found.push(Leftover::new(Kind::CiWorkflow, legacy_ci, blocked));
     }
-    let (legacy_start, _) = names::HOOK_BLOCKS[1];
+    let (legacy_start, _) = names::LEGACY_HOOK_BLOCK;
     for hook in HOOKS {
         let path = root.join(".git/hooks").join(hook);
         if read(&path).is_some_and(|text| text.contains(legacy_start)) {
