@@ -1,20 +1,20 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/assets/agent_sync.svg">
-    <img src="https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/assets/agent_sync_light.svg" alt="AgentSync" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/yelmuratoff/exuno/main/assets/agent_sync.svg">
+    <img src="https://raw.githubusercontent.com/yelmuratoff/exuno/main/assets/agent_sync_light.svg" alt="Exuno" width="400">
   </picture>
 
   <h3>One source → 15 AI tools. Stop copy-pasting rules.</h3>
 
   <p>
-    <a href="https://github.com/yelmuratoff/agent_sync">
+    <a href="https://github.com/yelmuratoff/exuno">
       <img src="https://img.shields.io/badge/built_with-rust-4EAA25?style=for-the-badge&logo=rust&logoColor=white" alt="Built with Rust">
     </a>
     <a href="https://www.gnu.org/licenses/gpl-3.0.html">
       <img src="https://img.shields.io/badge/license-GPL--3.0--only-4EAA25?style=for-the-badge" alt="GPL-3.0-only License">
     </a>
-    <a href="https://github.com/yelmuratoff/agent_sync">
-      <img src="https://img.shields.io/github/stars/yelmuratoff/agent_sync?style=for-the-badge&logo=github&color=4EAA25" alt="GitHub stars">
+    <a href="https://github.com/yelmuratoff/exuno">
+      <img src="https://img.shields.io/github/stars/yelmuratoff/exuno?style=for-the-badge&logo=github&color=4EAA25" alt="GitHub stars">
     </a>
   </p>
 </div>
@@ -27,13 +27,13 @@ Use more than one tool — or work on a team where different people use differen
 
 ## The solution
 
-AgentSync syncs from a single source (`.ai/src/`) into **15 AI tools**: Claude Code, GitHub Copilot, Cursor, Gemini CLI, OpenAI Codex, Kimi Code, MiniMax Code, OpenCode, Devin Desktop (Windsurf), JetBrains Junie, Cline, Kiro, Amazon Q, Zed, Google Antigravity.
+Exuno syncs from a single source (`.ai/src/`) into **15 AI tools**: Claude Code, GitHub Copilot, Cursor, Gemini CLI, OpenAI Codex, Kimi Code, MiniMax Code, OpenCode, Devin Desktop (Windsurf), JetBrains Junie, Cline, Kiro, Amazon Q, Zed, Google Antigravity.
 
-Write once → `agentsync sync` → every tool gets instructions in its native format.
+Write once → `exuno sync` → every tool gets instructions in its native format.
 
 ```
 .ai/src/rules/testing.md
-    ↓ agentsync sync
+    ↓ exuno sync
 ├── .claude/rules/testing.md              # + @rules/testing.md import in CLAUDE.md
 ├── .cursor/rules/testing.mdc             # + globs/alwaysApply frontmatter
 ├── .github/instructions/testing.instructions.md  # + applyTo frontmatter
@@ -43,20 +43,20 @@ Write once → `agentsync sync` → every tool gets instructions in its native f
 └── .rules                                # merged into single file (Zed)
 ```
 
-The frontmatter above is the always-on default. Give a rule `paths:` frontmatter (a list of globs) and AgentSync emits each tool's **scoped** trigger instead (`alwaysApply: false`, `applyTo: <globs>`, `trigger: glob`; Claude keeps `paths:`), so domain rules load only when matching files are touched — keeping the always-on context lean.
+The frontmatter above is the always-on default. Give a rule `paths:` frontmatter (a list of globs) and Exuno emits each tool's **scoped** trigger instead (`alwaysApply: false`, `applyTo: <globs>`, `trigger: glob`; Claude keeps `paths:`), so domain rules load only when matching files are touched — keeping the always-on context lean.
 
 ## Speed
 
-AgentSync was a Bash program until 0.37.0 and is a single Rust binary from
+Exuno was a Bash program until 0.37.0 and is a single Rust binary from
 0.38.0. On the repository's own benchmark fixture — 389 source files, 13 tools
 enabled, 3465 generated files — the same commands on the same machine:
 
 | Command | Bash 0.37.0 | Rust 0.38.0 |
 | --- | --- | --- |
-| `agentsync list` | 0.57 s | under 0.01 s |
-| `agentsync check` | 73.6 s | 0.25 s |
-| `agentsync sync` | 67.5 s | 2.5 s |
-| `agentsync sync --if-stale` | 0.18 s | 0.01 s |
+| `exuno list` | 0.57 s | under 0.01 s |
+| `exuno check` | 73.6 s | 0.25 s |
+| `exuno sync` | 67.5 s | 2.5 s |
+| `exuno sync --if-stale` | 0.18 s | 0.01 s |
 
 `check` is the one that changes what you can do with it: at 74 seconds it could
 not live in a pre-commit hook, and at a quarter of a second you stop noticing
@@ -71,8 +71,8 @@ recorded before the migration started.
 
 ## Why not just...?
 
-- **...symlink the files?** Tools demand different extensions (`.mdc`, `.instructions.md`), different frontmatter, different nesting. Symlinks can't transform content — AgentSync does.
-- **...a shell script per tool?** You'd be writing the same copy / rename / header-injection logic 14 times. AgentSync is that script, declarative (YAML), already tested on macOS, Linux, and Windows.
+- **...symlink the files?** Tools demand different extensions (`.mdc`, `.instructions.md`), different frontmatter, different nesting. Symlinks can't transform content — Exuno does.
+- **...a shell script per tool?** You'd be writing the same copy / rename / header-injection logic 14 times. Exuno is that script, declarative (YAML), already tested on macOS, Linux, and Windows.
 - **...stick to the one tool I use today?** Teammates pick different ones. Your future self might too. A single source file future-proofs you.
 - **Zero runtime dependencies.** A single static binary. No Node, Python, `yq`, or `jq`. Install with one `curl | bash`.
 
@@ -84,6 +84,7 @@ recorded before the migration started.
 - [Speed](#speed)
 - [Why not just...?](#why-not-just)
 - [Installation](#installation)
+  - [Coming from AgentSync](#coming-from-agentsync)
 - [Team Setup](#team-setup)
 - [Quick Start](#quick-start)
 - [Project Structure](#project-structure)
@@ -104,16 +105,16 @@ recorded before the migration started.
 - [Customization workflow](#customization-workflow)
 - [How Resources Resolve](#how-resources-resolve)
 - [Migrating from the 0.10 flat layout](#migrating-from-the-010-flat-layout)
-- [Migrating an outdated AgentSync project](#migrating-an-outdated-agentsync-project)
+- [Migrating an outdated Exuno project](#migrating-an-outdated-exuno-project)
 - [Path Overrides](#path-overrides)
 - [Migrating Existing Configurations](#migrating-existing-configurations)
   - [Step-by-step](#step-by-step)
   - [What gets overwritten](#what-gets-overwritten)
   - [Drift detection](#drift-detection)
-  - [`agentsync adopt` — promote an IDE edit back into source](#agentsync-adopt--promote-an-ide-edit-back-into-source)
+  - [`exuno adopt` — promote an IDE edit back into source](#exuno-adopt--promote-an-ide-edit-back-into-source)
   - [Disabling sync for tools or categories](#disabling-sync-for-tools-or-categories)
   - [Letting a tool read `AGENTS.md` instead of its own file](#letting-a-tool-read-agentsmd-instead-of-its-own-file)
-- [Workspaces — nested AgentSync projects](#workspaces--nested-agentsync-projects)
+- [Workspaces — nested Exuno projects](#workspaces--nested-exuno-projects)
 - [Profiles — multiple config homes per tool](#profiles--multiple-config-homes-per-tool)
 - [Development](#development)
 - [License](#license)
@@ -123,31 +124,43 @@ recorded before the migration started.
 
 ## Installation
 
-Requirements: `curl` and `tar`. AgentSync is one static binary for **macOS** (Apple silicon and Intel), **Linux** (x86_64 and arm64) and **Windows** (x86_64).
+Requirements: `curl` and `tar`. Exuno is one static binary for **macOS** (Apple silicon and Intel), **Linux** (x86_64 and arm64) and **Windows** (x86_64).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash
 ```
 
 On Windows, from PowerShell:
 
 ```powershell
-irm https://github.com/yelmuratoff/agent_sync/releases/latest/download/agentsync-installer.ps1 | iex
+irm https://github.com/yelmuratoff/exuno/releases/latest/download/exuno-installer.ps1 | iex
 ```
 
-To install the exact release a project pins in `agentsync_version` — what CI should do when outputs are committed — set `AGENTSYNC_VERSION`; the same variable moves an existing install, and `agentsync update <version>` does it from the CLI:
+To install the exact release a project pins in `exuno_version` — what CI should do when outputs are committed — set `EXUNO_VERSION`; the same variable moves an existing install, and `exuno update <version>` does it from the CLI:
 
 ```bash
-AGENTSYNC_VERSION=0.36.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh | bash
+EXUNO_VERSION=0.45.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash
 ```
 
 What the installer does:
 
 1. Downloads the release archive for your platform from GitHub Releases and verifies its sha256
-2. Places the binary at `~/.agentsync/bin/agentsync`
-3. Creates a symlink `agentsync` in `/usr/local/bin/` (falls back to `~/.local/bin/`)
+2. Places the binary at `~/.exuno/bin/exuno`
+3. Creates the symlinks `exuno` and `agentsync` in `/usr/local/bin/` (falls back to `~/.local/bin/`) — the second keeps hooks and CI written before the rename working until 1.0
 
-`agentsync update` replaces the binary with the latest release, and `agentsync update <version>` pins one. Releases before the first binary release have no archive: pinning to one installs from source (a git clone in `~/.agentsync/` with `AGENTSYNC_HOME` in your shell config, as the installer always did), and such an install moves to the binary by itself the next time `agentsync update` reaches a release that ships one.
+`exuno update` replaces the binary with the latest release, and `exuno update <version>` pins one. A release before 0.45.0 ships as `agentsync-<target>`, which both the installer and `update` still fetch. Releases before the first binary release have no archive: pinning to one installs from source (a git clone in `~/.exuno/` with `AGENTSYNC_HOME` in your shell config, as the installer always did), and such an install moves to the binary by itself the next time `exuno update` reaches a release that ships one.
+
+### Coming from AgentSync
+
+Exuno was called AgentSync up to 0.44. Everything keeps working until 1.0: the `agentsync` command, `AGENTSYNC_*` variables, `.ai/agent_sync.yaml`, `agentsync_version`, `metadata.agentsync-*` skill keys, and git hooks or CI gates that call `agentsync`. To move a project to the new names:
+
+```bash
+exuno migrate --legacy        # dry-run: lists every file, key, and skill still named agentsync
+exuno migrate --apply --yes   # renames them and records format r3
+exuno setup-hooks             # rewrites git hooks that still run the agentsync block
+```
+
+`exuno doctor` names whatever is left. A previous install in `~/.agentsync` is no longer used once you rerun the installer; it tells you how to remove it.
 
 ## Team Setup
 
@@ -155,56 +168,56 @@ One person connects the project; nobody else runs anything.
 
 ```bash
 cd your-project
-agentsync init --tools claude,cursor   # wizard in a TTY; adopts existing config, then syncs
-git add -A && git commit -m "chore: add agentsync"
+exuno init --tools claude,cursor   # wizard in a TTY; adopts existing config, then syncs
+git add -A && git commit -m "chore: add exuno"
 ```
 
-`init` keeps the tool config the project already has, generates the outputs for every enabled tool, and — with a `.github/` directory — offers a CI job that runs `agentsync check`. After the commit:
+`init` keeps the tool config the project already has, generates the outputs for every enabled tool, and — with a `.github/` directory — offers a CI job that runs `exuno check`. After the commit:
 
 - **Everyone else** runs nothing. `git pull` brings `CLAUDE.md`, `.claude/rules/`, `.cursor/rules/` and the rest, already current.
-- **Anyone editing the rules** edits `.ai/src/`, runs `agentsync sync`, and commits source and outputs together. `agentsync setup-hooks` installs a pre-commit hook that enforces that, and `agentsync check` in CI catches it when they skip the hook.
+- **Anyone editing the rules** edits `.ai/src/`, runs `exuno sync`, and commits source and outputs together. `exuno setup-hooks` installs a pre-commit hook that enforces that, and `exuno check` in CI catches it when they skip the hook.
 - **Everyone's agent** is told to edit `.ai/src/`: the shipped rules say so, and Claude Code gets a generated `PreToolUse` hook that blocks a write to a generated file and names the source instead.
 
-Pin the engine so every machine and CI generate the same bytes: `agentsync_version` in `.ai/agent_sync.yaml` is written by `init`, and `sync` and `check` stop when the running version differs. Install an exact release with `AGENTSYNC_VERSION=<version>` on the installer or `agentsync update <version>`.
+Pin the engine so every machine and CI generate the same bytes: `exuno_version` in `.ai/exuno.yaml` is written by `init`, and `sync` and `check` stop when the running version differs. Install an exact release with `EXUNO_VERSION=<version>` on the installer or `exuno update <version>`.
 
-Teams that would rather not commit generated files can pass `--outputs local`; then every clone needs `agentsync` and `agentsync setup-hooks`. See [Where generated files live](#where-generated-files-live).
+Teams that would rather not commit generated files can pass `--outputs local`; then every clone needs `exuno` and `exuno setup-hooks`. See [Where generated files live](#where-generated-files-live).
 
 ## Quick Start
 
 ```bash
 cd your-project
-agentsync init                        # 1. Interactive wizard in a TTY; auto-detect elsewhere
-agentsync enable claude cursor        # 2. Turn on the tools you use (prints where to edit)
-agentsync add mcp github --command …  # 3. (Optional) wire up shared MCP servers
-agentsync generate | pbcopy           # 4. (Optional) AI-generate a project-specific config
-agentsync sync                        # 5. Re-distribute after any change to .ai/src/
+exuno init                        # 1. Interactive wizard in a TTY; auto-detect elsewhere
+exuno enable claude cursor        # 2. Turn on the tools you use (prints where to edit)
+exuno add mcp github --command …  # 3. (Optional) wire up shared MCP servers
+exuno generate | pbcopy           # 4. (Optional) AI-generate a project-specific config
+exuno sync                        # 5. Re-distribute after any change to .ai/src/
 ```
 
 **What each step does:**
 
-1. **`agentsync init`** — Scaffolds the `.ai/` directory, adopts the tool config the project already has, and runs the first sync. In a terminal it opens a short wizard to pick tools, content sections, whether to commit generated files, and whether to add the CI gate; in scripts/CI it runs silently using auto-detection (`.claude/`, `.cursor/`, `CLAUDE.md`, ...) and those defaults. Only the payloads you opt into get scaffolded — other tools use shipped base templates at sync time. Useful flags: `--tools claude,cursor` (explicit list), `--content agents,rules` (narrow content), `--outputs local` (gitignore the outputs instead), `--existing replace` (regenerate over the project's own config instead of adopting it), `--ci github` (write the check workflow), `--no-sync` (skip the first sync), `--no-templates` (empty `.ai/src/` layout without shipped starters), `--no-detect` (skip tool auto-detection), `--yes` (accept defaults), `--dry-run` (preview). Safe to run twice — if `.ai/src/` already exists, it skips.
+1. **`exuno init`** — Scaffolds the `.ai/` directory, adopts the tool config the project already has, and runs the first sync. In a terminal it opens a short wizard to pick tools, content sections, whether to commit generated files, and whether to add the CI gate; in scripts/CI it runs silently using auto-detection (`.claude/`, `.cursor/`, `CLAUDE.md`, ...) and those defaults. Only the payloads you opt into get scaffolded — other tools use shipped base templates at sync time. Useful flags: `--tools claude,cursor` (explicit list), `--content agents,rules` (narrow content), `--outputs local` (gitignore the outputs instead), `--existing replace` (regenerate over the project's own config instead of adopting it), `--ci github` (write the check workflow), `--no-sync` (skip the first sync), `--no-templates` (empty `.ai/src/` layout without shipped starters), `--no-detect` (skip tool auto-detection), `--yes` (accept defaults), `--dry-run` (preview). Safe to run twice — if `.ai/src/` already exists, it skips.
 
-2. **`agentsync enable <tool>`** — Adds the tool to `tools.enabled` _and_ scaffolds editable copies of its settings / hooks at `.ai/src/tools/<tool>/`, then prints the exact file path to edit plus the shared MCP path. Pass `--no-scaffold` to skip materializing files; pass `--yes` to accept the TTY confirm non-interactively.
+2. **`exuno enable <tool>`** — Adds the tool to `tools.enabled` _and_ scaffolds editable copies of its settings / hooks at `.ai/src/tools/<tool>/`, then prints the exact file path to edit plus the shared MCP path. Pass `--no-scaffold` to skip materializing files; pass `--yes` to accept the TTY confirm non-interactively.
 
-3. **`agentsync add mcp <server>`** — Writes an MCP server entry into the shared `.ai/src/mcp.json`. On the next `sync`, every enabled MCP target gets the server map in its native format. Put a divergent map at `.ai/src/tools/<tool>/mcp.json`; `agentsync customize <tool> mcp` scaffolds it when that target ships a copyable base.
+3. **`exuno add mcp <server>`** — Writes an MCP server entry into the shared `.ai/src/mcp.json`. On the next `sync`, every enabled MCP target gets the server map in its native format. Put a divergent map at `.ai/src/tools/<tool>/mcp.json`; `exuno customize <tool> mcp` scaffolds it when that target ships a copyable base.
 
-4. **`agentsync generate`** — Prints a detailed prompt that you paste into any AI (Claude, ChatGPT, Gemini). The AI analyzes your project description and generates a complete `.ai/src/` config tailored to your stack: project-specific AGENTS.md, rules, skills, commands, agents, and settings. Pass optional context: `agentsync generate "React + Next.js + Prisma"`. Use `| pbcopy` (macOS) or `| xclip` (Linux) to copy to clipboard.
+4. **`exuno generate`** — Prints a detailed prompt that you paste into any AI (Claude, ChatGPT, Gemini). The AI analyzes your project description and generates a complete `.ai/src/` config tailored to your stack: project-specific AGENTS.md, rules, skills, commands, agents, and settings. Pass optional context: `exuno generate "React + Next.js + Prisma"`. Use `| pbcopy` (macOS) or `| xclip` (Linux) to copy to clipboard.
 
-5. **`agentsync sync`** — Reads each enabled tool's config (user override + shipped base — see [How Resources Resolve](#how-resources-resolve)), then copies and transforms your source files into tool-specific formats. Rules get renamed (`.mdc` for Cursor, `.instructions.md` for Copilot), frontmatter headers are added, commands are converted to TOML for Gemini, agents get the right extensions, and settings/MCP/hooks are placed where each tool expects them. Also manages the `.gitignore` block that matches your `outputs:` mode — see [Where generated files live](#where-generated-files-live).
+5. **`exuno sync`** — Reads each enabled tool's config (user override + shipped base — see [How Resources Resolve](#how-resources-resolve)), then copies and transforms your source files into tool-specific formats. Rules get renamed (`.mdc` for Cursor, `.instructions.md` for Copilot), frontmatter headers are added, commands are converted to TOML for Gemini, agents get the right extensions, and settings/MCP/hooks are placed where each tool expects them. Also manages the `.gitignore` block that matches your `outputs:` mode — see [Where generated files live](#where-generated-files-live).
 
 After `sync`, tool-specific directories appear (`.claude/`, `.cursor/`, `.github/`, `.devin/`, etc.), each with instructions in that tool's expected format.
 
-> **Important:** `agentsync sync` **overwrites** generated tool directories entirely. `agentsync init` adopts the config a project already has, and `agentsync adopt <file>` promotes a single file at any time — but a sync you run against untouched tool directories replaces them from `.ai/src/`. See [Migrating Existing Configurations](#migrating-existing-configurations).
+> **Important:** `exuno sync` **overwrites** generated tool directories entirely. `exuno init` adopts the config a project already has, and `exuno adopt <file>` promotes a single file at any time — but a sync you run against untouched tool directories replaces them from `.ai/src/`. See [Migrating Existing Configurations](#migrating-existing-configurations).
 
 ## Project Structure
 
-AgentSync supports two source layouts:
+Exuno supports two source layouts:
 
 **Structured (default, created by `init`):**
 
 ```
 .ai/
-├── agent_sync.yaml             # project config (tools.enabled, version pin, paths)
+├── exuno.yaml             # project config (tools.enabled, version pin, paths)
 └── src/                        # Source of truth. Edit ONLY here.
     ├── AGENTS.md               # Agent identity: role, approach, principles
     ├── rules/                  # Rules — always-on, or paths:-scoped (load on-demand)
@@ -223,7 +236,7 @@ AgentSync supports two source layouts:
             └── mcp.json        #     per-tool MCP override (shadows mcp.json above)
 ```
 
-> **Note:** `init` is minimal. `mcp.json` and every file under `tools/<tool>/` are _overrides_ — they appear only when you opt in via `agentsync enable`, `agentsync customize`, or `agentsync add mcp`. Missing overrides fall back to shipped base templates automatically — see [How Resources Resolve](#how-resources-resolve) and [Customization workflow](#customization-workflow).
+> **Note:** `init` is minimal. `mcp.json` and every file under `tools/<tool>/` are _overrides_ — they appear only when you opt in via `exuno enable`, `exuno customize`, or `exuno add mcp`. Missing overrides fall back to shipped base templates automatically — see [How Resources Resolve](#how-resources-resolve) and [Customization workflow](#customization-workflow).
 
 **Flat (auto-detected):** `.ai/AGENTS.md`, `.ai/rules/`, `.ai/skills/`, `.ai/tools/`
 
@@ -234,7 +247,7 @@ AgentSync supports two source layouts:
 | **AGENTS.md** | Agent identity — role, approach, principles. Copied as-is (renamed per tool: `CLAUDE.md`, `GEMINI.md`, `.junie/AGENTS.md`, `00-context.md`).                                                                                                                                                                                                                      | All                                                         |
 | **rules/**    | Always-on constraints by default. Add `paths:` frontmatter (a list of globs) to scope a domain rule so it loads only when matching files are touched — translated to each tool's native trigger (Claude keeps `paths:`, Cursor `globs`+`alwaysApply:false`, Copilot `applyTo`, Windsurf/Antigravity `trigger: glob`). One file per topic; keep the always-on set lean so individual rules aren't diluted. | All                                                         |
 | **skills/**   | On-demand recipes in the open [agentskills.io](https://agentskills.io) format. Each skill = directory with `SKILL.md` + optional `references/`, `scripts/`, `assets/`. Description is the trigger (keyword-first, pushy about phrasings, narrow about the domain, ≤1024 chars). `Gotchas` section prevents repeated mistakes. Inlined as index for tools without native skills support. | All except MiniMax Code; its project skill path is unverified |
-| **commands/** | Custom slash commands. `review.md` → `/project:review`. Support `$ARGUMENTS` and `` !`shell` `` syntax. Auto-converted to TOML for Gemini. For tools without a native commands surface, AgentSync converts commands to generated skills or an inlined index. | Claude, Cursor, Copilot (`.prompt.md`), Gemini (TOML), Junie, Cline, Windsurf, Antigravity, OpenCode; Codex and Kimi Code (as skills); Amazon Q, Zed (inlined) |
+| **commands/** | Custom slash commands. `review.md` → `/project:review`. Support `$ARGUMENTS` and `` !`shell` `` syntax. Auto-converted to TOML for Gemini. For tools without a native commands surface, Exuno converts commands to generated skills or an inlined index. | Claude, Cursor, Copilot (`.prompt.md`), Gemini (TOML), Junie, Cline, Windsurf, Antigravity, OpenCode; Codex and Kimi Code (as skills); Amazon Q, Zed (inlined) |
 | **agents/**   | Subagent personas. Isolated context, restricted tools. Frontmatter: `model`, `tools`, `readonly`. Converted when the target needs a different schema. | Claude, Cursor, Copilot (`.agent.md`), Gemini, Junie, Codex (TOML), Amazon Q (JSON), OpenCode (safe MD) |
 | **settings/** | Permissions & config. Per-tool files (`claude.json`, `gemini.json`, `codex.toml`, `opencode.json`, `zed.json`). Controls allow/deny rules. Claude hooks also go here. | Claude, Gemini, Codex, OpenCode, Zed |
 | **mcp.json**  | Shared canonical `mcpServers` map. Copied to compatible targets and converted into OpenCode's top-level `mcp` map. | Claude, Cursor, Windsurf, Junie, Amazon Q, Kimi Code, MiniMax Code, OpenCode |
@@ -244,7 +257,7 @@ AgentSync supports two source layouts:
 ## CLI Commands
 
 ```
-agentsync <command> [options]
+exuno <command> [options]
 ```
 
 | Command                  | Alias | Description                                                                                    |
@@ -263,7 +276,7 @@ agentsync <command> [options]
 | `resolve`                |       | Interactively reconcile overrides with base values                                              |
 | `refresh`                |       | Pull new template files into existing `.ai/src/` (three-way diff; `--status` to list declined) |
 | `dedupe`                 |       | Interactively remove source files duplicated against a parent `.ai/src/`                       |
-| `migrate`                |       | Print and copy an AI prompt that safely upgrades an existing AgentSync configuration            |
+| `migrate`                |       | Print and copy an AI prompt that safely upgrades an existing Exuno configuration            |
 | `adopt <dest>`           |       | Promote a manual edit in a generated file back into `.ai/src/` (`--all` for every drifted file) |
 | `profile <cmd>`          |       | Manage config-home profiles: `add`, `list`, `remove` (work/personal tool variants)             |
 | `doctor`                 |       | Validate setup and surface drift / config warnings / cross-project advisories                  |
@@ -276,62 +289,62 @@ agentsync <command> [options]
 | `skills list\|show\|check` |     | Inspect effective project skills and check their `SKILL.md` metadata (`--profile <name>`)     |
 | `mcp list\|show\|validate\|render\|use` |     | Inspect a selected offline MCP catalog or prepare a per-tool source without running servers     |
 | `update`                 |       | Replace the binary with the latest release, or `update <version>` to pin a release tag         |
-| `upgrade-config`         |       | Re-pin `agentsync_version` in `agent_sync.yaml`                                                 |
+| `upgrade-config`         |       | Re-pin `exuno_version` in `exuno.yaml`                                                 |
 | `release`                |       | Bump version, tag, and push (maintainer)                                                        |
 | `version`                | `-v`  | Print version                                                                                  |
 | `help`                   | `-h`  | Show help                                                                                      |
 
 ### Skill categories
 
-A directory under `skills/` without its own `SKILL.md` is a category, so `.ai/src/skills/flutter/bloc/SKILL.md` and `.ai/src/skills/backend/auth/SKILL.md` can sit side by side, up to four category levels deep. Tools disagree on nested skills (Claude Code, VS Code Copilot, and Gemini CLI skip them), so `sync` lands every skill flat at `<dest>/<name>/` for every tool, and the inlined index groups entries under a heading per category. Keep leaf names unique across categories: two skills sharing a name stop `sync`. `targets.skills.include`/`exclude` match a skill's name or its category path, so `exclude: cloudflare/*` drops a whole category for one tool. Scaffold into a category with `agentsync add skill bloc --category flutter`; category names follow the same lowercase-kebab rule as skill names, and `skills check` and `doctor` flag a directory that breaks it. Moving a shipped skill such as `commit` into a category keeps it tracked: `refresh` finds it there by name and updates it in place.
+A directory under `skills/` without its own `SKILL.md` is a category, so `.ai/src/skills/flutter/bloc/SKILL.md` and `.ai/src/skills/backend/auth/SKILL.md` can sit side by side, up to four category levels deep. Tools disagree on nested skills (Claude Code, VS Code Copilot, and Gemini CLI skip them), so `sync` lands every skill flat at `<dest>/<name>/` for every tool, and the inlined index groups entries under a heading per category. Keep leaf names unique across categories: two skills sharing a name stop `sync`. `targets.skills.include`/`exclude` match a skill's name or its category path, so `exclude: cloudflare/*` drops a whole category for one tool. Scaffold into a category with `exuno add skill bloc --category flutter`; category names follow the same lowercase-kebab rule as skill names, and `skills check` and `doctor` flag a directory that breaks it. Moving a shipped skill such as `commit` into a category keeps it tracked: `refresh` finds it there by name and updates it in place.
 
 ### Inspecting skills
 
-`agentsync skills list` reads the effective `source.skills` tree, including shared and bundled skills, and names each skill's category. Use `--profile <name>` to inspect a profile, or `--include` and `--exclude` to filter by name or category path. `agentsync skills show <name>` displays a skill's description, category, source path, and declared `license` and `compatibility` when present. `agentsync skills check` reports missing or malformed required metadata, empty or too-deep categories, and names two skills share; of those, `sync` refuses only the shared name.
+`exuno skills list` reads the effective `source.skills` tree, including shared and bundled skills, and names each skill's category. Use `--profile <name>` to inspect a profile, or `--include` and `--exclude` to filter by name or category path. `exuno skills show <name>` displays a skill's description, category, source path, and declared `license` and `compatibility` when present. `exuno skills check` reports missing or malformed required metadata, empty or too-deep categories, and names two skills share; of those, `sync` refuses only the shared name.
 
 The [Agent Skills specification](https://agentskills.io/specification) defines `name`, `description`, `compatibility`, and an optional string-valued `metadata` map. For project-owned skills, use that map when a concise card needs extra human context:
 
 ```yaml
 metadata:
-  agentsync-use-when: Review a selected diff before merging
-  agentsync-not-for: Writing or fixing the code under review
-  agentsync-requirements: A selected diff and access to the repository
+  exuno-use-when: Review a selected diff before merging
+  exuno-not-for: Writing or fixing the code under review
+  exuno-requirements: A selected diff and access to the repository
 ```
 
-`skills show` labels these entries as **unverified annotations**; it does not probe tools, authorize actions, or select a skill automatically. The built-in check covers the required fields and common scalar forms. Use the [reference validator](https://agentskills.io/specification#validation) (`skills-ref validate <skill-dir>`) for full format validation. [OASF](https://github.com/agntcy/oasf) provides a separate capability taxonomy; AgentSync does not infer OASF mappings from a skill description.
+`skills show` labels these entries as **unverified annotations**; it does not probe tools, authorize actions, or select a skill automatically. The built-in check covers the required fields and common scalar forms. Use the [reference validator](https://agentskills.io/specification#validation) (`skills-ref validate <skill-dir>`) for full format validation. [OASF](https://github.com/agntcy/oasf) provides a separate capability taxonomy; Exuno does not infer OASF mappings from a skill description.
 
-For skills outside this project's effective source tree, `agentsync skills catalog list/show --catalog FILE` reads an explicitly selected, manually curated catalog. Optional `--source ALIAS=LOCAL_REPO` inspects metadata from a full pinned commit in a local Git repository. It does not fetch, install, execute, or verify the curator's suitability claims. See the [experimental catalog contract](docs/skill-cards.md) and [pinned example](docs/examples/skill-cards/pilot/catalog.tsv).
+For skills outside this project's effective source tree, `exuno skills catalog list/show --catalog FILE` reads an explicitly selected, manually curated catalog. Optional `--source ALIAS=LOCAL_REPO` inspects metadata from a full pinned commit in a local Git repository. It does not fetch, install, execute, or verify the curator's suitability claims. See the [experimental catalog contract](docs/skill-cards.md) and [pinned example](docs/examples/skill-cards/pilot/catalog.tsv).
 
 ### Inspecting an MCP catalog
 
-`agentsync mcp list/show/validate/render --library DIR` reads JSON manifests from a selected local catalog. `list` prints IDs and titles, `show` prints the selected manifest's original bytes, `validate` checks one entry or the whole catalog, and `render <id>[@variant]` prints the selected connection as AgentSync MCP source JSON. `mcp use <id>[@variant] --tool SLUG` previews a per-tool source; `--apply` writes it, and `--merge --apply` extends an existing per-tool JSON source with one server. Replacing an ID requires `--replace <id>`. These commands do not start a server or probe an endpoint, and `use` does not run `sync` for you. See the [MCP catalog contract](docs/mcp-library.md) for the bounded manifest format and optional `library.mcp.path` setting. The opt-in [pilot catalog](catalog/mcp/README.md) includes Microsoft Learn, Context7, and Octocode with their requirements and source references.
+`exuno mcp list/show/validate/render --library DIR` reads JSON manifests from a selected local catalog. `list` prints IDs and titles, `show` prints the selected manifest's original bytes, `validate` checks one entry or the whole catalog, and `render <id>[@variant]` prints the selected connection as Exuno MCP source JSON. `mcp use <id>[@variant] --tool SLUG` previews a per-tool source; `--apply` writes it, and `--merge --apply` extends an existing per-tool JSON source with one server. Replacing an ID requires `--replace <id>`. These commands do not start a server or probe an endpoint, and `use` does not run `sync` for you. See the [MCP catalog contract](docs/mcp-library.md) for the bounded manifest format and optional `library.mcp.path` setting. The opt-in [pilot catalog](catalog/mcp/README.md) includes Microsoft Learn, Context7, and Octocode with their requirements and source references.
 
 ### Sync options
 
 ```bash
-agentsync sync                        # All enabled tools
-agentsync sync --only claude,cursor   # Only specified tools
-agentsync sync --skip gemini          # All except specified
-agentsync sync --profile hub          # Personal tools + the named profile (config-home variant)
-agentsync sync --dry-run              # Preview without writing
-agentsync sync --force                # Overwrite edited files and prune hand-added files in generated dirs
-agentsync sync --workspace            # Run sync in every .ai/ below cwd (bottom-up alphabetical)
-agentsync sync --quiet                # Only warnings, errors, and the closing [DONE] line
-agentsync sync --json                 # One JSON summary object on stdout after a successful run
-agentsync rollback --list             # List init/sync/rollback snapshots
-agentsync rollback --dry-run          # Preview restoring the latest snapshot
-agentsync rollback <backup-id> --yes  # Restore one snapshot non-interactively
+exuno sync                        # All enabled tools
+exuno sync --only claude,cursor   # Only specified tools
+exuno sync --skip gemini          # All except specified
+exuno sync --profile hub          # Personal tools + the named profile (config-home variant)
+exuno sync --dry-run              # Preview without writing
+exuno sync --force                # Overwrite edited files and prune hand-added files in generated dirs
+exuno sync --workspace            # Run sync in every .ai/ below cwd (bottom-up alphabetical)
+exuno sync --quiet                # Only warnings, errors, and the closing [DONE] line
+exuno sync --json                 # One JSON summary object on stdout after a successful run
+exuno rollback --list             # List init/sync/rollback snapshots
+exuno rollback --dry-run          # Preview restoring the latest snapshot
+exuno rollback <backup-id> --yes  # Restore one snapshot non-interactively
 ```
 
-The sync log is written to stderr, so `agentsync sync > out.json` captures nothing but the `--json` summary and `2>&1` merges the log back in. The JSON object is the stable contract for scripts — `dry_run`, `synced`, `total`, `skipped`, `written`, `preserved`, `backup` — and its fields are only ever added to; the human log may change between releases.
+The sync log is written to stderr, so `exuno sync > out.json` captures nothing but the `--json` summary and `2>&1` merges the log back in. The JSON object is the stable contract for scripts — `dry_run`, `synced`, `total`, `skipped`, `written`, `preserved`, `backup` — and its fields are only ever added to; the human log may change between releases.
 
 ### Generate
 
 ```bash
-agentsync generate                    # Generate bootstrap prompt
-agentsync generate | pbcopy           # Copy to clipboard (macOS)
-agentsync generate "React + Next.js"  # With project context
-agentsync migrate                     # Print and auto-copy a safe upgrade prompt
+exuno generate                    # Generate bootstrap prompt
+exuno generate | pbcopy           # Copy to clipboard (macOS)
+exuno generate "React + Next.js"  # With project context
+exuno migrate                     # Print and auto-copy a safe upgrade prompt
 ```
 
 Works like `claude /init` — generates a prompt that you paste into any AI (Claude, ChatGPT, Gemini). The AI analyzes your codebase description and creates a complete `.ai/src/` config: AGENTS.md, rules, skills, commands, and agents tailored to your project's stack and conventions.
@@ -421,20 +434,20 @@ targets:
     dest: ".tool/hooks/agentsync-guard.sh"
     # profile_scoped: false
 
-# post_sync: "npx prettier --write .tool/**/*.mdc"   # off unless AGENTSYNC_ALLOW_POST_SYNC=true
+# post_sync: "npx prettier --write .tool/**/*.mdc"   # off unless EXUNO_ALLOW_POST_SYNC=true
 ```
 
 `post_sync` runs arbitrary shell, so the engine skips it with a warning unless
-`AGENTSYNC_ALLOW_POST_SYNC=true` is set in the environment — the in-repo
-`agent_sync.yaml` cannot grant that, so cloning and syncing an untrusted
-repository never runs its hook. `AGENTSYNC_SKIP_POST_SYNC=true` or
-`post_sync.skip: true` in `agent_sync.yaml` disables it again, and `check`
+`EXUNO_ALLOW_POST_SYNC=true` is set in the environment — the in-repo
+`exuno.yaml` cannot grant that, so cloning and syncing an untrusted
+repository never runs its hook. `EXUNO_SKIP_POST_SYNC=true` or
+`post_sync.skip: true` in `exuno.yaml` disables it again, and `check`
 always skips it.
 
-Quote any value that holds a `#`. AgentSync reads an unquoted value up to the
+Quote any value that holds a `#`. Exuno reads an unquoted value up to the
 first `#`, with or without a space before it, so `url: https://x.dev/#top`
 reads as `https://x.dev/`; `url: "https://x.dev/#top"` keeps the whole URL.
-The same holds in `agent_sync.yaml`.
+The same holds in `exuno.yaml`.
 
 ### Key Fields
 
@@ -458,7 +471,7 @@ The same holds in `agent_sync.yaml`.
 | `source` (settings/mcp/hooks)   | Optional declared source; canonical `.ai/src/tools/<tool>/<resource>.<ext>` overrides it automatically                 |
 | `legacy_dest`                   | Where an earlier config wrote the target; sync removes the files there the manifest records once it moves (Windsurf)   |
 | `guard` (target)                | Copy the tool's write-guard script to `dest` and mark it executable; override the base at `.ai/src/tools/<tool>/guard.sh` and register it from the tool's settings (Claude) |
-| `profile_scoped: false`         | On any target: `agentsync profile add` keeps the base `dest` instead of rewriting it into the profile's config home     |
+| `profile_scoped: false`         | On any target: `exuno profile add` keeps the base `dest` instead of rewriting it into the profile's config home     |
 | `profile_supported: false`      | Refuse config-home profiles for a client that reads only project-root files                                             |
 | `adoptable: false` (agents)     | Refuse `adopt` when the generated agents file cannot safely round-trip into its source                                 |
 
@@ -487,7 +500,7 @@ documents every option, including the ones this table leaves out.
 
 ## Format Conversions
 
-AgentSync auto-converts between formats during sync:
+Exuno auto-converts between formats during sync:
 
 | Source format  | Target format                                    | Used by                     |
 | -------------- | ------------------------------------------------ | --------------------------- |
@@ -507,21 +520,21 @@ AgentSync auto-converts between formats during sync:
 | Agents `.md`   | Safe OpenCode Markdown (`mode` + permissions)    | OpenCode                    |
 | MCP `mcpServers` | OpenCode top-level `mcp` (`local` / `remote`)  | OpenCode                    |
 
-You write everything in Markdown. AgentSync handles the rest.
+You write everything in Markdown. Exuno handles the rest.
 
 ## Models and Providers Are Not Tools
 
-AgentSync targets coding tools and their filesystem formats, not model vendors. Kimi and GLM models used through Claude Code, Cline, or OpenCode continue to use that tool's target; there is deliberately no `glm.yaml` or `zai.yaml`. MiniMax Code has a standalone CLI with its own project files; a MiniMax model used through another client still uses that client's target.
+Exuno targets coding tools and their filesystem formats, not model vendors. Kimi and GLM models used through Claude Code, Cline, or OpenCode continue to use that tool's target; there is deliberately no `glm.yaml` or `zai.yaml`. MiniMax Code has a standalone CLI with its own project files; a MiniMax model used through another client still uses that client's target.
 
 - **Kimi model in another tool:** configure the provider with [Kimi's official third-party-agent setup](https://www.kimi.com/code/docs/en/third-party-tools/other-coding-agents), then keep syncing the existing Claude/Cline/OpenCode target. Use the `kimi` target only for the standalone Kimi Code CLI.
 - **GLM Coding Plan:** authenticate Z.AI using its official [Claude Code](https://docs.z.ai/devpack/tool/claude) or [OpenCode](https://docs.z.ai/devpack/tool/opencode) flow. Keep API keys in the provider's credential store or environment, never in `.ai/src/`.
 - **OpenCode MCP:** shared `.ai/src/mcp.json` is converted into OpenCode's top-level `mcp` map. Use `.ai/src/tools/opencode/mcp.json` for a divergent canonical server map. Move any existing `mcp` field out of `.ai/src/tools/opencode/settings.json` before enabling canonical MCP; `sync` and `doctor` name both files when ownership is ambiguous.
-- **OpenCode hooks:** customize `.ai/src/tools/opencode/hooks.ts`; AgentSync owns only `.opencode/plugins/agentsync.ts` and preserves sibling plugins. Custom tools under `.opencode/tools/`, other plugins, themes, TUI preferences, and credentials remain tool-owned.
-- **Kimi hooks and agents:** Kimi Code exposes built-in agents but no project custom-agent surface. Its hooks live globally in `$KIMI_CODE_HOME/config.toml`, so AgentSync intentionally leaves that file untouched.
+- **OpenCode hooks:** customize `.ai/src/tools/opencode/hooks.ts`; Exuno owns only `.opencode/plugins/agentsync.ts` and preserves sibling plugins. Custom tools under `.opencode/tools/`, other plugins, themes, TUI preferences, and credentials remain tool-owned.
+- **Kimi hooks and agents:** Kimi Code exposes built-in agents but no project custom-agent surface. Its hooks live globally in `$KIMI_CODE_HOME/config.toml`, so Exuno intentionally leaves that file untouched.
 
 ```bash
-agentsync enable kimi opencode     # enable the standalone coding tools
-agentsync sync
+exuno enable kimi opencode     # enable the standalone coding tools
+exuno sync
 
 npx @z_ai/coding-helper           # configure GLM in an existing supported tool
 opencode auth login               # choose Z.AI Coding Plan for OpenCode
@@ -529,15 +542,15 @@ opencode auth login               # choose Z.AI Coding Plan for OpenCode
 
 ## Adding a New Tool
 
-A tool AgentSync does not ship is a YAML file in your own project. Start from
+A tool Exuno does not ship is a YAML file in your own project. Start from
 the closest shipped tool rather than an empty file:
 
 ```bash
-agentsync customize cursor --full        # writes .ai/src/tools/cursor.yaml, the full base
+exuno customize cursor --full        # writes .ai/src/tools/cursor.yaml, the full base
 cp .ai/src/tools/cursor.yaml .ai/src/tools/newtool.yaml
 # Edit newtool.yaml: at least `name:` and one target's `dest:`
-agentsync enable newtool
-agentsync sync --only newtool
+exuno enable newtool
+exuno sync --only newtool
 ```
 
 Every field is documented in
@@ -554,61 +567,61 @@ Generated outputs regenerate from `.ai/src/`, so they go stale whenever you edit
 Add this to your `~/.zshrc` (or `~/.bashrc` with `bash`):
 
 ```bash
-eval "$(agentsync shell-init zsh)"
+eval "$(exuno shell-init zsh)"
 ```
 
-This regenerates the hook from `agentsync` each session — the recommended form, since upgrades and fixes apply automatically without re-editing your rc (the same pattern as `direnv`, `starship`, and `zoxide`). The hook runs `agentsync sync --if-stale` when the current directory itself is an `.ai/` project root (including when a shell opens there). It does not walk up to a parent project while you navigate its descendants. The command is a no-op — and silent — when nothing changed. Set `AGENTSYNC_NO_AUTO_SYNC=1` to disable without removing the line.
+This regenerates the hook from `exuno` each session — the recommended form, since upgrades and fixes apply automatically without re-editing your rc (the same pattern as `direnv`, `starship`, and `zoxide`). The hook runs `exuno sync --if-stale` when the current directory itself is an `.ai/` project root (including when a shell opens there). It does not walk up to a parent project while you navigate its descendants. The command is a no-op — and silent — when nothing changed. Set `EXUNO_NO_AUTO_SYNC=1` to disable without removing the line.
 
-Prefer to avoid the per-session `agentsync` call? Freeze a copy instead with `agentsync shell-init zsh >> ~/.zshrc`, but re-run it after each upgrade to pick up changes.
+Prefer to avoid the per-session `exuno` call? Freeze a copy instead with `exuno shell-init zsh >> ~/.zshrc`, but re-run it after each upgrade to pick up changes.
 
 ### Git hooks
 
 ```bash
-agentsync setup-hooks                 # the hooks this project's outputs: mode needs
-agentsync setup-hooks --pre-commit    # local mode: also add a pre-commit sync
+exuno setup-hooks                 # the hooks this project's outputs: mode needs
+exuno setup-hooks --pre-commit    # local mode: also add a pre-commit sync
 ```
 
-`setup-hooks` installs what the project's `outputs:` mode calls for. With `committed` (the default) that is a single pre-commit gate: it runs `sync --if-stale` and **fails the commit** when a generated file would be left out of it, so outputs never lag source. With `local` it installs `post-merge` and `post-checkout` hooks that run `agentsync sync` after `git pull` / `git checkout`, and `--pre-commit` adds a hook that runs `sync --if-stale` before each commit; those three are non-fatal — a failed sync warns but never blocks the git operation. `AGENTSYNC_SKIP_HOOKS=1` turns any installed hook into a no-op. Safe to run multiple times: a current AgentSync block is left alone, one an older release installed is rewritten in place, and the rest of the hook is kept.
+`setup-hooks` installs what the project's `outputs:` mode calls for. With `committed` (the default) that is a single pre-commit gate: it runs `sync --if-stale` and **fails the commit** when a generated file would be left out of it, so outputs never lag source. With `local` it installs `post-merge` and `post-checkout` hooks that run `exuno sync` after `git pull` / `git checkout`, and `--pre-commit` adds a hook that runs `sync --if-stale` before each commit; those three are non-fatal — a failed sync warns but never blocks the git operation. `EXUNO_SKIP_HOOKS=1` turns any installed hook into a no-op. Safe to run multiple times: a current Exuno block is left alone, one an older release installed is rewritten in place, and the rest of the hook is kept.
 
 ### Manual / CI
 
 ```bash
-agentsync sync --if-stale    # sync only if source changed since the last sync
-agentsync check              # verify outputs match source (exit 0/1, CI gate)
+exuno sync --if-stale    # sync only if source changed since the last sync
+exuno check              # verify outputs match source (exit 0/1, CI gate)
 ```
 
 `--if-stale` is the cheap probe the shell and pre-commit hooks build on; `check` is the authoritative drift gate for CI.
 
 ## Where generated files live
 
-`outputs:` in `.ai/agent_sync.yaml` decides whether generated tool files are committed or regenerated on every machine. `agentsync init` writes `committed`; pass `--outputs local` to choose the other mode.
+`outputs:` in `.ai/exuno.yaml` decides whether generated tool files are committed or regenerated on every machine. `exuno init` writes `committed`; pass `--outputs local` to choose the other mode.
 
-| Mode                    | In git                                               | Who runs `agentsync`                                 |
+| Mode                    | In git                                               | Who runs `exuno`                                 |
 | ----------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
 | `committed` *(default)* | `.ai/src/`, generated outputs, `.ai/.sync-manifest`  | Whoever edits `.ai/src/` (`sync`), plus CI (`check`) |
 | `local`                 | `.ai/src/` only                                      | Every clone, after every pull (`setup-hooks`)        |
 
-In both modes `agentsync sync` manages a block in `.gitignore` between `AI SYNC GENERATED START/END` markers: `local` lists every generated path and the manifest, `committed` lists only profile config homes, which are personal in either mode. The manifest always shares the git status of the outputs it describes — that is what keeps a teammate's `git pull` from looking like a manual edit. A project without an `outputs:` key behaves as `local`, or as `committed` when it already set `gitignore.update: false`.
+In both modes `exuno sync` manages a block in `.gitignore` between `AI SYNC GENERATED START/END` markers: `local` lists every generated path and the manifest, `committed` lists only profile config homes, which are personal in either mode. The manifest always shares the git status of the outputs it describes — that is what keeps a teammate's `git pull` from looking like a manual edit. A project without an `outputs:` key behaves as `local`, or as `committed` when it already set `gitignore.update: false`.
 
 ### Engine-owned skills
 
-The `agentsync` skill documents AgentSync itself, so it is versioned with the engine instead of being copied into every project where it would go stale. It ships inside the binary, built from `lib/templates/base-src/skills/`, and is resolved at sync time, after any `shared:` parent, so precedence reads project → shared parent → engine. Upgrade the engine and the next `sync` in any project emits the current version, with no prompt and no merge.
+The `exuno` skill documents Exuno itself, so it is versioned with the engine instead of being copied into every project where it would go stale. It ships inside the binary, built from `lib/templates/base-src/skills/`, and is resolved at sync time, after any `shared:` parent, so precedence reads project → shared parent → engine. Upgrade the engine and the next `sync` in any project emits the current version, with no prompt and no merge.
 
-To add to it and keep the updates, create a directory named `agentsync` with no `SKILL.md` of its own, at `.ai/src/skills/agentsync/` or inside any category. Its files join the engine's, and a file at the same path as one of the engine's replaces it. A `SKILL.append.md` there is appended to the engine's `SKILL.md` at sync, so the agent learns about your additions; it never reaches a tool as a file of its own. The same works for a skill a `shared:` parent provides.
+To add to it and keep the updates, create a directory named `exuno` with no `SKILL.md` of its own, at `.ai/src/skills/exuno/` or inside any category. Its files join the engine's, and a file at the same path as one of the engine's replaces it. A `SKILL.append.md` there is appended to the engine's `SKILL.md` at sync, so the agent learns about your additions; it never reaches a tool as a file of its own. The same works for a skill a `shared:` parent provides.
 
-To diverge completely, keep your own `SKILL.md` in that directory — a project copy with its own `SKILL.md` always wins, and engine upgrades stop reaching it. To drop the layer entirely, set `base_skills: false` in `.ai/agent_sync.yaml`.
+To diverge completely, keep your own `SKILL.md` in that directory — a project copy with its own `SKILL.md` always wins, and engine upgrades stop reaching it. To drop the layer entirely, set `base_skills: false` in `.ai/exuno.yaml`.
 
-Projects scaffolded before this carry their own copy, which shadows the engine's. `agentsync migrate` reports it and `agentsync migrate --apply` removes the copy when it is unedited, leaving an edited one in place as the deliberate override it is.
+Projects scaffolded before this carry their own copy, which shadows the engine's. `exuno migrate` reports it and `exuno migrate --apply` removes the copy when it is unedited, leaving an edited one in place as the deliberate override it is.
 
 ### Project format revision
 
-`format:` in `.ai/agent_sync.yaml` records which migrations a project has been walked through. It is a small counter bumped only when a project actually needs a step — unlike `agentsync_version`, which moves on every patch — so the reminder appears exactly when something applies and never otherwise. `init` writes the current revision, `migrate --apply` records it, and nothing else touches it. A project behind the engine is flagged on the next interactive command and by `agentsync doctor`.
+`format:` in `.ai/exuno.yaml` records which migrations a project has been walked through. It is a small counter bumped only when a project actually needs a step — unlike `exuno_version`, which moves on every patch — so the reminder appears exactly when something applies and never otherwise. `init` writes the current revision, `migrate --apply` records it, and nothing else touches it. A project behind the engine is flagged on the next interactive command and by `exuno doctor`.
 
 ### Keeping agents on the source
 
 Generated files are output, so an agent that edits them loses the change on the next sync. Three layers prevent that: the shipped `AGENTS.md` and `rules/core.md` state where instructions live, Claude Code receives a generated `PreToolUse` hook (`.claude/hooks/agentsync-guard.sh`) that blocks a write to any path in `.ai/.sync-manifest` and names the source instead, and `sync` refuses to overwrite a generated file edited since the last run. Replace the hook per project at `.ai/src/tools/claude/guard.sh`, or remove the `hooks` block from your settings override to drop it.
 
-`agentsync_version` in `agent_sync.yaml` pins the engine. With committed outputs every machine and CI must generate byte-identical files, so `sync` and `check` stop when the running version differs from the pin: match it with `agentsync update <version>` (or `AGENTSYNC_VERSION=<version>` on the installer), or move the pin with `agentsync upgrade-config` and commit the re-synced outputs. In `local` mode the mismatch is a warning by default. Set `version_pin.mode: strict` to make a local mismatch fatal as well; `warn` preserves the default. Unknown modes are rejected before a sync can write outputs.
+`exuno_version` in `exuno.yaml` pins the engine. With committed outputs every machine and CI must generate byte-identical files, so `sync` and `check` stop when the running version differs from the pin: match it with `exuno update <version>` (or `EXUNO_VERSION=<version>` on the installer), or move the pin with `exuno upgrade-config` and commit the re-synced outputs. In `local` mode the mismatch is a warning by default. Set `version_pin.mode: strict` to make a local mismatch fatal as well; `warn` preserves the default. Unknown modes are rejected before a sync can write outputs.
 
 ```yaml
 version_pin:
@@ -631,7 +644,7 @@ version_pin: strict # or warn
    - Syncs commands. Four modes pick the first that fits: native `dest` → `format: toml` → `as_skills` (writes `<skills.dest>/command-*/SKILL.md`) → `inline_into_agents` (appends `## Commands` index to AGENTS file)
    - Syncs subagents (with optional extension rename or MD→TOML)
    - Resolves settings / MCP / hooks per the base + override rules below
-   - Runs the optional `post_sync` command, but only when `AGENTSYNC_ALLOW_POST_SYNC=true` comes from the environment rather than the repository
+   - Runs the optional `post_sync` command, but only when `EXUNO_ALLOW_POST_SYNC=true` comes from the environment rather than the repository
 4. Updates `.gitignore`
 5. Disabled tools get their generated files cleaned up automatically.
 
@@ -641,16 +654,16 @@ Three commands cover every customization, each with a single responsibility.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│  agentsync enable <tool>                                                      │
+│  exuno enable <tool>                                                      │
 │    → adds tool to tools.enabled                                               │
 │    → scaffolds .ai/src/tools/<tool>/{settings,hooks}.<ext> from base          │
 │    → prints the exact file path to edit                                       │
 │                                                                               │
-│  agentsync add mcp <server> [--command|--url ...]                             │
+│  exuno add mcp <server> [--command|--url ...]                             │
 │    → creates / updates the shared .ai/src/mcp.json                            │
 │    → applied to every enabled tool with a compatible MCP target               │
 │                                                                               │
-│  agentsync customize <tool> <resource>                                        │
+│  exuno customize <tool> <resource>                                        │
 │    → for the rare case you need a per-tool override that differs from         │
 │      the shared MCP map, or to materialize a payload enable --no-scaffold     │
 │      skipped (`customize cursor hooks`)                                       │
@@ -685,44 +698,44 @@ Every payload resource — tool YAML, hooks, MCP config, settings — follows th
 | mcp       | `lib/templates/mcp/<tool>.json`       | `.ai/src/tools/<tool>/mcp.json`       | `.ai/src/mcp.json` |
 | settings  | `lib/templates/settings/<tool>.<ext>` | `.ai/src/tools/<tool>/settings.<ext>` | —                  |
 
-The legacy flat-layout overrides (`.ai/src/hooks/<tool>.<ext>`, `.ai/src/mcp/<tool>.<ext>`, `.ai/src/settings/<tool>.<ext>`) from 0.10 and earlier are still read and still win over base, but print a one-shot deprecation warning. Run `agentsync migrate --legacy` to preview moving them into the canonical per-tool layout, then `agentsync migrate --apply` to apply it; the legacy paths may be dropped in a future release.
+The legacy flat-layout overrides (`.ai/src/hooks/<tool>.<ext>`, `.ai/src/mcp/<tool>.<ext>`, `.ai/src/settings/<tool>.<ext>`) from 0.10 and earlier are still read and still win over base, but print a one-shot deprecation warning. Run `exuno migrate --legacy` to preview moving them into the canonical per-tool layout, then `exuno migrate --apply` to apply it; the legacy paths may be dropped in a future release.
 
 **Why it matters:**
 
-- **Lean by default.** `agentsync init` creates `.ai/agent_sync.yaml`, `AGENTS.md`, and your chosen content sections — no pre-written hooks / MCP / settings for 15 tools you don't use.
-- **Updates flow through.** Because the base ships with the engine, `agentsync update` improves every project that hasn't locked the file in as an override.
+- **Lean by default.** `exuno init` creates `.ai/exuno.yaml`, `AGENTS.md`, and your chosen content sections — no pre-written hooks / MCP / settings for 15 tools you don't use.
+- **Updates flow through.** Because the base ships with the engine, `exuno update` improves every project that hasn't locked the file in as an override.
 - **Shared MCP is converted where schemas differ.** One `.ai/src/mcp.json` reaches every enabled MCP target. OpenCode's adapter validates local and remote transports, then atomically composes the result into `opencode.json`.
 - **MiniMax Code MCP uses the project `.mcp.json`.** Claude Code shares that destination. When their effective MCP sources differ, sync stops before writing either version. MiniMax may start a configured server during tool discovery or use, so review an MCP source before syncing it.
-- **Global settings files are shared with the tools that read them.** Synced from `$HOME` or into a profile, AgentSync owns only the keys `.ai/src` declares in each TOML or JSON settings and MCP file, one entry per MCP server, and keeps what the tool writes there itself: Codex's project trust and plugins, Claude Code's model, theme, and plugin choices, a server added in Cursor. A declared key the tool changed stops the sync by name; `agentsync adopt <file>` pulls it into the source. `targets.settings.ownership` and `targets.mcp.ownership` (`auto`, `keys`, `file`) override the choice; in a repository `auto` owns files whole, and Zed's shipped tool owns its commented settings whole.
+- **Global settings files are shared with the tools that read them.** Synced from `$HOME` or into a profile, Exuno owns only the keys `.ai/src` declares in each TOML or JSON settings and MCP file, one entry per MCP server, and keeps what the tool writes there itself: Codex's project trust and plugins, Claude Code's model, theme, and plugin choices, a server added in Cursor. A declared key the tool changed stops the sync by name; `exuno adopt <file>` pulls it into the source. `targets.settings.ownership` and `targets.mcp.ownership` (`auto`, `keys`, `file`) override the choice; in a repository `auto` owns files whole, and Zed's shipped tool owns its commented settings whole.
 - **Shared `AGENTS.md` needs one source of truth.** If enabled tools read different agents content for the same destination, sync stops before either output is written.
 - **MiniMax Code has no config-home profile.** It reads files from the primary project workspace, so `profile add` and `sync` refuse MiniMax profile variants instead of creating files the client would not load.
-- **Opt in per tool.** Need to edit Cursor's hooks? `agentsync customize cursor hooks` copies the current base into `.ai/src/tools/cursor/hooks.json`. Delete the file later to resume inheriting.
+- **Opt in per tool.** Need to edit Cursor's hooks? `exuno customize cursor hooks` copies the current base into `.ai/src/tools/cursor/hooks.json`. Delete the file later to resume inheriting.
 - **Safe hooks.** `customize <tool> hooks` prints the base content first and requires `--yes` in non-interactive mode — you never scaffold executable intent silently.
-- **`simplify` prunes noise.** Scaffolded payloads that are still byte-identical to base are flagged by `agentsync simplify` and removed with `--apply`, so you don't accidentally pin yesterday's defaults forever.
+- **`simplify` prunes noise.** Scaffolded payloads that are still byte-identical to base are flagged by `exuno simplify` and removed with `--apply`, so you don't accidentally pin yesterday's defaults forever.
 
 ## Migrating from the 0.10 flat layout
 
 Projects upgraded from 0.10 keep working without intervention — the resolver still reads `.ai/src/{hooks,mcp,settings}/<tool>.<ext>`. When you are ready to move them into the canonical per-tool layout:
 
 ```bash
-agentsync migrate --legacy    # dry-run; prints the planned legacy-layout moves
-agentsync migrate --apply     # performs the moves; consolidates identical MCP files
-agentsync migrate --apply -y  # non-interactive — accepts MCP consolidation by default
+exuno migrate --legacy    # dry-run; prints the planned legacy-layout moves
+exuno migrate --apply     # performs the moves; consolidates identical MCP files
+exuno migrate --apply -y  # non-interactive — accepts MCP consolidation by default
 ```
 
 `migrate` moves each legacy file to `.ai/src/tools/<tool>/<resource>.<ext>`. When every `.ai/src/mcp/*.json` is byte-identical, it offers to collapse them into the shared `.ai/src/mcp.json`; if they differ, they migrate per-tool. Existing files at the target are never overwritten — such collisions are skipped with a warning so you resolve them by hand. Empty source directories are cleaned up on success.
 
 `migrate` also detects the pre-v0.6 monolithic `.agent/` (singular, no `s`) layout — a single directory holding `AGENTS.md`, `workflows/`, `rules/`, `skills/` without per-tool separation. The current engine doesn't recognise it, so a normal `sync` never cleans it up. Dry-run lists the contents; `--apply --yes` removes the directory. Detection runs alongside the flat-layout move logic, so a single `migrate --apply --yes` cleans up both in one pass.
 
-## Migrating an outdated AgentSync project
+## Migrating an outdated Exuno project
 
-Run `agentsync migrate` from the project root. It prints a self-contained prompt
+Run `exuno migrate` from the project root. It prints a self-contained prompt
 and automatically copies it with `pbcopy`, `wl-copy`, `xclip`, `xsel`, or
 `clip.exe`, whichever is available. Paste the prompt into a coding AI that can
 inspect the repository.
 
 The prompt includes the installed CLI version and the project's
-`agentsync_version` pin. It directs the AI to verify the actual starting version,
+`exuno_version` pin. It directs the AI to verify the actual starting version,
 read every relevant official changelog section, consult the latest README,
 bundled skill, and templates from the same stable release, create a recoverable
 checkpoint, preserve custom configuration, use supported migration commands,
@@ -731,7 +744,7 @@ available, the prompt is still printed to stdout.
 
 ## Path Overrides
 
-Create `agent_sync.yaml` in the project root to override source paths. Relative
+Create `exuno.yaml` in the project root to override source paths. Relative
 values are resolved from the project root; absolute values may point at a
 separately maintained source tree. `source.tools` controls both the per-tool
 YAML files and their payload directories (`<source.tools>/<tool>/settings.json`,
@@ -763,15 +776,15 @@ Then trust that tree from outside the repository, in your shell profile or CI
 environment:
 
 ```bash
-export AGENTSYNC_EXTERNAL_SOURCE_ROOTS="/home/me/agentic"   # colon-separated
+export EXUNO_EXTERNAL_SOURCE_ROOTS="/home/me/agentic"   # colon-separated
 ```
 
 Sources outside the project follow these rules:
 
 - **Trusted roots only.** A value outside the project must resolve under an
-  absolute directory listed in `AGENTSYNC_EXTERNAL_SOURCE_ROOTS`; otherwise
+  absolute directory listed in `EXUNO_EXTERNAL_SOURCE_ROOTS`; otherwise
   `sync` and `check` stop before writing, and `doctor` reports it. Only the
-  environment grants that trust, never `agent_sync.yaml`, so syncing a cloned
+  environment grants that trust, never `exuno.yaml`, so syncing a cloned
   repository — including the `shell-init` hook on `cd` — cannot read your
   files from wherever its config points.
 - **Explicit values only.** A `source.agents`, `source.rules`, `source.skills`,
@@ -783,7 +796,7 @@ Sources outside the project follow these rules:
 - **Symlinks follow the same rule.** Before reading anything, `sync` and
   `check` resolve every symlink under `.ai/` and the configured sources,
   following chains and links to directories. One whose target is outside the
-  project and not under `AGENTSYNC_EXTERNAL_SOURCE_ROOTS` — a committed
+  project and not under `EXUNO_EXTERNAL_SOURCE_ROOTS` — a committed
   `.ai/src/rules/notes.md -> ~/secrets.md`, say — stops the run before
   writing, naming the link. A link to a shared tree you maintain works once
   that tree is listed in the variable.
@@ -791,7 +804,7 @@ Sources outside the project follow these rules:
   project root, or a directory containing the project root is rejected before
   anything is written; `doctor` reports it for every key except `tools`.
 - **Relative to the project root.** Relative values resolve from the project
-  root, including when `AGENTSYNC_CONFIG_PATH` selects a config file stored
+  root, including when `EXUNO_CONFIG_PATH` selects a config file stored
   elsewhere and inside `check`'s temporary workspace.
 - **Read-only.** Outside sources are only read. Destinations stay confined to
   the project root, and `check` reads the sources in place while generating
@@ -802,24 +815,24 @@ Sources outside the project follow these rules:
   legacy `enabled: true` exit with an error before writing; plain `enable`
   skips payload scaffolding. Edit that catalog where it lives.
 
-`AGENTSYNC_CONFIG_PATH` selects an alternate configuration file. Every command
+`EXUNO_CONFIG_PATH` selects an alternate configuration file. Every command
 that reads the project config fails when it names a missing file instead of
-falling back to `.ai/agent_sync.yaml`.
+falling back to `.ai/exuno.yaml`.
 
 ## Migrating Existing Configurations
 
-If you already have tool-specific configs (`.claude/rules/`, `.cursor/rules/`, custom `settings.json`, etc.), **move them into `.ai/src/` before running `agentsync sync`**. Sync treats generated directories as fully managed — any files not present in the source will be overwritten or removed.
+If you already have tool-specific configs (`.claude/rules/`, `.cursor/rules/`, custom `settings.json`, etc.), **move them into `.ai/src/` before running `exuno sync`**. Sync treats generated directories as fully managed — any files not present in the source will be overwritten or removed.
 
 ### Step-by-step
 
-1. **Run `agentsync init`** to create the `.ai/src/` structure (skips files that already exist).
+1. **Run `exuno init`** to create the `.ai/src/` structure (skips files that already exist).
 
 2. **Move your rules** from tool-specific directories into `.ai/src/rules/`:
 
    ```bash
    # Example: you had custom Cursor rules
    mv .cursor/rules/my-api-conventions.mdc .ai/src/rules/my-api-conventions.md
-   # Remove Cursor-specific frontmatter (---/globs/alwaysApply) — AgentSync adds it automatically
+   # Remove Cursor-specific frontmatter (---/globs/alwaysApply) — Exuno adds it automatically
 
    # Example: you had custom Claude rules
    mv .claude/rules/testing.md .ai/src/rules/testing.md
@@ -854,8 +867,8 @@ If you already have tool-specific configs (`.claude/rules/`, `.cursor/rules/`, c
 7. **Run sync** and verify:
 
    ```bash
-   agentsync sync --dry-run   # Preview what will be generated
-   agentsync sync              # Apply
+   exuno sync --dry-run   # Preview what will be generated
+   exuno sync              # Apply
    ```
 
 ### What gets overwritten
@@ -870,22 +883,22 @@ If you already have tool-specific configs (`.claude/rules/`, `.cursor/rules/`, c
 
 ### Transactional backups and rollback
 
-Before a real `init` or `sync` writes anything, AgentSync copies every path the operation may change into `.ai/backups/<backup-id>/`. The backup store ignores itself in Git. Dry runs, fresh `sync --if-stale` calls, and syncs rejected by drift preflight do not create snapshots.
+Before a real `init` or `sync` writes anything, Exuno copies every path the operation may change into `.ai/backups/<backup-id>/`. The backup store ignores itself in Git. Dry runs, fresh `sync --if-stale` calls, and syncs rejected by drift preflight do not create snapshots.
 
-If an operation exits with an error, AgentSync automatically restores its pre-operation snapshot, including paths that did not exist before the run. Successful snapshots remain available for an accidental-sync rollback:
+If an operation exits with an error, Exuno automatically restores its pre-operation snapshot, including paths that did not exist before the run. Successful snapshots remain available for an accidental-sync rollback:
 
 ```bash
-agentsync rollback --list                 # show complete snapshots
-agentsync rollback --dry-run              # preview the latest snapshot
-agentsync rollback                        # restore latest (interactive)
-agentsync rollback <backup-id> --yes       # restore a selected snapshot
+exuno rollback --list                 # show complete snapshots
+exuno rollback --dry-run              # preview the latest snapshot
+exuno rollback                        # restore latest (interactive)
+exuno rollback <backup-id> --yes       # restore a selected snapshot
 ```
 
-Rollback creates its own safety snapshot first, so its output prints an ID that can undo the rollback. After each operation — successful, or failed once its restore completes — AgentSync prunes the history: a snapshot is kept only if it is among the latest 10 **and** younger than 30 days. Set `AGENTSYNC_BACKUP_LIMIT` or `AGENTSYNC_BACKUP_MAX_AGE_DAYS` to another non-negative integer to change either bound, or to `0` to disable that bound alone. The newest snapshot is always retained, so rollback stays available however long a project sits idle. Staging directories left behind by an interrupted or killed run are reclaimed on the next backup, once they are over 24 hours old.
+Rollback creates its own safety snapshot first, so its output prints an ID that can undo the rollback. After each operation — successful, or failed once its restore completes — Exuno prunes the history: a snapshot is kept only if it is among the latest 10 **and** younger than 30 days. Set `EXUNO_BACKUP_LIMIT` or `EXUNO_BACKUP_MAX_AGE_DAYS` to another non-negative integer to change either bound, or to `0` to disable that bound alone. The newest snapshot is always retained, so rollback stays available however long a project sits idle. Staging directories left behind by an interrupted or killed run are reclaimed on the next backup, once they are over 24 hours old.
 
 To retain all existing recovery data automatically, set this in the project's
-`.ai/agent_sync.yaml` (or root `agent_sync.yaml`, or the file selected by
-`AGENTSYNC_CONFIG_PATH`):
+`.ai/exuno.yaml` (or root `exuno.yaml`, or the file selected by
+`EXUNO_CONFIG_PATH`):
 
 ```yaml
 backup:
@@ -909,7 +922,7 @@ New snapshots are still created and the current `.latest` pointer and
 operation can still be cleaned up on failure; preserve protects recovery that
 already existed when the operation began.
 
-The transaction covers declared tool destinations plus `.ai/.sync-manifest` and the managed `.gitignore` state. A trusted `post_sync` hook can execute arbitrary commands; side effects it makes outside those paths are outside AgentSync's rollback boundary.
+The transaction covers declared tool destinations plus `.ai/.sync-manifest` and the managed `.gitignore` state. A trusted `post_sync` hook can execute arbitrary commands; side effects it makes outside those paths are outside Exuno's rollback boundary.
 
 Rollback first compares every target with the state recorded **after** the
 selected operation. Later additions, edits, deletions, type or executable-bit
@@ -953,7 +966,7 @@ does not authenticate data against an actor who can rewrite the backup store.
 
 ### Drift detection
 
-After every successful sync, AgentSync writes `.ai/.sync-manifest` — one line per generated file with its SHA-256 hash. It records what *this clone* generated, so sync adds it to the managed `.gitignore` block next to the outputs it describes: a committed manifest beside ignored outputs would make every teammate's next sync read a `git pull` as manual edits. On the next sync, every destination is compared against the manifest:
+After every successful sync, Exuno writes `.ai/.sync-manifest` — one line per generated file with its SHA-256 hash. It records what *this clone* generated, so sync adds it to the managed `.gitignore` block next to the outputs it describes: a committed manifest beside ignored outputs would make every teammate's next sync read a `git pull` as manual edits. On the next sync, every destination is compared against the manifest:
 
 - File untouched → sync rewrites silently (idempotent).
 - File deleted manually → sync rewrites silently.
@@ -965,21 +978,21 @@ After every successful sync, AgentSync writes `.ai/.sync-manifest` — one line 
 
   These files would be silently overwritten. Choose one:
     • Move your edits into .ai/src/, then re-run sync
-    • If a tool wrote here out of band, run 'agentsync adopt <file>' to pull it into .ai/src/
+    • If a tool wrote here out of band, run 'exuno adopt <file>' to pull it into .ai/src/
     • Re-run with --force to discard the edits and rewrite from source
 ```
 
-`agentsync check` and `agentsync doctor` both surface drift, so a stale or hand-edited clone is visible before the edit is lost.
+`exuno check` and `exuno doctor` both surface drift, so a stale or hand-edited clone is visible before the edit is lost.
 
-### `agentsync adopt` — promote an IDE edit back into source
+### `exuno adopt` — promote an IDE edit back into source
 
 Quickly iterating in Claude Code or Cursor and edited a generated file directly? Skip the manual `cp + sync --force` dance:
 
 ```bash
-agentsync adopt .claude/rules/core.md            # interactive, with diff preview
-agentsync adopt --dry-run .claude/rules/core.md  # show plan, write nothing
-agentsync adopt --yes .claude/rules/core.md      # non-interactive (CI / scripts)
-agentsync adopt --all                            # adopt every drifted file at once
+exuno adopt .claude/rules/core.md            # interactive, with diff preview
+exuno adopt --dry-run .claude/rules/core.md  # show plan, write nothing
+exuno adopt --yes .claude/rules/core.md      # non-interactive (CI / scripts)
+exuno adopt --all                            # adopt every drifted file at once
 ```
 
 Resolves the destination back to its source file (`.ai/src/rules/core.md`), copies the edited content, and refreshes the manifest entry — the next `sync` is drift-free.
@@ -993,7 +1006,7 @@ Resolves the destination back to its source file (`.ai/src/rules/core.md`), copi
 - Rules or skills inlined into AGENTS.md (rules: `codex`, `gemini`, `junie`, `kimi`, `minimax`, `opencode`; skills: `amazonq`, `cline`, `zed`).
 - Format-converted output (`codex` subagents → TOML, `amazonq` subagents → JSON, `opencode` subagents → OpenCode Markdown).
 
-For these, edit `.ai/src/` directly. AgentSync names the offending file when it refuses.
+For these, edit `.ai/src/` directly. Exuno names the offending file when it refuses.
 
 ### Disabling sync for tools or categories
 
@@ -1007,7 +1020,7 @@ enabled: false
 Or exclude it at sync time:
 
 ```bash
-agentsync sync --skip cursor
+exuno sync --skip cursor
 ```
 
 To keep the tool enabled but omit one output category, set that target's
@@ -1026,7 +1039,7 @@ variant inherits a destination that another config should own.
 
 ### Letting a tool read `AGENTS.md` instead of its own file
 
-AgentSync already writes the root `AGENTS.md` as the instructions file for four
+Exuno already writes the root `AGENTS.md` as the instructions file for four
 tools: Codex, Cursor, OpenCode, and Windsurf. Claude Code can join them, because
 it reads `AGENTS.md` in a folder that has no `CLAUDE.md`. A project that would
 rather ship one instructions file than two turns the second one off:
@@ -1040,7 +1053,7 @@ targets:
 
 ```bash
 rm CLAUDE.md          # only if a previous sync already wrote it
-agentsync sync
+exuno sync
 ```
 
 Everything else Claude Code gets stays: `.claude/rules/`, skills, commands,
@@ -1049,18 +1062,18 @@ subagents, settings, hooks, and MCP are separate targets and are untouched.
 Delete the file as well as disabling the target. A `CLAUDE.md` left from an
 earlier sync keeps being read by Claude Code, and because nothing regenerates
 it, it quietly ages. Sync leaves it in place, so a file you froze on purpose
-survives; `agentsync check` and `agentsync doctor` name it as left from a
+survives; `exuno check` and `exuno doctor` name it as left from a
 disabled target without failing. Once it is gone, the next sync drops it from
 the manifest.
 
-## Workspaces — nested AgentSync projects
+## Workspaces — nested Exuno projects
 
 A parent project at `workspace/.ai/src/` with sub-projects below (`workspace/foo/.ai/src/`, `workspace/bar/.ai/src/`) is supported as a first-class workflow. Two patterns to manage shared content between the layers:
 
-**Pattern A — declarative inheritance via `shared:`.** Each child project declares which categories it inherits from the parent. At sync time, AgentSync builds a transient shadow `.ai/src/` (child + parent fillers, child wins on collisions) and materialises the result into every enabled tool's output — works for tools without parent-loading (Codex, Cursor, JetBrains Junie) and tools with it (Claude Code) equally. Inherited files are never written into the child's `.ai/src/`; they live only in the shadow tree during a single sync run.
+**Pattern A — declarative inheritance via `shared:`.** Each child project declares which categories it inherits from the parent. At sync time, Exuno builds a transient shadow `.ai/src/` (child + parent fillers, child wins on collisions) and materialises the result into every enabled tool's output — works for tools without parent-loading (Codex, Cursor, JetBrains Junie) and tools with it (Claude Code) equally. Inherited files are never written into the child's `.ai/src/`; they live only in the shadow tree during a single sync run.
 
 ```yaml
-# child/.ai/agent_sync.yaml
+# child/.ai/exuno.yaml
 shared:
   path: "../"
   inherit: rules,skills,commands,agents
@@ -1069,17 +1082,17 @@ shared:
 **Pattern B — interactive cleanup via `dedupe`.** When child and parent both have the same source file (a copy-paste duplicate), `dedupe` compares them by hash:
 
 ```bash
-agentsync dedupe                  # walk up to nearest parent .ai/src/ (bounded by git boundary)
-agentsync dedupe --against ../    # explicit parent path
-agentsync dedupe --workspace      # bottom-up alphabetical fan-out across every nested .ai/
-agentsync dedupe --yes            # non-interactive: delete identical-hash dupes, leave divergent
+exuno dedupe                  # walk up to nearest parent .ai/src/ (bounded by git boundary)
+exuno dedupe --against ../    # explicit parent path
+exuno dedupe --workspace      # bottom-up alphabetical fan-out across every nested .ai/
+exuno dedupe --yes            # non-interactive: delete identical-hash dupes, leave divergent
 ```
 
 Identical-hash files become a `[d]elete / [k]eep / [v]iew` prompt; for shipped templates the deletion also writes a `template_overrides.declined` entry so `refresh` won't re-offer the file. Divergent files (same path, different content) show a diff and leave the decision to the human — dedupe never auto-resolves a divergence.
 
-**Detection — `agentsync doctor`.** Doctor walks up to the nearest parent `.ai/src/` (same boundary as dedupe) and flags identical-hash duplicates as advisories and divergent files as info. Rules and skills marked with `category: governance` in their frontmatter are upgraded to advisories when divergent, with explicit "likely a mistake, not an override" framing. All cross-project findings are exit-code-0 advisories — visible during interactive runs, invisible to CI gates, so pre-commit hooks running `doctor` don't break on workspace techdebt.
+**Detection — `exuno doctor`.** Doctor walks up to the nearest parent `.ai/src/` (same boundary as dedupe) and flags identical-hash duplicates as advisories and divergent files as info. Rules and skills marked with `category: governance` in their frontmatter are upgraded to advisories when divergent, with explicit "likely a mistake, not an override" framing. All cross-project findings are exit-code-0 advisories — visible during interactive runs, invisible to CI gates, so pre-commit hooks running `doctor` don't break on workspace techdebt.
 
-**Workspace-wide sync.** `agentsync sync --workspace` runs `sync` in every AgentSync-managed `.ai/` below cwd, bottom-up alphabetical (deeper paths first; siblings sorted by `LC_ALL=C` for reproducibility). Continues past per-project failures; reports max exit code at the end. All other sync options (`--only`, `--skip`, `--profile`, `--dry-run`, `--force`, `--quiet`, `--json`) forward to each per-project invocation, so `--json` prints one object per project.
+**Workspace-wide sync.** `exuno sync --workspace` runs `sync` in every Exuno-managed `.ai/` below cwd, bottom-up alphabetical (deeper paths first; siblings sorted by `LC_ALL=C` for reproducibility). Continues past per-project failures; reports max exit code at the end. All other sync options (`--only`, `--skip`, `--profile`, `--dry-run`, `--force`, `--quiet`, `--json`) forward to each per-project invocation, so `--json` prints one object per project.
 
 The walk-up logic stops at the start's git repository boundary, so a child project with its own `.git` never picks up an unrelated parent `.ai/src/` from above the boundary.
 
@@ -1088,27 +1101,27 @@ The walk-up logic stops at the start's git repository boundary, so a child proje
 Sync from `$HOME` and juggle more than one account for the same tool — a work Claude and a personal Claude? A **profile** generates a second, self-contained config home (`~/.claude-hub/` next to your personal `~/.claude/`) whose content is the base `.ai/src/` plus profile-only extras. Shared rules stay shared; work-only rules and MCP servers live in the profile.
 
 ```bash
-agentsync profile add hub                       # scaffold a "hub" profile for every enabled tool
-agentsync profile add hub --tools claude,codex  # ...or just these tools
-agentsync profile add hub --adopt               # pull an existing ~/.claude-hub/ into the profile first
-agentsync profile list                          # show profiles, their tools, and config homes
-agentsync profile remove hub                    # delete the config-home output and the profile
+exuno profile add hub                       # scaffold a "hub" profile for every enabled tool
+exuno profile add hub --tools claude,codex  # ...or just these tools
+exuno profile add hub --adopt               # pull an existing ~/.claude-hub/ into the profile first
+exuno profile list                          # show profiles, their tools, and config homes
+exuno profile remove hub                    # delete the config-home output and the profile
 ```
 
-`profile add` writes three things: a thin variant tool `.ai/src/tools/<tool>-hub.yaml` that inherits everything from the base tool via `base:` and only overrides the dest paths, an overlay directory `.ai/profiles/hub/src/` for profile-only content (rules, skills, commands, agents, AGENTS.md — profile wins on collisions), and a `profiles:` block in `agent_sync.yaml`.
+`profile add` writes three things: a thin variant tool `.ai/src/tools/<tool>-hub.yaml` that inherits everything from the base tool via `base:` and only overrides the dest paths, an overlay directory `.ai/profiles/hub/src/` for profile-only content (rules, skills, commands, agents, AGENTS.md — profile wins on collisions), and a `profiles:` block in `exuno.yaml`.
 
-On sync, `agentsync sync` builds every `active` profile alongside your personal tools; `agentsync sync --profile hub` builds just that one. The per-profile overlay layers over the base — and over an active `shared:` overlay if you have one, so the two compose. Run the result with the tool's config-home variable, for example `CLAUDE_CONFIG_DIR=~/.claude-hub claude`. Profile outputs are gitignored and drift-protected like any other generated file.
+On sync, `exuno sync` builds every `active` profile alongside your personal tools; `exuno sync --profile hub` builds just that one. The per-profile overlay layers over the base — and over an active `shared:` overlay if you have one, so the two compose. Run the result with the tool's config-home variable, for example `CLAUDE_CONFIG_DIR=~/.claude-hub claude`. Profile outputs are gitignored and drift-protected like any other generated file.
 
 ## Development
 
-AgentSync is a Rust crate at the repository root (edition 2024, `unsafe_code`
-forbidden); `src/main.rs` is the `agentsync` binary and the tool templates in
+Exuno is a Rust crate at the repository root (edition 2024, `unsafe_code`
+forbidden); `src/main.rs` is the `exuno` binary and the tool templates in
 `lib/templates/` are embedded into it at build time. Configuration is read by
-`src/config/yaml_subset.rs`, a parser for the YAML shapes AgentSync accepts, so the
+`src/config/yaml_subset.rs`, a parser for the YAML shapes Exuno accepts, so the
 binary has no YAML dependency. Build it and run the checks from the repo root:
 
 ```bash
-cargo build --release                             # target/release/agentsync
+cargo build --release                             # target/release/exuno
 cargo fmt --all --check
 cargo clippy --all-targets -- -D warnings
 cargo test                                        # the whole suite
@@ -1120,7 +1133,7 @@ cargo test --test sync
 `cargo test` is everything: unit tests inside `src/` and integration tests in
 `tests/*.rs`, one file per command surface, each driving the binary Cargo just
 built. `tests/common/mod.rs` is the shared harness — a throwaway git project in
-a temp directory, the binary with your `AGENTSYNC_*` variables and git config
+a temp directory, the binary with your `EXUNO_*` and `AGENTSYNC_*` variables and git config
 scrubbed out, and the file helpers the assertions need. CI runs the same gates
 on Linux, macOS, and Windows. `shellcheck -x -S warning -e SC1091` covers the
 two shell scripts that remain: `install.sh` and
@@ -1142,7 +1155,7 @@ publishes the five archives, their checksums, and the installers.
 
 Copyright (C) 2026 Yelaman Yelmurat.
 
-AgentSync is free software licensed under the
+Exuno is free software licensed under the
 [GNU General Public License version 3 only](LICENSE) (`GPL-3.0-only`).
 You may use, modify, and redistribute it under that license's terms. Distributed
 modified versions must remain under the same license and provide corresponding
@@ -1153,7 +1166,7 @@ source code. Third-party components retain their original licenses; see
 
 ```bash
 # Global
-rm -rf ~/.agentsync && rm -f /usr/local/bin/agentsync
+rm -rf ~/.exuno && rm -f /usr/local/bin/exuno /usr/local/bin/agentsync
 # Remove AGENTSYNC_HOME from ~/.zshrc if a source install added it
 
 # Per project
@@ -1165,12 +1178,12 @@ rm -rf .ai/
 
 ## Star history
 
-<a href="https://star-history.com/#yelmuratoff/agent_sync&Date">
-  <img src="https://api.star-history.com/svg?repos=yelmuratoff/agent_sync&type=Date" alt="Star History Chart">
+<a href="https://star-history.com/#yelmuratoff/exuno&Date">
+  <img src="https://api.star-history.com/svg?repos=yelmuratoff/exuno&type=Date" alt="Star History Chart">
 </a>
 
 <div align="center">
-  <a href="https://github.com/yelmuratoff/agent_sync/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=yelmuratoff/agent_sync" />
+  <a href="https://github.com/yelmuratoff/exuno/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=yelmuratoff/exuno" />
   </a>
 </div> -->
