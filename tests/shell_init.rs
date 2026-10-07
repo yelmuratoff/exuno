@@ -45,12 +45,17 @@ fn write_logging_stub(project: &Project, rel_dir: &str, binary: &str) {
 }
 
 #[cfg(unix)]
+// The snippet prefers an installed exuno over the stub, so its directories are dropped.
 fn path_with(project: &Project, rel_dir: &str) -> String {
-    format!(
-        "{}:{}",
-        project.join(rel_dir).display(),
-        std::env::var("PATH").unwrap_or_default()
-    )
+    let rest: Vec<String> = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .filter(|dir| {
+            !["exuno", "agentsync"]
+                .iter()
+                .any(|bin| dir.join(bin).exists())
+        })
+        .map(|dir| dir.display().to_string())
+        .collect();
+    format!("{}:{}", project.join(rel_dir).display(), rest.join(":"))
 }
 
 #[cfg(unix)]
