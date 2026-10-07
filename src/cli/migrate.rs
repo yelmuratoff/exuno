@@ -881,12 +881,16 @@ fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<
         } else {
             run.say(&format!("{}  {line}\n", style.cyan("  would rename")))?;
         }
+        if leftover.kind == Kind::ConfigFile && leftover.is_automatic() {
+            warn_old_releases(run)?;
+        }
     }
-    let moves_config = renames
-        .iter()
-        .any(|leftover| leftover.kind == Kind::ConfigFile && leftover.is_automatic());
-    if moves_config {
-        run.say(&format!(
+    run.say("\n")
+}
+
+fn warn_old_releases(run: &mut Run) -> Result<(), Error> {
+    let style = run.style;
+    run.say(&format!(
             "  {}\n",
             style.yellow(&format!(
                 "Releases before {} cannot read {}: update every machine and CI to {} before you commit this.",
@@ -894,9 +898,7 @@ fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<
                 names::CONFIG,
                 leftovers::FIRST_RELEASE
             ))
-        ))?;
-    }
-    run.say("\n")
+        ))
 }
 
 /// Category directories above a removed skill that it left empty, up to `skills`.
