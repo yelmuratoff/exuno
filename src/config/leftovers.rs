@@ -348,8 +348,7 @@ fn replace_word(text: &str, from: &str, to: &str) -> String {
     out
 }
 
-/// Walks categories only, as `skill_tree::discover` does, so a skill's own
-/// directories are never renamed.
+/// Walks categories only, like `skill_tree::discover`, so no skill's own directory is renamed.
 fn walk_skills(dir: &Path, depth: usize, files: &mut Vec<PathBuf>, dirs: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -369,10 +368,17 @@ fn walk_skills(dir: &Path, depth: usize, files: &mut Vec<PathBuf>, dirs: &mut Ve
         if is_skill {
             files.push(skill_md);
         }
-        if name == LEGACY_SKILL {
+        let is_legacy = name == LEGACY_SKILL;
+        if !is_skill && depth < MAX_CATEGORY_DEPTH {
+            let nested_dirs = if is_legacy {
+                &mut Vec::new()
+            } else {
+                &mut *dirs
+            };
+            walk_skills(&path, depth + 1, files, nested_dirs);
+        }
+        if is_legacy {
             dirs.push(path);
-        } else if !is_skill && depth < MAX_CATEGORY_DEPTH {
-            walk_skills(&path, depth + 1, files, dirs);
         }
     }
 }
@@ -591,6 +597,33 @@ mod tests {
             root.join(".ai/src/skills/meta/exuno/references/z.md")
                 .is_file()
         );
+    }
+
+    #[test]
+    fn skills_inside_a_legacy_directory_are_renamed_in_one_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write(
+            root,
+            ".ai/src/skills/agentsync/deploy/SKILL.md",
+            "---\nname: deploy\nmetadata:\n  agentsync-use-when: Shipping\n---\n",
+        );
+        write(
+            root,
+            ".ai/src/skills/agentsync/deploy/agentsync/x.md",
+            "x\n",
+        );
+        assert_eq!(kinds(&scan(root)), [Kind::SkillMetadata, Kind::SkillDir]);
+        apply_all(root);
+        assert!(
+            read(root, ".ai/src/skills/exuno/deploy/SKILL.md")
+                .contains("\n  exuno-use-when: Shipping\n")
+        );
+        assert!(
+            root.join(".ai/src/skills/exuno/deploy/agentsync/x.md")
+                .is_file()
+        );
+        assert!(scan(root).is_empty());
     }
 
     #[test]
