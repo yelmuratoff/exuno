@@ -173,7 +173,8 @@ fn install_hook(
     if !hook.is_file() {
         std::fs::write(&hook, "#!/bin/sh\n\n").map_err(|e| Error::io(&hook, e))?;
     }
-    let existing = std::fs::read(&hook).map_err(|e| Error::io(&hook, e))?;
+    let original = std::fs::read(&hook).map_err(|e| Error::io(&hook, e))?;
+    let existing = without_legacy_blocks(&original);
     let block = format!("{BLOCK_START}\n{body}\n{BLOCK_END}");
     let present = names::HOOK_BLOCKS
         .iter()
@@ -187,7 +188,7 @@ fn install_hook(
         Some((start, end_marker)) => {
             let end = find(&existing, end_marker.as_bytes(), start).map(|i| i + end_marker.len());
             match end {
-                Some(end) if existing[start..end] != *block.as_bytes() => {
+                Some(end) if existing[start..end] != *block.as_bytes() || existing != original => {
                     let mut rewritten = existing[..start].to_vec();
                     rewritten.extend_from_slice(block.as_bytes());
                     rewritten.extend_from_slice(&existing[end..]);
@@ -203,6 +204,29 @@ fn install_hook(
     }
     executable(&hook)?;
     put(out, format!("Configured {name} hook.\n").as_bytes())
+}
+
+/// `hook` without the complete blocks an older name left once a current
+/// block is present, so the hook syncs once.
+fn without_legacy_blocks(hook: &[u8]) -> Vec<u8> {
+    let mut text = hook.to_vec();
+    if find(&text, BLOCK_START.as_bytes(), 0).is_none() {
+        return text;
+    }
+    for (start, end) in &names::HOOK_BLOCKS[1..] {
+        while let Some(at) = find(&text, start.as_bytes(), 0) {
+            let Some(stop) = find(&text, end.as_bytes(), at) else {
+                break;
+            };
+            let from = if at > 0 && text[at - 1] == b'\n' {
+                at - 1
+            } else {
+                at
+            };
+            text.drain(from..stop + end.len());
+        }
+    }
+    text
 }
 
 /// `chmod +x`.
