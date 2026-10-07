@@ -192,6 +192,7 @@ fn install_hook(
                     let mut rewritten = existing[..start].to_vec();
                     rewritten.extend_from_slice(block.as_bytes());
                     rewritten.extend_from_slice(&existing[end..]);
+                    let rewritten = without_legacy_blocks(&rewritten);
                     std::fs::write(&hook, rewritten).map_err(|e| Error::io(&hook, e))?;
                     put(out, format!("Updated Exuno hook in {name}.\n").as_bytes())?;
                 }
@@ -296,7 +297,7 @@ pub fn setup_hooks(
     let git_dir = git(&root, &["rev-parse", "--absolute-git-dir"]).unwrap_or_default();
     let committed = outputs_mode(&root) == "committed";
     if physical(&hooks_dir) != physical(&format!("{git_dir}/hooks")) {
-        upgrade_legacy_blocks(&Path::new(&git_dir).join("hooks"), committed, out)?;
+        upgrade_legacy_blocks(&Path::new(&git_dir).join("hooks"), committed, &[], out)?;
         put(
             out,
             HOOKS_PATH_ELSEWHERE
@@ -306,9 +307,12 @@ pub fn setup_hooks(
         return Ok(0);
     }
     let hooks_dir = PathBuf::from(hooks_dir);
-    for (name, body) in hooks_for(committed, pre_commit) {
-        install_hook(&hooks_dir, name, &body, out)?;
+    let hooks = hooks_for(committed, pre_commit);
+    for (name, body) in &hooks {
+        install_hook(&hooks_dir, name, body, out)?;
     }
+    let installed: Vec<&str> = hooks.iter().map(|(name, _)| *name).collect();
+    upgrade_legacy_blocks(&hooks_dir, committed, &installed, out)?;
     let mode = if committed { "committed" } else { "local" };
     put(
         out,
@@ -331,18 +335,33 @@ fn hooks_for(committed: bool, pre_commit: bool) -> Vec<(&'static str, String)> {
     hooks
 }
 
-/// Another `core.hooksPath` may still call these hooks, so old blocks are rewritten; none is created.
+/// Rewrites an older release's block in every hook past `skip`; creates no hook.
 fn upgrade_legacy_blocks(
-    git_hooks: &Path,
+    hooks_dir: &Path,
     committed: bool,
+    skip: &[&str],
     out: &mut dyn Write,
 ) -> Result<(), Error> {
     let (legacy_start, _) = names::LEGACY_HOOK_BLOCK;
-    for (name, body) in hooks_for(committed, true) {
-        let holds_legacy = std::fs::read(git_hooks.join(name))
-            .is_ok_and(|hook| find(&hook, legacy_start.as_bytes(), 0).is_some());
-        if holds_legacy {
-            install_hook(git_hooks, name, &body, out)?;
+    let pre_commit = if committed {
+        GATE_BODY.to_string()
+    } else {
+        sync_body("sync --if-stale")
+    };
+    let older = [
+        ("pre-commit", pre_commit),
+        ("post-merge", sync_body("sync")),
+        ("post-checkout", sync_body("sync")),
+    ];
+    for (name, body) in older.iter().filter(|(name, _)| !skip.contains(name)) {
+        let hook = hooks_dir.join(name);
+        let text = match std::fs::read(&hook) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(Error::io(&hook, e)),
+        };
+        if find(&text, legacy_start.as_bytes(), 0).is_some() {
+            install_hook(hooks_dir, name, body, out)?;
         }
     }
     Ok(())
@@ -502,6 +521,72 @@ mod tests {
         );
         assert!(!dir.path().join(".git/hooks/post-checkout").exists());
         assert!(!dir.path().join(".githooks/post-merge").exists());
+    }
+
+    fn legacy_hook(dir: &Path, name: &str, blocks: usize) -> PathBuf {
+        let (start, end) = names::LEGACY_HOOK_BLOCK;
+        let hook = dir.join(".git/hooks").join(name);
+        let body = format!("{start}\nagentsync sync\n{end}\n").repeat(blocks);
+        std::fs::write(&hook, format!("#!/bin/sh\n\n{body}")).unwrap();
+        hook
+    }
+
+    #[test]
+    fn committed_outputs_upgrade_older_sync_hooks_they_do_not_install() {
+        let (dir, root) = repo("outputs: committed\n");
+        let post_merge = legacy_hook(dir.path(), "post-merge", 1);
+        let (status, _, err) = run(&root, &[]);
+        assert_eq!((status, err.as_str()), (0, ""));
+        let text = std::fs::read_to_string(&post_merge).unwrap();
+        assert!(!text.contains("AGENTSYNC AUTO SYNC"), "{text}");
+        assert!(text.contains(&sync_body("sync")), "{text}");
+        assert!(!dir.path().join(".git/hooks/post-checkout").exists());
+    }
+
+    #[test]
+    fn every_older_block_in_a_hook_is_replaced_by_one_block() {
+        let (dir, root) = repo("outputs: local\n");
+        let post_merge = legacy_hook(dir.path(), "post-merge", 2);
+        run(&root, &[]);
+        let text = std::fs::read_to_string(&post_merge).unwrap();
+        assert!(!text.contains("AGENTSYNC AUTO SYNC"), "{text}");
+        assert_eq!(text.matches(BLOCK_START).count(), 1, "{text}");
+    }
+
+    #[test]
+    fn an_unreadable_hook_with_an_older_block_fails_instead_of_passing() {
+        if Command::new("id")
+            .arg("-u")
+            .output()
+            .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        {
+            return;
+        }
+        let (dir, root) = repo("outputs: committed\n");
+        std::fs::create_dir_all(dir.path().join(".githooks")).unwrap();
+        assert!(
+            Command::new("git")
+                .args(["-C", &root, "config", "core.hooksPath", ".githooks"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        let post_merge = legacy_hook(dir.path(), "post-merge", 1);
+        let mut perms = std::fs::metadata(&post_merge).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o000);
+        std::fs::set_permissions(&post_merge, perms).unwrap();
+        let args: Vec<String> = Vec::new();
+        let result = setup_hooks(
+            &args,
+            &root,
+            &Style::plain(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+        );
+        let mut perms = std::fs::metadata(&post_merge).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o755);
+        std::fs::set_permissions(&post_merge, perms).unwrap();
+        assert!(result.is_err());
     }
 
     #[test]
