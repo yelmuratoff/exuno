@@ -51,7 +51,7 @@ fn git(
         .env("GIT_CONFIG_GLOBAL", &absent)
         .env("GIT_CONFIG_SYSTEM", &absent);
     if let Some(prefix) = path_prefix {
-        let existing = std::env::var("PATH").unwrap_or_default();
+        let existing = common::path_without_installed_engine();
         command.env("PATH", format!("{}:{existing}", prefix.display()));
     }
     for (key, value) in extra_env {
