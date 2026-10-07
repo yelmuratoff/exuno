@@ -94,6 +94,6 @@ _body "Generated project" > "$SRC/AGENTS.md"
     printf '  enabled:\n'
     printf -- '    - %s\n' amazonq antigravity claude cline codex copilot cursor \
         gemini junie kimi opencode windsurf zed
-} > "$DEST/.ai/agent_sync.yaml"
+} > "$DEST/.ai/exuno.yaml"
 
 printf '%s\n' "$(find "$SRC" -type f | wc -l | tr -d ' ') files in $SRC"

@@ -26,8 +26,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BINARY="$REPO_DIR/target/release/agentsync"
-[[ -x "$BINARY" ]] || BINARY="$REPO_DIR/target/release/agentsync.exe"
+BINARY="$REPO_DIR/target/release/exuno"
+[[ -x "$BINARY" ]] || BINARY="$REPO_DIR/target/release/exuno.exe"
 [[ -x "$BINARY" ]] || {
     echo "Error: build the engine first: cargo build --release" >&2
     exit 1
@@ -48,7 +48,7 @@ command -v /usr/bin/time >/dev/null 2>&1 || {
     exit 1
 }
 
-FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/agentsync_bench.XXXXXX")"
+FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/exuno_bench.XXXXXX")"
 cleanup() { [[ "$KEEP" == "true" ]] || rm -rf "$FIXTURE"; }
 trap cleanup EXIT INT TERM HUP
 
@@ -107,7 +107,7 @@ _row() {
             AGENTSYNC_REPO_ROOT="$FIXTURE" bash "$BASH_CLI" "$@")
     fi
     if [[ "$ENGINES" != "bash" ]]; then
-        native_result=$(_measure env AGENTSYNC_REPO_ROOT="$FIXTURE" "$BINARY" "$@")
+        native_result=$(_measure env EXUNO_REPO_ROOT="$FIXTURE" "$BINARY" "$@")
     fi
     printf '| %s | %s | %s |\n' "$label" "${bash_result:-—}" "${native_result:-—}"
 }
@@ -116,7 +116,7 @@ _self_check
 
 # sync writes; every later measurement runs against an already-synced project,
 # which is the state a user is in most of the time.
-env AGENTSYNC_REPO_ROOT="$FIXTURE" "$BINARY" sync >/dev/null 2>&1
+env EXUNO_REPO_ROOT="$FIXTURE" "$BINARY" sync >/dev/null 2>&1
 
 printf '\n'
 printf 'Fixture: %s\n' "$(find "$FIXTURE/.ai/src" -type f | wc -l | tr -d ' ') source files, 13 tools enabled"

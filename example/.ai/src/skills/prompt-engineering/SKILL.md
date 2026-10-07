@@ -1,6 +1,6 @@
 ---
 name: prompt-engineering
-description: Design, debug, and refine prompts for LLM-based coding tools, agents, and pipelines. Use this skill when writing or rewriting a system prompt, agent persona, slash-command body, rule, or skill description; tuning a prompt that produces vague, incomplete, off-format, hallucinated, or over-/under-triggering output; choosing among techniques like XML tags, few-shot examples, role-setting, reasoning steps, or recap; debugging a model that ignores instructions, leaks information, or over-engineers solutions; or designing the persona, autonomy posture, or tool-use rules of an autonomous agent — even when the user does not explicitly mention "prompt engineering" or "system prompt". Not for AgentSync file structure, frontmatter, or scaffolding new rule/skill/command files — use the `agentsync` skill for that.
+description: Design, debug, and refine prompts for LLM-based coding tools, agents, and pipelines. Use this skill when writing or rewriting a system prompt, agent persona, slash-command body, rule, or skill description; tuning a prompt that produces vague, incomplete, off-format, hallucinated, or over-/under-triggering output; choosing among techniques like XML tags, few-shot examples, role-setting, reasoning steps, or recap; debugging a model that ignores instructions, leaks information, or over-engineers solutions; or designing the persona, autonomy posture, or tool-use rules of an autonomous agent — even when the user does not explicitly mention "prompt engineering" or "system prompt". Not for Exuno file structure, frontmatter, or scaffolding new rule/skill/command files — use the `exuno` skill for that.
 ---
 
 # Prompt Engineering
@@ -91,7 +91,7 @@ Before shipping a prompt, check:
 - **Claude (Opus 4.7 / 4.8)** — Opus 4.8 is the current most-capable GA model and builds on 4.7 with no breaking API changes (`effort` defaults to `high`, set `xhigh` for coding). Interprets instructions literally; state scope explicitly. Uses adaptive thinking — tune via `effort`, not by over-prompting. Dial back "MUST/ALWAYS/CRITICAL" — it over-triggers. Prefers XML tags.
 - **OpenAI GPT-5 / Codex** — uses `instructions` + `input` roles; pin production prompts to a specific model snapshot; build evals alongside prompts. Reasoning models: prefer goal-only prompts over step-by-step instructions. For `gpt-5.3-codex`, persist the `phase` field on assistant items (commentary vs. final_answer) — dropping it degrades performance.
 - **Gemini** — responds well to the full component template (Objective → Instructions → Constraints → Context → Output format → Examples → Recap). Native Thinking: avoid explicit step-by-step.
-- **Agent rules / skills / commands (this repo)** — rules are always-on constraints (imperative, 20–50 lines, one topic). Skills are on-demand recipes with a triggering description. Commands are one-workflow prompts. See the `agentsync` skill for AgentSync file format and scaffolding.
+- **Agent rules / skills / commands (this repo)** — rules are always-on constraints (imperative, 20–50 lines, one topic). Skills are on-demand recipes with a triggering description. Commands are one-workflow prompts. See the `exuno` skill for Exuno file format and scaffolding.
 
 ## Gotchas
 
