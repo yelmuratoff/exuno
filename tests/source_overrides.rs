@@ -28,7 +28,7 @@ fn write_project_sources(project: &Project) {
 /// Writes `.ai/exuno.yaml` enabling Claude, with `source.rules` set when given.
 fn write_rules_config(project: &Project, rules_source: Option<&str>) {
     let mut content =
-        String::from("format: 2\noutputs: committed\ntools:\n  enabled:\n    - claude\n");
+        String::from("format: 3\noutputs: committed\ntools:\n  enabled:\n    - claude\n");
     if let Some(src) = rules_source {
         content.push_str(&format!("source:\n  rules: \"{src}\"\n"));
     }
@@ -85,7 +85,7 @@ fn write_external_fixture(
     write(
         &config,
         &format!(
-            "format: 2\noutputs: committed\ntools:\n  enabled:\n    - claude\nsource:\n  agents: \"sources/AGENTS.md\"\n  rules: \"sources/rules\"\n  skills: \"sources/skills\"\n  tools: \"{tools_path}\"\n"
+            "format: 3\noutputs: committed\ntools:\n  enabled:\n    - claude\nsource:\n  agents: \"sources/AGENTS.md\"\n  rules: \"sources/rules\"\n  skills: \"sources/skills\"\n  tools: \"{tools_path}\"\n"
         ),
     );
     config

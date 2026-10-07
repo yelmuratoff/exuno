@@ -709,7 +709,7 @@ mod tests {
         assert!(files.contains(&".ai/src/skills/humanizer/scripts/strip-ai-chars.sh".to_string()));
         assert!(!Path::new(&root).join(".ai/src/tools").exists());
         let config = std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap();
-        assert!(config.starts_with("# Exuno — Project Configuration\n# All keys are optional — remove any that you leave at the default.\n\nexuno_version: \"9.9.9\"\nformat: 2\n\n# Tools:"));
+        assert!(config.starts_with("# Exuno — Project Configuration\n# All keys are optional — remove any that you leave at the default.\n\nexuno_version: \"9.9.9\"\nformat: 3\n\n# Tools:"));
         assert!(config.contains("\ntools:\n  enabled: []\n\n# Source paths"));
         assert!(config.ends_with("outputs: committed\n\n# .gitignore management (false leaves the managed block untouched).\ngitignore:\n  update: true\n"));
         assert_eq!(

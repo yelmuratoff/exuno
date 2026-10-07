@@ -389,7 +389,7 @@ fn migrate_apply_moves_overrides_into_the_source_tools_directory() {
     // block is the one under test rather than the one `init` already wrote.
     project.write(
         ".ai/exuno.yaml",
-        "format: 2\ntools:\n  enabled: []\nsource:\n  tools: \"catalog\"\n",
+        "format: 3\ntools:\n  enabled: []\nsource:\n  tools: \"catalog\"\n",
     );
 
     project

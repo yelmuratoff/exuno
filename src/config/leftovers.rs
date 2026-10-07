@@ -68,7 +68,9 @@ impl Leftover {
             }
             Kind::SkillDir => format!("{path}/ → {}/", shown(&renamed_dir(&self.path))),
             Kind::CiWorkflow => format!("{path} → {CI_WORKFLOW}"),
-            Kind::HookBlock => format!("{path} still runs the {LEGACY_SKILL} block"),
+            Kind::HookBlock => {
+                format!("{path} still runs the {LEGACY_SKILL} block — run exuno setup-hooks")
+            }
         }
     }
 }

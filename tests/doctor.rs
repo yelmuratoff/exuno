@@ -161,7 +161,7 @@ fn doctor_checks_explicit_external_sources_at_their_configured_location() {
     project.write(
         ".ai/exuno.yaml",
         &format!(
-            "format: 2\ntools:\n  enabled: []\nsource:\n  agents: \"{outside_str}/AGENTS.md\"\n  rules: \"{outside_str}/rules\"\n"
+            "format: 3\ntools:\n  enabled: []\nsource:\n  agents: \"{outside_str}/AGENTS.md\"\n  rules: \"{outside_str}/rules\"\n"
         ),
     );
 

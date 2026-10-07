@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use super::{files_below, put, sorted_entries};
+use crate::config::leftovers::{self, Kind, Leftover};
 use crate::config::template_manifest::{self, TemplateManifest};
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
@@ -478,6 +479,15 @@ fn legacy(
     let agent_dir = root_path.join(".agent");
     let has_agent_dir = agent_dir.is_dir();
     let skills = scan_base_skills(&root_path)?;
+    let retired: Vec<PathBuf> = skills
+        .iter()
+        .filter(|copy| !copy.edited)
+        .map(|copy| root_path.join(".ai/src/skills").join(&copy.rel))
+        .collect();
+    let renames: Vec<Leftover> = leftovers::scan(&root_path)
+        .into_iter()
+        .filter(|leftover| !(leftover.kind == Kind::SkillDir && retired.contains(&leftover.path)))
+        .collect();
     let engine_rev = format_rev::engine();
     let current_rev = project_format(&project)?;
 
@@ -486,7 +496,12 @@ fn legacy(
         style.bold("  Exuno Migrate"),
         style.dim(&format!("  {}", run.root))
     ))?;
-    if legacy.is_empty() && !has_agent_dir && skills.is_empty() && current_rev >= engine_rev {
+    if legacy.is_empty()
+        && !has_agent_dir
+        && skills.is_empty()
+        && renames.is_empty()
+        && current_rev >= engine_rev
+    {
         run.say(&format!(
             "{}\n{}\n\n",
             style.green("  Nothing to migrate."),
@@ -506,6 +521,9 @@ fn legacy(
     }
     if current_rev < engine_rev {
         run.bump_format(current_rev, engine_rev, apply)?;
+    }
+    if !renames.is_empty() {
+        rename_leftovers(&mut run, apply, &renames)?;
     }
     if legacy.is_empty() && !has_agent_dir {
         let hint = run.closing_hint(apply);
@@ -839,6 +857,26 @@ fn retire_base_skills(run: &mut Run, apply: bool, copies: &[BaseSkillCopy]) -> R
     Ok(())
 }
 
+/// The r3 step: each leftover the old name left, renamed or previewed; one
+/// the new name already belongs to, or a git hook, is kept for the user.
+fn rename_leftovers(run: &mut Run, apply: bool, renames: &[Leftover]) -> Result<(), Error> {
+    let style = run.style;
+    let root = PathBuf::from(&run.root);
+    run.say(&format!("  {}:\n", style.bold("Renamed to Exuno")))?;
+    for leftover in renames {
+        let line = leftover.describe(&root);
+        if leftover.blocked_by.is_some() || leftover.kind == Kind::HookBlock {
+            run.say(&format!("{}          {line}\n", style.yellow("  keep")))?;
+        } else if apply {
+            leftovers::apply(&root, leftover)?;
+            run.say(&format!("{}       {line}\n", style.green("  renamed")))?;
+        } else {
+            run.say(&format!("{}  {line}\n", style.cyan("  would rename")))?;
+        }
+    }
+    run.say("\n")
+}
+
 /// Category directories above a removed skill that it left empty, up to `skills`.
 fn remove_empty_categories(removed: &Path, skills: &Path) -> Result<(), Error> {
     for dir in removed.ancestors().skip(1).take_while(|dir| *dir != skills) {
@@ -968,7 +1006,7 @@ mod tests {
 
     #[test]
     fn arguments_are_refused_with_the_bash_statuses() {
-        let (_dir, root) = project(&[(".ai/agent_sync.yaml", "format: 2\n")]);
+        let (_dir, root) = project(&[(".ai/exuno.yaml", "format: 3\n")]);
         let bogus = call(&root, &["--bogus", "extra"], false, false, None);
         assert_eq!(
             (bogus.status, bogus.out.as_str(), bogus.err.as_str()),
@@ -999,15 +1037,15 @@ mod tests {
         assert_eq!(
             call(&root, &["--apply"], false, false, None).out,
             format!(
-                "\n  Exuno Migrate\n  {root}\n\n  Nothing to migrate.\n  Canonical layout, no engine-owned skill copies, format r2 is current.\n\n"
+                "\n  Exuno Migrate\n  {root}\n\n  Nothing to migrate.\n  Canonical layout, no engine-owned skill copies, format r3 is current.\n\n"
             )
         );
     }
 
     const LEGACY: [(&str, &str); 9] = [
         (
-            ".ai/agent_sync.yaml",
-            "format: 2\ntools:\n  enabled:\n    - claude\n",
+            ".ai/exuno.yaml",
+            "format: 3\ntools:\n  enabled:\n    - claude\n",
         ),
         (".ai/src/hooks/cursor.json", "{\"hooks\": {}}\n"),
         (".ai/src/tools/cursor/settings.json", "{\"taken\": true}\n"),
@@ -1046,7 +1084,7 @@ mod tests {
         assert_eq!(
             tree(&root),
             [
-                ".ai/agent_sync.yaml",
+                ".ai/exuno.yaml",
                 ".ai/src/mcp.json",
                 ".ai/src/settings/README",
                 ".ai/src/settings/cursor.json",
@@ -1164,7 +1202,7 @@ mod tests {
         assert_eq!(
             dry.out,
             format!(
-                "\n  Exuno Migrate\n  {root}\n\n  Engine-owned skills:\n  would remove  .ai/src/skills/agentsync/ (unedited — the engine supplies it)\n\n  Project format r1 → r2:\n  would set     format: 2 in .ai/agent_sync.yaml\n\n  Dry-run — re-run with exuno migrate --apply to apply.\n\n"
+                "\n  Exuno Migrate\n  {root}\n\n  Engine-owned skills:\n  would remove  .ai/src/skills/agentsync/ (unedited — the engine supplies it)\n\n  Project format r1 → r3:\n  would set     format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  would rename  .ai/agent_sync.yaml → .ai/exuno.yaml\n\n  Dry-run — re-run with exuno migrate --apply to apply.\n\n"
             )
         );
         let applied = call(&root, &["--apply"], false, false, None);
@@ -1174,19 +1212,16 @@ mod tests {
             )
         );
         assert!(applied.out.ends_with(
-            "  set           format: 2 in .ai/agent_sync.yaml\n\n  Migration complete.\n\n"
+            "  set           format: 3 in .ai/agent_sync.yaml\n\n  Renamed to Exuno:\n  renamed       .ai/agent_sync.yaml → .ai/exuno.yaml\n\n  Migration complete.\n\n"
         ));
-        assert_eq!(
-            tree(&root),
-            [".ai/.template-manifest", ".ai/agent_sync.yaml"]
-        );
+        assert_eq!(tree(&root), [".ai/.template-manifest", ".ai/exuno.yaml"]);
         assert_eq!(
             std::fs::read_to_string(Path::new(&root).join(".ai/.template-manifest")).unwrap(),
             "rules/core.md\tabc\n"
         );
         assert_eq!(
-            std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap(),
-            "tools:\n  enabled:\n    - claude\nformat: 2\n"
+            std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap(),
+            "tools:\n  enabled:\n    - claude\nformat: 3\n"
         );
 
         let (_dir, root) = project(&fixture);
@@ -1198,9 +1233,13 @@ mod tests {
         let kept = call(&root, &["--apply"], false, false, None);
         assert!(kept.out.contains("  keep          .ai/src/skills/agentsync/ (edited — stays your override; delete it to follow the engine)\n"));
         assert!(
-            Path::new(&root)
-                .join(".ai/src/skills/agentsync/SKILL.md")
-                .is_file()
+            kept.out
+                .contains("  renamed       .ai/src/skills/agentsync/ → .ai/src/skills/exuno/\n")
+        );
+        assert_eq!(
+            std::fs::read_to_string(Path::new(&root).join(".ai/src/skills/exuno/SKILL.md"))
+                .unwrap(),
+            "edited\n"
         );
     }
 
@@ -1237,7 +1276,7 @@ mod tests {
             ".ai/src/skills/meta/other/SKILL.md",
             "---\nname: other\n---\n",
         ));
-        fixture.push((".ai/agent_sync.yaml", "format: 2\n"));
+        fixture.push((".ai/exuno.yaml", "format: 3\n"));
         fixture.push((".ai/.template-manifest", &manifest));
 
         let (_dir, root) = project(&fixture);
@@ -1253,7 +1292,7 @@ mod tests {
             tree(&root),
             [
                 ".ai/.template-manifest",
-                ".ai/agent_sync.yaml",
+                ".ai/exuno.yaml",
                 ".ai/src/skills/meta/other/SKILL.md"
             ]
         );

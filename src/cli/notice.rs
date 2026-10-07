@@ -177,9 +177,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             format_notice(dir.path(), &Style::plain()),
-            "\n  This project's agent config is a migration behind (format r1 → r2)\n    r2  The exuno skill is engine-owned now. A copy under .ai/src/skills/exuno/ (or the older skills/agentsync/) keeps engine upgrades from your agents.\n  Preview it with exuno migrate, apply with exuno migrate --apply\n\n"
+            "\n  This project's agent config is a migration behind (format r1 → r3)\n    r2  The exuno skill is engine-owned now. A copy under .ai/src/skills/exuno/ (or the older skills/agentsync/) keeps engine upgrades from your agents.\n    r3  AgentSync is Exuno now: .ai/exuno.yaml, exuno_version, metadata.exuno-*, skills/exuno/, exuno-check.yml.\n  Preview it with exuno migrate, apply with exuno migrate --apply\n\n"
         );
-        std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "format: 2\n").unwrap();
+        std::fs::write(dir.path().join(".ai/agent_sync.yaml"), "format: 3\n").unwrap();
         assert_eq!(format_notice(dir.path(), &Style::plain()), "");
     }
 
