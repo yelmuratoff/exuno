@@ -25,9 +25,9 @@ fn absent_git_config() -> std::path::PathBuf {
     std::env::temp_dir().join("agentsync-tests-absent-gitconfig")
 }
 
-/// Rewrite the `outputs:` line in `.ai/agent_sync.yaml`.
+/// Rewrite the `outputs:` line in `.ai/exuno.yaml`.
 fn set_outputs_mode(project: &Project, mode: &str) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .map(|line| {
@@ -39,17 +39,17 @@ fn set_outputs_mode(project: &Project, mode: &str) {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    project.write(".ai/agent_sync.yaml", &format!("{rewritten}\n"));
+    project.write(".ai/exuno.yaml", &format!("{rewritten}\n"));
 }
 
 fn drop_outputs_key(project: &Project) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .filter(|line| !line.starts_with("outputs:"))
         .collect::<Vec<_>>()
         .join("\n");
-    project.write(".ai/agent_sync.yaml", &format!("{rewritten}\n"));
+    project.write(".ai/exuno.yaml", &format!("{rewritten}\n"));
 }
 
 fn init_no_sync(project: &Project, extra: &[&str]) {
@@ -64,7 +64,7 @@ fn outputs_init_defaults_new_projects_to_committed() {
     init_no_sync(&project, &[]);
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .contains("outputs: committed")
     );
 }
@@ -73,11 +73,7 @@ fn outputs_init_defaults_new_projects_to_committed() {
 fn outputs_init_outputs_local_writes_local() {
     let project = Project::empty();
     init_no_sync(&project, &["--outputs", "local"]);
-    assert!(
-        project
-            .read(".ai/agent_sync.yaml")
-            .contains("outputs: local")
-    );
+    assert!(project.read(".ai/exuno.yaml").contains("outputs: local"));
 }
 
 #[test]
@@ -160,9 +156,9 @@ fn outputs_a_missing_key_with_gitignore_update_false_means_committed() {
     let project = Project::empty();
     init_no_sync(&project, &[]);
     drop_outputs_key(&project);
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten = config.replace("  update: true", "  update: false");
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
     project.write(".gitignore", "keep-me\n");
     project.exuno().arg("sync").assert().success();
     assert_eq!(project.read(".gitignore"), "keep-me\n");

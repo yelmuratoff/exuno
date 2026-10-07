@@ -41,7 +41,7 @@ fn a_missing_config_refuses_write_sync_before_cleanup_defaults_can_run() {
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
-    std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
+    std::fs::remove_file(project.join(".ai/exuno.yaml")).unwrap();
     project.write(".claude/skills/config-safety-sentinel.md", "");
 
     project
@@ -82,7 +82,7 @@ fn check_hands_a_relative_explicit_config_outside_ai_to_its_isolated_sync() {
         .success();
     std::fs::create_dir_all(project.join("config")).unwrap();
     std::fs::rename(
-        project.join(".ai/agent_sync.yaml"),
+        project.join(".ai/exuno.yaml"),
         project.join("config/agentsync.yaml"),
     )
     .unwrap();
@@ -110,7 +110,7 @@ fn a_missing_config_remains_usable_for_a_dry_run() {
         .args(["init", "--tools", "claude", "--yes", "--no-sync"])
         .assert()
         .success();
-    std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
+    std::fs::remove_file(project.join(".ai/exuno.yaml")).unwrap();
     project.write(".claude/skills/config-safety-sentinel.md", "");
 
     project

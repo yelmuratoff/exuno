@@ -18,7 +18,7 @@ use crate::{Error, config::names, config::yaml_subset};
 const DIR_TARGETS: [&str; 8] = [
     "rules", "skills", "commands", "agents", "settings", "mcp", "hooks", "tools",
 ];
-const CONFIG: &str = ".ai/agent_sync.yaml";
+const CONFIG: &str = ".ai/exuno.yaml";
 const CONFIG_LEGACY: &str = "agent_sync.yaml";
 
 /// The first config `dir` resolves, relative to `dir`.
@@ -1204,7 +1204,7 @@ mod tests {
         write(dir.path(), "custom/cmds/c.md", "# Command\n");
         write(
             dir.path(),
-            ".ai/agent_sync.yaml",
+            ".ai/exuno.yaml",
             "source:\n  commands: custom/cmds\n",
         );
         (dir, root)
@@ -1283,7 +1283,7 @@ mod tests {
         assert_eq!(
             out,
             format!(
-                "\n  Exuno Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • agent_sync.yaml\n\n  Dry run — no files written.\n  Would create: {root}/agentsync-bundle.tar.gz\n\n"
+                "\n  Exuno Export\n\n  Contents:\n    • AGENTS.md\n    • rules/ (1 files)\n    • skills/ (1 files)\n    • commands/ (1 files)\n    • exuno.yaml\n\n  Dry run — no files written.\n  Would create: {root}/agentsync-bundle.tar.gz\n\n"
             )
         );
         let (status, out, err) = run_export(&root, &["--bogus"]);
@@ -1316,7 +1316,7 @@ mod tests {
         let (_source, source_root) = tiny_project();
         write(
             Path::new(&source_root),
-            ".ai/agent_sync.yaml",
+            ".ai/exuno.yaml",
             "tools:\n  enabled: [claude]\n\nsource:\n  commands: custom/cmds\n",
         );
         let target = tempfile::tempdir().unwrap();
@@ -1324,7 +1324,7 @@ mod tests {
         let (status, _, err) = run_import(&target_root, &[&source_root]);
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
-            std::fs::read_to_string(target.path().join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(target.path().join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled: [claude]\n\n"
         );
     }
@@ -1351,7 +1351,7 @@ mod tests {
             std::fs::read_to_string(target.path().join(".ai/src/commands/c.md")).unwrap(),
             "# Command\n"
         );
-        assert!(!target.path().join(".ai/agent_sync.yaml").exists());
+        assert!(!target.path().join(".ai/exuno.yaml").exists());
         let (status, out, _) = run_import(&target_root, &[&source_root]);
         assert_eq!(status, 0);
         assert!(out.ends_with("  Source: Directory: {source_root}\n\n  Already up to date! Nothing to import.\n\n".replace("{source_root}", &source_root).as_str()));

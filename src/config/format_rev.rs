@@ -34,7 +34,7 @@ pub fn pending_notes(from: u32, to: u32) -> Vec<String> {
         .collect()
 }
 
-/// `format_config_path`: `.ai/agent_sync.yaml`, else `agent_sync.yaml`, when a file.
+/// `format_config_path`: the first of [`names::CONFIG_CANDIDATES`] that is a file.
 pub fn config_path(project_dir: &Path) -> Option<PathBuf> {
     names::CONFIG_CANDIDATES
         .iter()

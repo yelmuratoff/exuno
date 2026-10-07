@@ -32,7 +32,7 @@ pub const HELP: Help = Help {
             title: "ARGUMENTS",
             entries: &[(
                 "<version>",
-                "Pin the install to that release tag (e.g. 0.35.0) instead of\nthe latest release — what a project's agentsync_version asks for",
+                "Pin the install to that release tag (e.g. 0.35.0) instead of\nthe latest release — what a project's exuno_version asks for",
             )],
         },
         Section {
@@ -964,7 +964,7 @@ mod tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\n  exuno update — replace the binary with a GitHub release\n\n  USAGE\n    exuno update [<version>] [--strict]\n\n  DESCRIPTION\n    Downloads the release archive for this platform from GitHub Releases,\n    verifies its sha256, and moves the new binary over the running one.\n    Conflicts between the new catalog and your overrides are queued for\n    exuno resolve.\n\n  ARGUMENTS\n    <version>   Pin the install to that release tag (e.g. 0.35.0) instead of\n                the latest release — what a project's agentsync_version asks for\n\n  OPTIONS\n    --strict     Exit non-zero if upstream changed a field you have overridden\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno update\n    exuno update 0.35.0\n    exuno update --strict\n\n"
+            "\n  exuno update — replace the binary with a GitHub release\n\n  USAGE\n    exuno update [<version>] [--strict]\n\n  DESCRIPTION\n    Downloads the release archive for this platform from GitHub Releases,\n    verifies its sha256, and moves the new binary over the running one.\n    Conflicts between the new catalog and your overrides are queued for\n    exuno resolve.\n\n  ARGUMENTS\n    <version>   Pin the install to that release tag (e.g. 0.35.0) instead of\n                the latest release — what a project's exuno_version asks for\n\n  OPTIONS\n    --strict     Exit non-zero if upstream changed a field you have overridden\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno update\n    exuno update 0.35.0\n    exuno update --strict\n\n"
         );
         let (status, out, err) = fixture.run(&["--bogus"]);
         assert_eq!(

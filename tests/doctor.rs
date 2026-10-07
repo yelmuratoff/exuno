@@ -48,14 +48,14 @@ fn git_init_at(dir: &Path) {
     run(&["config", "user.name", "Test"]);
 }
 
-/// `pin_version`: rewrite the `agentsync_version:` line in place.
+/// `pin_version`: rewrite the `exuno_version:` line in place.
 fn pin_version(project: &Project, version: &str) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .map(|line| {
-            if line.starts_with("agentsync_version:") {
-                format!("agentsync_version: \"{version}\"")
+            if line.starts_with("exuno_version:") {
+                format!("exuno_version: \"{version}\"")
             } else {
                 line.to_string()
             }
@@ -63,7 +63,7 @@ fn pin_version(project: &Project, version: &str) {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn doctor_checks_explicit_external_sources_at_their_configured_location() {
     let outside_str = common::engine_path(outside.path());
     // Overwrite the config wholesale, as the bats fixture does with `>`.
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         &format!(
             "format: 2\ntools:\n  enabled: []\nsource:\n  agents: \"{outside_str}/AGENTS.md\"\n  rules: \"{outside_str}/rules\"\n"
         ),
@@ -263,13 +263,13 @@ fn list_shows_payload_override_column_when_hooks_override_exists() {
 }
 
 #[test]
-fn init_pins_agentsync_version_in_agent_sync_yaml() {
+fn init_pins_exuno_version_in_agent_sync_yaml() {
     let project = Project::seeded(&["--no-detect"]);
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
-            .any(|line| line.starts_with("agentsync_version:"))
+            .any(|line| line.starts_with("exuno_version:"))
     );
 }
 
@@ -290,8 +290,8 @@ fn upgrade_config_bumps_pinned_version_to_current_cli() {
     project.exuno().arg("upgrade-config").assert().success();
     assert!(
         !project
-            .read(".ai/agent_sync.yaml")
-            .contains("agentsync_version: \"0.0.1\"")
+            .read(".ai/exuno.yaml")
+            .contains("exuno_version: \"0.0.1\"")
     );
     doctor(&project).stdout(predicate::str::contains("differs from pinned").not());
 }
@@ -371,7 +371,7 @@ fn doctor_advises_when_a_project_copy_replaces_the_bundled_skill() {
         .success()
         .stdout(predicate::str::contains(replaced));
 
-    project.append(".ai/agent_sync.yaml", "base_skills: false\n");
+    project.append(".ai/exuno.yaml", "base_skills: false\n");
     doctor(&project)
         .success()
         .stdout(predicate::str::contains(replaced).not());
@@ -584,9 +584,9 @@ fn doctor_honors_shared_path_across_git_boundary_asymmetric_repro() {
         inner.join(".ai/src/rules/shared.md"),
     )
     .unwrap();
-    let mut config = std::fs::read_to_string(inner.join(".ai/agent_sync.yaml")).unwrap();
+    let mut config = std::fs::read_to_string(inner.join(".ai/exuno.yaml")).unwrap();
     config.push_str("\nshared:\n  path: \"../\"\n  inherit: rules\n");
-    std::fs::write(inner.join(".ai/agent_sync.yaml"), config).unwrap();
+    std::fs::write(inner.join(".ai/exuno.yaml"), config).unwrap();
 
     doctor_at(&inner)
         .success()

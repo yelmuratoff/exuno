@@ -329,7 +329,7 @@ fn sync_in_repo_post_sync_allow_does_not_enable_the_hook() {
         "post_sync: \"touch post_sync_ran\"\n",
     );
     // An in-repo allow must be ignored — cloning a repo can't run its hook.
-    project.append(".ai/agent_sync.yaml", "\npost_sync:\n  allow: true\n");
+    project.append(".ai/exuno.yaml", "\npost_sync:\n  allow: true\n");
     project
         .exuno()
         .arg("sync")

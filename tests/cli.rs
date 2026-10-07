@@ -91,7 +91,7 @@ fn list_counts_configured_tools_and_honours_the_repo_root_variable() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join(".ai")).unwrap();
     std::fs::write(
-        dir.path().join(".ai/agent_sync.yaml"),
+        dir.path().join(".ai/exuno.yaml"),
         "tools:\n  enabled:\n    - claude\n",
     )
     .unwrap();
@@ -112,7 +112,7 @@ fn sync_project(tool_yaml: Option<&str>) -> tempfile::TempDir {
     std::fs::write(dir.path().join(".ai/src/AGENTS.md"), "# Agents\n").unwrap();
     std::fs::write(dir.path().join(".ai/src/rules/core.md"), "# Core\n").unwrap();
     std::fs::write(
-        dir.path().join(".ai/agent_sync.yaml"),
+        dir.path().join(".ai/exuno.yaml"),
         "outputs: committed\ntools:\n  enabled: [claude]\n",
     )
     .unwrap();
@@ -366,9 +366,9 @@ fn no_arguments_shows_help() {
 fn every_command_with_its_own_usage_answers_help_without_running() {
     let project = common::Project::seeded(&[]);
     let stale = project
-        .read(".ai/agent_sync.yaml")
+        .read(".ai/exuno.yaml")
         .replace(engine_version(), "0.0.1");
-    project.write(".ai/agent_sync.yaml", &stale);
+    project.write(".ai/exuno.yaml", &stale);
     for command in [
         "init",
         "sync",
@@ -409,7 +409,7 @@ fn every_command_with_its_own_usage_answers_help_without_running() {
             .stderr("");
     }
     assert_eq!(
-        project.read(".ai/agent_sync.yaml"),
+        project.read(".ai/exuno.yaml"),
         stale,
         "upgrade-config --help must not touch the pin"
     );

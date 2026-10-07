@@ -13,7 +13,7 @@ fn synced_project() -> Project {
 }
 
 fn set_config(project: &Project, line: &str) {
-    project.append(".ai/agent_sync.yaml", &format!("{line}\n"));
+    project.append(".ai/exuno.yaml", &format!("{line}\n"));
 }
 
 #[test]

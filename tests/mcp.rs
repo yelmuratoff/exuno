@@ -209,7 +209,7 @@ fn render_serializes_connection_strings_as_json_data() {
 #[test]
 fn use_previews_then_creates_a_per_tool_source_without_syncing() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
         .exuno()
@@ -247,7 +247,7 @@ fn use_previews_then_creates_a_per_tool_source_without_syncing() {
 #[test]
 fn use_merge_preserves_other_servers_and_rolls_back() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     let original = "{\"notes\":{\"private\":\"SECRET_SOURCE_VALUE\"},\"mcpServers\":{\"existing\":{\"command\":\"old\"}}}\n";
     project.write(".ai/src/tools/claude/mcp.json", original);
@@ -317,7 +317,7 @@ fn use_merge_preserves_other_servers_and_rolls_back() {
 #[test]
 fn use_merge_requires_explicit_replacement_and_refuses_ambiguous_sources() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     let original = "{\"mcpServers\":{\"alpha\":{\"command\":\"old\"}}}";
     project.write(".ai/src/tools/claude/mcp.json", original);
@@ -360,7 +360,7 @@ fn use_merge_requires_explicit_replacement_and_refuses_ambiguous_sources() {
 #[test]
 fn use_merge_refuses_a_live_or_stale_lock_without_writing() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     let original = "{\"mcpServers\":{}}";
     project.write(".ai/src/tools/claude/mcp.json", original);
@@ -388,7 +388,7 @@ fn use_merge_refuses_a_live_or_stale_lock_without_writing() {
 #[test]
 fn use_merge_refuses_invalid_sources_and_backup_failure() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     let command = [
         "mcp",
@@ -422,7 +422,7 @@ fn use_merge_refuses_invalid_sources_and_backup_failure() {
 #[test]
 fn use_merge_does_not_migrate_a_shared_source() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     let original = "{\"mcpServers\":{}}";
     project.write(".ai/src/mcp.json", original);
@@ -452,7 +452,7 @@ fn use_respects_source_tools_and_opencode_composition() {
     let project = Project::empty();
     project.write(".ai/src/AGENTS.md", "# Agent\n");
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "tools:\n  enabled: [opencode]\nsource:\n  tools: custom/tools\n",
     );
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
@@ -481,7 +481,7 @@ fn use_respects_source_tools_and_opencode_composition() {
 fn use_source_reaches_claude_on_a_separate_sync() {
     let project = Project::empty();
     project.write(".ai/src/AGENTS.md", "# Agent\n");
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
         .exuno()
@@ -564,7 +564,7 @@ fn use_kimi_http_writes_native_source_and_round_trips_through_sync_and_adopt() {
 #[test]
 fn use_kimi_stdio_keeps_native_command_and_args() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [kimi]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [kimi]\n");
     project.write("catalog/docs/manifest.json", &manifest("docs", "Docs"));
     project
         .exuno()
@@ -778,7 +778,7 @@ fn codex_composes_native_server_fields_from_a_per_tool_source() {
 #[test]
 fn use_refuses_occupied_sources_without_revealing_or_changing_them() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     for occupied in [
         ".ai/src/mcp.json",
@@ -820,7 +820,7 @@ fn use_refuses_occupied_sources_without_revealing_or_changing_them() {
 #[test]
 fn use_refuses_disabled_tools_invalid_selections_and_unsafe_source_roots() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     for args in [
         vec!["alpha", "--tool", "cursor"],
@@ -839,7 +839,7 @@ fn use_refuses_disabled_tools_invalid_selections_and_unsafe_source_roots() {
     }
     let external = tempfile::tempdir().unwrap();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         &format!(
             "tools:\n  enabled: [claude]\nsource:\n  tools: {}\n",
             external.path().display()
@@ -867,7 +867,7 @@ fn use_refuses_disabled_tools_invalid_selections_and_unsafe_source_roots() {
 #[test]
 fn use_keeps_the_source_absent_when_backup_creation_fails() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project.write(".ai/backups", "private bytes");
     project
@@ -897,7 +897,7 @@ fn use_discards_a_snapshot_when_the_new_source_cannot_be_written() {
         return;
     }
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     let parent = project.join(".ai/src/tools/claude");
     std::fs::create_dir_all(&parent).unwrap();
@@ -936,7 +936,7 @@ fn use_refuses_a_per_tool_directory_link_outside_the_project() {
 
     let project = Project::empty();
     let external = tempfile::tempdir().unwrap();
-    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [claude]\n");
+    project.write(".ai/exuno.yaml", "tools:\n  enabled: [claude]\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     std::fs::create_dir_all(project.join(".ai/src/tools")).unwrap();
     symlink(external.path(), project.join(".ai/src/tools/claude")).unwrap();
@@ -962,10 +962,7 @@ fn use_refuses_a_per_tool_directory_link_outside_the_project() {
 #[test]
 fn configured_catalog_stays_inside_project_root() {
     let project = Project::empty();
-    project.write(
-        ".ai/agent_sync.yaml",
-        "library:\n  mcp:\n    path: catalog\n",
-    );
+    project.write(".ai/exuno.yaml", "library:\n  mcp:\n    path: catalog\n");
     project.write("catalog/alpha/manifest.json", &manifest("alpha", "First"));
     project
         .exuno()
@@ -976,7 +973,7 @@ fn configured_catalog_stays_inside_project_root() {
 
     let external = tempfile::tempdir().unwrap();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         &format!(
             "library:\n  mcp:\n    path: {}\n",
             external.path().display()

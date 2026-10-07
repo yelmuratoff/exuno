@@ -284,7 +284,7 @@ fn refresh_include_deleted_with_yes_still_skips_restoration_interactive_only() {
 fn refresh_declined_override_skips_template_entirely() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  declined:\n    - rules/comments.md\n",
     );
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();
@@ -302,7 +302,7 @@ fn refresh_declined_override_skips_template_entirely() {
 fn refresh_pinned_override_silences_conflict_on_user_edited_file_when_template_moves() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  pinned:\n    - rules/core.md\n",
     );
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
@@ -654,7 +654,7 @@ fn refresh_up_to_date_summary_omits_the_review_hint_when_nothing_differs() {
 fn refresh_pinned_override_still_wins_over_review() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  pinned:\n    - rules/core.md\n",
     );
     project.append(".ai/src/rules/core.md", "USER LOCAL EDIT\n");
@@ -677,7 +677,7 @@ fn refresh_pinned_override_still_wins_over_review() {
 fn refresh_status_prints_persistent_declined_list() {
     let project = seeded();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  declined:\n    - rules/core.md\n    - rules/git.md\n",
     );
     project
@@ -727,7 +727,7 @@ fn refresh_up_to_date_output_splits_persistent_vs_local_declined_counts() {
         .assert()
         .success();
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\ntemplate_overrides:\n  declined:\n    - rules/core.md\n",
     );
     std::fs::remove_file(project.join(".ai/src/rules/comments.md")).unwrap();

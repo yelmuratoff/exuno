@@ -53,7 +53,7 @@ impl Report<'_> {
             text.push_str(&format!(
                 "  {}\n",
                 style.dim(&format!(
-                    "Persistently declined (agent_sync.yaml): {declined} file(s)."
+                    "Persistently declined (exuno.yaml): {declined} file(s)."
                 ))
             ));
         }

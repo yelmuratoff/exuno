@@ -25,14 +25,14 @@ fn write_project_sources(project: &Project) {
     );
 }
 
-/// Writes `.ai/agent_sync.yaml` enabling Claude, with `source.rules` set when given.
+/// Writes `.ai/exuno.yaml` enabling Claude, with `source.rules` set when given.
 fn write_rules_config(project: &Project, rules_source: Option<&str>) {
     let mut content =
         String::from("format: 2\noutputs: committed\ntools:\n  enabled:\n    - claude\n");
     if let Some(src) = rules_source {
         content.push_str(&format!("source:\n  rules: \"{src}\"\n"));
     }
-    write(&project.join(".ai/agent_sync.yaml"), &content);
+    write(&project.join(".ai/exuno.yaml"), &content);
 }
 
 fn make_outside_rules() -> tempfile::TempDir {
@@ -209,7 +209,7 @@ fn isolated_check_reads_the_version_pin_from_an_external_config() {
         .unwrap();
     {
         use std::io::Write;
-        file.write_all(b"agentsync_version: \"0.0.0\"\n").unwrap();
+        file.write_all(b"exuno_version: \"0.0.0\"\n").unwrap();
     }
 
     project

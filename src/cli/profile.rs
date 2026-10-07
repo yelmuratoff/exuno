@@ -255,7 +255,7 @@ fn add(
         put(
             err,
             format!(
-                "{}: no agent_sync.yaml — run {} first.\n",
+                "{}: no exuno.yaml — run {} first.\n",
                 style.red("Error"),
                 style.cyan("exuno init")
             )

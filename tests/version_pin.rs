@@ -1,4 +1,4 @@
-//! `tests/version_pin.bats`: `agentsync_version` pin vs the running engine —
+//! `tests/version_pin.bats`: `exuno_version` pin vs the running engine —
 //! fatal when outputs are committed (every machine must generate identical
 //! files), a warning otherwise.
 //!
@@ -13,14 +13,14 @@ mod common;
 use common::Project;
 use predicates::prelude::*;
 
-/// `pin_version`: rewrite the `agentsync_version:` line in place.
+/// `pin_version`: rewrite the `exuno_version:` line in place.
 fn pin_version(project: &Project, version: &str) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .map(|line| {
-            if line.starts_with("agentsync_version:") {
-                format!("agentsync_version: \"{version}\"")
+            if line.starts_with("exuno_version:") {
+                format!("exuno_version: \"{version}\"")
             } else {
                 line.to_string()
             }
@@ -28,23 +28,23 @@ fn pin_version(project: &Project, version: &str) {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
 }
 
 /// `set_version_pin_mode`: insert a `version_pin:\n  mode: <mode>` block
-/// right after the `agentsync_version:` line.
+/// right after the `exuno_version:` line.
 fn set_version_pin_mode(project: &Project, mode: &str) {
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let mut rewritten = String::new();
     for line in config.lines() {
         rewritten.push_str(line);
         rewritten.push('\n');
-        if line.starts_with("agentsync_version:") {
+        if line.starts_with("exuno_version:") {
             rewritten.push_str("version_pin:\n");
             rewritten.push_str(&format!("  mode: {mode}\n"));
         }
     }
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
 }
 
 fn init_committed(project: &Project) {
@@ -85,15 +85,15 @@ fn version_pin_committed_mode_refuses_to_sync_with_a_different_engine() {
 }
 
 #[test]
-fn version_pin_reads_an_exuno_version_key() {
+fn version_pin_reads_a_legacy_agentsync_version_key() {
     let project = Project::empty();
     init_committed(&project);
     let config = project
-        .read(".ai/agent_sync.yaml")
+        .read(".ai/exuno.yaml")
         .lines()
         .map(|line| {
-            if line.starts_with("agentsync_version:") {
-                "exuno_version: \"0.1.0\"".to_string()
+            if line.starts_with("exuno_version:") {
+                "agentsync_version: \"0.1.0\"".to_string()
             } else {
                 line.to_string()
             }
@@ -101,7 +101,7 @@ fn version_pin_reads_an_exuno_version_key() {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    project.write(".ai/agent_sync.yaml", &config);
+    project.write(".ai/exuno.yaml", &config);
     project
         .exuno()
         .arg("sync")
@@ -169,7 +169,7 @@ fn version_pin_the_scalar_shorthand_makes_local_mode_strict() {
     let project = Project::empty();
     init_local(&project);
     pin_version(&project, "0.1.0");
-    project.append(".ai/agent_sync.yaml", "version_pin: strict\n");
+    project.append(".ai/exuno.yaml", "version_pin: strict\n");
     project
         .exuno()
         .arg("sync")
@@ -183,7 +183,7 @@ fn version_pin_the_scalar_shorthand_makes_local_mode_strict() {
 fn version_pin_check_treats_gitignore_update_false_as_committed_like_sync() {
     let project = Project::empty();
     init_committed(&project);
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
         .filter(|line| !line.starts_with("outputs:"))
@@ -197,12 +197,8 @@ fn version_pin_check_treats_gitignore_update_false_as_committed_like_sync() {
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    project.write(".ai/agent_sync.yaml", &rewritten);
-    assert!(
-        project
-            .read(".ai/agent_sync.yaml")
-            .contains("  update: false\n")
-    );
+    project.write(".ai/exuno.yaml", &rewritten);
+    assert!(project.read(".ai/exuno.yaml").contains("  update: false\n"));
     project.exuno().arg("sync").assert().success();
     pin_version(&project, "0.1.0");
     set_version_pin_mode(&project, "strict");
@@ -259,7 +255,7 @@ fn version_pin_unknown_mode_fails_before_writing() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "[ERROR] Unknown version_pin.mode 'refuse' in .ai/agent_sync.yaml",
+            "[ERROR] Unknown version_pin.mode 'refuse' in .ai/exuno.yaml",
         ));
     assert!(!project.exists("CLAUDE.md"));
 }
@@ -275,7 +271,7 @@ fn version_pin_check_rejects_an_unknown_mode() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "Unknown version_pin.mode 'refuse' in .ai/agent_sync.yaml",
+            "Unknown version_pin.mode 'refuse' in .ai/exuno.yaml",
         ));
 }
 
@@ -295,14 +291,14 @@ fn version_pin_a_matching_pin_is_silent() {
 fn version_pin_no_pin_means_no_check() {
     let project = Project::empty();
     init_committed(&project);
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let rewritten: String = config
         .lines()
-        .filter(|line| !line.starts_with("agentsync_version:"))
+        .filter(|line| !line.starts_with("exuno_version:"))
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    project.write(".ai/agent_sync.yaml", &rewritten);
+    project.write(".ai/exuno.yaml", &rewritten);
     project
         .exuno()
         .arg("sync")
@@ -321,9 +317,29 @@ fn version_pin_upgrade_config_re_pins_to_the_running_engine_and_unblocks_sync() 
 }
 
 #[test]
+fn upgrade_config_names_the_legacy_key_it_re_pins() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/exuno.yaml",
+        "agentsync_version: \"0.1.0\"\ntools:\n  enabled: []\n",
+    );
+    project
+        .exuno()
+        .arg("upgrade-config")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("agentsync_version →"));
+    assert!(
+        project
+            .read(".ai/exuno.yaml")
+            .starts_with("agentsync_version: ")
+    );
+}
+
+#[test]
 fn upgrade_config_pins_the_config_agentsync_config_path_names() {
     let project = Project::seeded(&[]);
-    let before = project.read(".ai/agent_sync.yaml");
+    let before = project.read(".ai/exuno.yaml");
     project.write("selected.yaml", "tools:\n  enabled: []\n");
     project
         .exuno()
@@ -331,10 +347,6 @@ fn upgrade_config_pins_the_config_agentsync_config_path_names() {
         .arg("upgrade-config")
         .assert()
         .success();
-    assert!(
-        project
-            .read("selected.yaml")
-            .starts_with("agentsync_version: ")
-    );
-    assert_eq!(project.read(".ai/agent_sync.yaml"), before);
+    assert!(project.read("selected.yaml").starts_with("exuno_version: "));
+    assert_eq!(project.read(".ai/exuno.yaml"), before);
 }

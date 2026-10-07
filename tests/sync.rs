@@ -932,10 +932,10 @@ fn sync_refuses_two_skills_sharing_a_name_and_changes_nothing() {
 }
 
 #[test]
-fn sync_reads_the_tools_an_ai_exuno_yaml_enables() {
+fn sync_reads_the_tools_a_legacy_ai_agent_sync_yaml_enables() {
     let project = Project::seeded(&[]);
-    std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
-    project.write(".ai/exuno.yaml", "tools:\n  enabled: [zed]\n");
+    std::fs::remove_file(project.join(".ai/exuno.yaml")).unwrap();
+    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: [zed]\n");
     project.exuno().arg("sync").assert().success();
     assert!(project.exists(".rules"));
 }

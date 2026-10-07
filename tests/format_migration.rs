@@ -12,13 +12,13 @@ use predicates::prelude::*;
 /// format key in the config.
 fn seed_pre_format_project() -> Project {
     let project = Project::seeded(&["--tools", "claude", "--yes", "--no-sync"]);
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     let stripped: String = config
         .lines()
         .filter(|line| !line.starts_with("format:"))
         .map(|line| format!("{line}\n"))
         .collect();
-    project.write(".ai/agent_sync.yaml", &stripped);
+    project.write(".ai/exuno.yaml", &stripped);
 
     let skill = std::fs::read_to_string(
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -46,7 +46,7 @@ fn format_init_records_the_engines_revision_on_a_fresh_project() {
     let expected = format!("format: {format_rev}");
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|line| line == expected)
     );
@@ -97,7 +97,7 @@ fn format_migrate_previews_the_stale_skill_copy_without_touching_it() {
     assert!(project.exists(".ai/src/skills/agentsync/SKILL.md"));
     assert!(
         !project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|line| line.starts_with("format:"))
     );
@@ -120,7 +120,7 @@ fn format_migrate_apply_removes_the_unedited_copy_and_records_the_revision() {
     let expected = format!("format: {format_rev}");
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|line| line == expected)
     );
@@ -167,7 +167,7 @@ fn format_an_edited_copy_is_kept_as_a_deliberate_override() {
     let expected = format!("format: {format_rev}");
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|line| line == expected)
     );
@@ -212,7 +212,7 @@ fn format_upgrade_config_does_not_silence_a_pending_migration() {
     project.exuno().arg("upgrade-config").assert().success();
     assert!(
         !project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|line| line.starts_with("format:"))
     );

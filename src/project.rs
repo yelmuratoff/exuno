@@ -1,4 +1,4 @@
-//! The project being operated on: its root and `agent_sync.yaml`.
+//! The project being operated on: its root and `exuno.yaml`.
 
 use crate::paths::DiskText;
 use std::collections::BTreeSet;
@@ -31,7 +31,7 @@ impl Project {
         Self::select(root, explicit.as_deref())
     }
 
-    /// Config is `.ai/agent_sync.yaml`, falling back to a root-level `agent_sync.yaml`.
+    /// Config is the first of [`names::CONFIG_CANDIDATES`] present.
     pub fn at(root: impl Into<PathBuf>) -> Result<Self, Error> {
         Self::select(root, None)
     }

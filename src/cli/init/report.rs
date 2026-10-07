@@ -120,12 +120,12 @@ fn created_lines(style: &Style, scaffold: &Scaffold, payload_lines: &[String]) -
     if outputs == "committed" {
         text.push_str(&format!(
             "   Created {}     — project config (outputs: committed — teammates need only git pull)\n",
-            style.cyan(".ai/agent_sync.yaml")
+            style.cyan(".ai/exuno.yaml")
         ));
     } else {
         text.push_str(&format!(
             "   Created {}     — project config (outputs: local — every clone runs exuno sync)\n",
-            style.cyan(".ai/agent_sync.yaml")
+            style.cyan(".ai/exuno.yaml")
         ));
     }
     let agents = src.join("AGENTS.md");
@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(
             run.out,
             format!(
-                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules\n  Tools:    claude, cursor (flag)\n  settings: claude.json\n  hooks:    cursor.json\n\nInitializing Exuno in {root}\n\n\n   Created .ai/agent_sync.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/tools/claude/settings.json\n   Created .ai/src/tools/cursor/hooks.json\n\n   Enabled 2 tool(s): claude, cursor (from --tools)\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run exuno generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run exuno list        — browse all available tools\n  4. Run exuno enable <slug> — add more tools\n  5. Run exuno sync        — distribute to enabled tools\n\nCustomize:\n  • exuno add mcp <server>            — configure shared MCP servers\n  • exuno customize <tool> <resource> — override settings/hooks per tool\n\n{}",
+                "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules\n  Tools:    claude, cursor (flag)\n  settings: claude.json\n  hooks:    cursor.json\n\nInitializing Exuno in {root}\n\n\n   Created .ai/exuno.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/tools/claude/settings.json\n   Created .ai/src/tools/cursor/hooks.json\n\n   Enabled 2 tool(s): claude, cursor (from --tools)\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run exuno generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run exuno list        — browse all available tools\n  4. Run exuno enable <slug> — add more tools\n  5. Run exuno sync        — distribute to enabled tools\n\nCustomize:\n  • exuno add mcp <server>            — configure shared MCP servers\n  • exuno customize <tool> <resource> — override settings/hooks per tool\n\n{}",
                 backup_line(&root)
             )
         );
@@ -311,7 +311,7 @@ mod tests {
             tree(&root),
             [
                 ".ai/.template-manifest",
-                ".ai/agent_sync.yaml",
+                ".ai/exuno.yaml",
                 ".ai/src/AGENTS.md",
                 ".ai/src/rules/comments.md",
                 ".ai/src/rules/core.md",
@@ -320,11 +320,11 @@ mod tests {
                 ".ai/src/tools/cursor/hooks.json"
             ]
         );
-        let config = std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap();
+        let config = std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap();
         assert!(config.contains("\ntools:\n  enabled:\n    - claude\n    - cursor\n\n"));
         let snapshot = backups(&root).pop().unwrap();
         let targets = std::fs::read_to_string(snapshot.join("targets.tsv")).unwrap();
-        assert!(targets.starts_with("missing\t.ai/src\nmissing\t.ai/agent_sync.yaml\nmissing\t.ai/.template-manifest\nmissing\tCLAUDE.md\n"));
+        assert!(targets.starts_with("missing\t.ai/src\nmissing\t.ai/exuno.yaml\nmissing\t.ai/.template-manifest\nmissing\tCLAUDE.md\n"));
         assert!(targets.contains("missing\t.cursor/hooks.json\n"));
 
         let (_dir, root) = project(&[]);
@@ -340,7 +340,7 @@ mod tests {
             ],
             quiet(),
         );
-        assert!(empty.out.contains("\n   Created .ai/agent_sync.yaml     — project config (outputs: local — every clone runs exuno sync)\n   Created .ai/src/AGENTS.md      — (empty)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
+        assert!(empty.out.contains("\n   Created .ai/exuno.yaml     — project config (outputs: local — every clone runs exuno sync)\n   Created .ai/src/AGENTS.md      — (empty)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
         assert_eq!(
             std::fs::metadata(Path::new(&root).join(".ai/src/AGENTS.md"))
                 .unwrap()
@@ -371,7 +371,7 @@ mod tests {
                 .out
                 .contains("  Content:  rules (no starter templates)\n")
         );
-        assert!(rules_only.out.contains("\n   Created .ai/agent_sync.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
+        assert!(rules_only.out.contains("\n   Created .ai/exuno.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/rules/          — (empty)\n\n   No tools enabled."));
         assert!(
             rules_only
                 .out

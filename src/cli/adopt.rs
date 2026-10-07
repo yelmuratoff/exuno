@@ -349,7 +349,7 @@ impl<'a> Resolver<'a> {
         };
         if raw.is_empty() {
             return Err(format!(
-                "No agents source resolved for {} — set source.agents in agent_sync.yaml or place AGENTS.md in .ai/src/.",
+                "No agents source resolved for {} — set source.agents in exuno.yaml or place AGENTS.md in .ai/src/.",
                 found.tool
             ));
         }

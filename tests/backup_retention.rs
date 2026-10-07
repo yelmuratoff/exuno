@@ -26,7 +26,7 @@ fn init_project(project: &Project) {
 /// `set_retention`: appends `backup.retention: <value>` to the project config.
 fn set_retention(project: &Project, value: &str) {
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         &format!("\nbackup:\n  retention: {value}\n"),
     );
 }
@@ -253,9 +253,9 @@ fn retention_invalid_or_empty_values_reject_sync_before_any_project_mutation() {
     let project = Project::empty();
     init_project(&project);
     seed_recovery(&project);
-    let original_config = project.read(".ai/agent_sync.yaml");
+    let original_config = project.read(".ai/exuno.yaml");
     for value in ["typo", "false", "0", "null", "[]", "{}", "\"\"", ""] {
-        project.write(".ai/agent_sync.yaml", &original_config);
+        project.write(".ai/exuno.yaml", &original_config);
         set_retention(&project, value);
         let before = snapshot_tree(project.path());
         project
@@ -276,7 +276,7 @@ fn retention_invalid_or_empty_values_reject_sync_before_any_project_mutation() {
 fn retention_malformed_backup_section_rejects_sync_before_changes() {
     let project = Project::empty();
     init_project(&project);
-    project.append(".ai/agent_sync.yaml", "\nbackup: preserve\n");
+    project.append(".ai/exuno.yaml", "\nbackup: preserve\n");
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
@@ -291,7 +291,7 @@ fn retention_malformed_backup_section_rejects_sync_before_changes() {
 #[test]
 fn retention_invalid_init_config_fails_before_scaffolding_or_recovery_changes() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "backup:\n  retention: typo\n");
+    project.write(".ai/exuno.yaml", "backup:\n  retention: typo\n");
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project
@@ -306,7 +306,7 @@ fn retention_invalid_init_config_fails_before_scaffolding_or_recovery_changes() 
 #[test]
 fn retention_preserve_init_keeps_existing_snapshots_and_staging() {
     let project = Project::empty();
-    project.write(".ai/agent_sync.yaml", "backup:\n  retention: preserve\n");
+    project.write(".ai/exuno.yaml", "backup:\n  retention: preserve\n");
     seed_recovery(&project);
     let before = snapshot_tree(project.path());
     project

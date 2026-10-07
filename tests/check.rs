@@ -109,11 +109,11 @@ fn check_follows_relative_shared_sources_and_detects_parent_changes_without_writ
         "parent rule\n",
     );
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nshared:\n  path: \"shared parent\"\n  inherit: rules\n",
     );
     project.exuno().arg("sync").assert().success();
-    let config_before = project.sha256(".ai/agent_sync.yaml");
+    let config_before = project.sha256(".ai/exuno.yaml");
     let manifest_before = project.sha256(".ai/.sync-manifest");
     let manifest = project.read(".ai/.sync-manifest");
     let generated = manifest
@@ -125,7 +125,7 @@ fn check_follows_relative_shared_sources_and_detects_parent_changes_without_writ
     let generated_before = project.sha256(&generated);
 
     check(&project).success();
-    assert_eq!(project.sha256(".ai/agent_sync.yaml"), config_before);
+    assert_eq!(project.sha256(".ai/exuno.yaml"), config_before);
 
     project.write(
         "shared parent/.ai/src/rules/parent-only.md",
@@ -209,7 +209,7 @@ fn check_agrees_with_sync_when_shared_inherit_names_a_category_sync_skips() {
         "targets:\n  agents:\n    dest: \"OTHER.md\"\n",
     );
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nshared:\n  path: \"parent\"\n  inherit: rules, tools\n",
     );
     project.exuno().arg("sync").assert().success();

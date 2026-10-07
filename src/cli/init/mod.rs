@@ -677,7 +677,7 @@ mod tests {
     }
 
     const PLAN_NONE: &str = "Plan:\n  Target:   {root}/.ai/\n  Content:  agents, rules, skills, commands, subagents\n  Tools:    (none — opt in later via 'exuno enable')\n\n";
-    const SUMMARY_FULL: &str = "\n   Created .ai/agent_sync.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/skills/         — 7 skill(s)\n   Created .ai/src/commands/       — 2 command(s)\n   Created .ai/src/agents/         — 1 subagent(s)\n";
+    const SUMMARY_FULL: &str = "\n   Created .ai/exuno.yaml     — project config (outputs: committed — teammates need only git pull)\n   Created .ai/src/AGENTS.md      — agent identity\n   Created .ai/src/rules/          — 3 rule(s)\n   Created .ai/src/skills/         — 7 skill(s)\n   Created .ai/src/commands/       — 2 command(s)\n   Created .ai/src/agents/         — 1 subagent(s)\n";
     const NEXT_NO_TOOLS: &str = "\n   No tools enabled. Run 'exuno enable <slug>' to opt in.\n\nDone!\n\nNext steps:\n  1. Edit .ai/src/AGENTS.md — customize your agent's identity\n  2. Run exuno generate    — print an AI prompt to tailor .ai/src/ to your codebase\n  3. Run exuno list        — browse all available tools\n  4. Run exuno enable <slug> — opt in to tools you use\n  5. Run exuno sync        — distribute to enabled tools\n\nCustomize:\n  • exuno add mcp <server>            — configure shared MCP servers\n  • exuno customize <tool> <resource> — override settings/hooks per tool\n\n";
 
     pub(super) fn backup_line(root: &str) -> String {
@@ -708,8 +708,8 @@ mod tests {
         assert!(files.contains(&".ai/.template-manifest".to_string()));
         assert!(files.contains(&".ai/src/skills/humanizer/scripts/strip-ai-chars.sh".to_string()));
         assert!(!Path::new(&root).join(".ai/src/tools").exists());
-        let config = std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap();
-        assert!(config.starts_with("# Exuno — Project Configuration\n# All keys are optional — remove any that you leave at the default.\n\nagentsync_version: \"9.9.9\"\nformat: 2\n\n# Tools:"));
+        let config = std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap();
+        assert!(config.starts_with("# Exuno — Project Configuration\n# All keys are optional — remove any that you leave at the default.\n\nexuno_version: \"9.9.9\"\nformat: 2\n\n# Tools:"));
         assert!(config.contains("\ntools:\n  enabled: []\n\n# Source paths"));
         assert!(config.ends_with("outputs: committed\n\n# .gitignore management (false leaves the managed block untouched).\ngitignore:\n  update: true\n"));
         assert_eq!(
@@ -722,7 +722,7 @@ mod tests {
         let snapshot = backups(&root).pop().unwrap();
         assert_eq!(
             std::fs::read_to_string(snapshot.join("targets.tsv")).unwrap(),
-            "missing\t.ai/src\nmissing\t.ai/agent_sync.yaml\nmissing\t.ai/.template-manifest\n"
+            "missing\t.ai/src\nmissing\t.ai/exuno.yaml\nmissing\t.ai/.template-manifest\n"
         );
         assert!(snapshot.join("after.tsv").is_file());
         assert!(
@@ -791,7 +791,7 @@ mod tests {
 
     #[test]
     fn a_scaffold_failure_restores_the_snapshot_like_bash() {
-        let (_dir, root) = project(&[(".ai/agent_sync.yaml/sentinel", "keep\n")]);
+        let (_dir, root) = project(&[(".ai/exuno.yaml/sentinel", "keep\n")]);
         let run = call(&root, &["--no-detect"], quiet());
         assert_eq!(run.status, 1);
         assert_eq!(
@@ -805,38 +805,37 @@ mod tests {
         assert_eq!(
             run.err,
             format!(
-                "{root}/.ai/agent_sync.yaml: Is a directory (os error 21)\nWarning: Init failed; restoring pre-init state...\nRestored pre-init state from .ai/backups/{}\n",
+                "{root}/.ai/exuno.yaml: Is a directory (os error 21)\nWarning: Init failed; restoring pre-init state...\nRestored pre-init state from .ai/backups/{}\n",
                 snapshot.file_name().unwrap().disk_text()
             )
         );
-        assert_eq!(tree(&root), [".ai/agent_sync.yaml/sentinel"]);
+        assert_eq!(tree(&root), [".ai/exuno.yaml/sentinel"]);
         assert!(snapshot.join("after.tsv").is_file());
     }
 
     #[test]
     fn preexisting_configs_are_kept_and_validated_like_bash() {
-        let (_dir, root) =
-            project(&[(".ai/agent_sync.yaml", "tools:\n  enabled:\n    - claude\n")]);
+        let (_dir, root) = project(&[(".ai/exuno.yaml", "tools:\n  enabled:\n    - claude\n")]);
         let run = call(&root, &["--no-detect", "--no-sync"], quiet());
         assert_eq!(run.status, 0);
         assert_eq!(
-            std::fs::read_to_string(Path::new(&root).join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(Path::new(&root).join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled:\n    - claude\n"
         );
 
         let (_dir, root) = project(&[("agent_sync.yaml", "tools:\n  enabled: []\n")]);
         let root_config = call(&root, &["--no-detect", "--no-sync"], quiet());
         assert_eq!(root_config.status, 0);
-        assert!(!Path::new(&root).join(".ai/agent_sync.yaml").exists());
+        assert!(!Path::new(&root).join(".ai/exuno.yaml").exists());
 
-        let (_dir, root) = project(&[(".ai/agent_sync.yaml", "backup:\n  retention: typo\n")]);
+        let (_dir, root) = project(&[(".ai/exuno.yaml", "backup:\n  retention: typo\n")]);
         let typo = call(&root, &["--no-detect"], quiet());
         assert_eq!(
             (typo.status, typo.err),
             (
                 1,
                 format!(
-                    "Error: Invalid backup.retention 'typo' in {root}/.ai/agent_sync.yaml; expected bounded or preserve\n"
+                    "Error: Invalid backup.retention 'typo' in {root}/.ai/exuno.yaml; expected bounded or preserve\n"
                 )
             )
         );

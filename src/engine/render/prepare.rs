@@ -268,7 +268,7 @@ fn require_agents(s: &mut Session, agents: &str) -> Step {
     s.log
         .error(&format!("Source agents file not found: {agents_abs}"));
     s.log
-        .error("Run 'exuno init' or set source.agents in agent_sync.yaml");
+        .error("Run 'exuno init' or set source.agents in exuno.yaml");
     Err(Stop(1))
 }
 
@@ -285,7 +285,7 @@ pub fn refuse_configless_cleanup(s: &mut Session, run: &Run) -> Step {
         return Ok(());
     }
     s.log.error(
-        "No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/agent_sync.yaml, or set AGENTSYNC_CONFIG_PATH.",
+        "No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/exuno.yaml, or set AGENTSYNC_CONFIG_PATH.",
     );
     Err(Stop(1))
 }
@@ -404,7 +404,7 @@ mod tests {
             s.log.tail(2),
             [
                 "[ERROR] Source agents file not found: /proj/.ai/src/AGENTS.md",
-                "[ERROR] Run 'exuno init' or set source.agents in agent_sync.yaml"
+                "[ERROR] Run 'exuno init' or set source.agents in exuno.yaml"
             ]
         );
     }
@@ -412,12 +412,12 @@ mod tests {
     #[test]
     fn an_unknown_outputs_mode_stops_before_the_banner() {
         let mut s = project();
-        file(&mut s, "/proj/.ai/agent_sync.yaml", "outputs: shared\n");
+        file(&mut s, "/proj/.ai/exuno.yaml", "outputs: shared\n");
         assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
         assert_eq!(
             s.log.tail(1),
             [
-                "[ERROR] Unknown outputs mode 'shared' in .ai/agent_sync.yaml — expected 'committed' or 'local'"
+                "[ERROR] Unknown outputs mode 'shared' in .ai/exuno.yaml — expected 'committed' or 'local'"
             ]
         );
     }
@@ -427,7 +427,7 @@ mod tests {
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
+            "/proj/.ai/exuno.yaml",
             "backup:\n  retention: typo\nversion_pin:\n  mode: refuse\n",
         );
         let env = Env {
@@ -438,14 +438,14 @@ mod tests {
         assert_eq!(
             s.log.tail(5),
             [
-                "Error: Invalid backup.retention 'typo' in /proj/.ai/agent_sync.yaml; expected bounded or preserve"
+                "Error: Invalid backup.retention 'typo' in /proj/.ai/exuno.yaml; expected bounded or preserve"
             ]
         );
 
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
+            "/proj/.ai/exuno.yaml",
             "tools:\n  enabled: [claude]\nbackup:\n  retention: typo\n",
         );
         assert_eq!(render(&mut s, &Env::default()), Ok(()));
@@ -456,7 +456,7 @@ mod tests {
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
+            "/proj/.ai/exuno.yaml",
             "source:\n  tools: \"catalog\"\n",
         );
         file(&mut s, "/proj/catalog/claude.yaml", "enabled: true\n");
@@ -471,7 +471,7 @@ mod tests {
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
+            "/proj/.ai/exuno.yaml",
             "tools:\n  enabled: [claude]\nsource:\n  rules: \"/\"\n",
         );
         assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
@@ -495,7 +495,7 @@ mod tests {
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
+            "/proj/.ai/exuno.yaml",
             "tools:\n  enabled: [claude]\n",
         );
         assert_eq!(render(&mut s, &with_config("missing.yaml")), Err(Stop(1)));
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(
             s.log.tail(5),
             [
-                "[ERROR] No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/agent_sync.yaml, or set AGENTSYNC_CONFIG_PATH."
+                "[ERROR] No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/exuno.yaml, or set AGENTSYNC_CONFIG_PATH."
             ]
         );
     }
@@ -530,8 +530,8 @@ mod tests {
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
-            "outputs: local\nagentsync_version: \"0.0.1\"\nversion_pin:\n  mode: strict\n",
+            "/proj/.ai/exuno.yaml",
+            "outputs: local\nexuno_version: \"0.0.1\"\nversion_pin:\n  mode: strict\n",
         );
         assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
         let engine = engine_version();
@@ -547,14 +547,14 @@ mod tests {
         let mut s = project();
         file(
             &mut s,
-            "/proj/.ai/agent_sync.yaml",
+            "/proj/.ai/exuno.yaml",
             "version_pin:\n  mode: refuse\noutputs: shared\n",
         );
         assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
         assert_eq!(
             s.log.tail(5),
             [
-                "[ERROR] Unknown version_pin.mode 'refuse' in .ai/agent_sync.yaml — expected 'warn' or 'strict'"
+                "[ERROR] Unknown version_pin.mode 'refuse' in .ai/exuno.yaml — expected 'warn' or 'strict'"
             ]
         );
     }

@@ -110,7 +110,7 @@ impl Run<'_, '_> {
             text.push_str(&format!(
                 "  {}  {}\n",
                 style.yellow("Persistent"),
-                style.dim("(template_overrides.declined in agent_sync.yaml — never offered):")
+                style.dim("(template_overrides.declined in exuno.yaml — never offered):")
             ));
             for item in declined {
                 text.push_str(&format!("    {} {item}\n", style.dim("·")));

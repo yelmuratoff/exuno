@@ -20,11 +20,11 @@ fn seeded() -> Project {
 fn migrate_outputs_a_grounded_upgrade_prompt() {
     let project = seeded();
     let mut config: String = project
-        .read(".ai/agent_sync.yaml")
+        .read(".ai/exuno.yaml")
         .lines()
         .map(|line| {
-            if line.starts_with("agentsync_version:") {
-                "agentsync_version: \"0.7.0\"".to_string()
+            if line.starts_with("exuno_version:") {
+                "exuno_version: \"0.7.0\"".to_string()
             } else {
                 line.to_string()
             }
@@ -32,7 +32,7 @@ fn migrate_outputs_a_grounded_upgrade_prompt() {
         .collect::<Vec<_>>()
         .join("\n");
     config.push('\n');
-    project.write(".ai/agent_sync.yaml", &config);
+    project.write(".ai/exuno.yaml", &config);
 
     project
         .exuno()
@@ -93,7 +93,7 @@ fn migrate_copies_the_full_prompt_with_an_available_clipboard_tool() {
 #[test]
 fn migrate_uses_an_explicit_fallback_when_the_project_version_is_absent() {
     let project = seeded();
-    std::fs::remove_file(project.join(".ai/agent_sync.yaml")).unwrap();
+    std::fs::remove_file(project.join(".ai/exuno.yaml")).unwrap();
 
     project
         .exuno()
@@ -388,7 +388,7 @@ fn migrate_apply_moves_overrides_into_the_source_tools_directory() {
     // Overwrite wholesale, as the bats fixture does, so the sole `source:`
     // block is the one under test rather than the one `init` already wrote.
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "format: 2\ntools:\n  enabled: []\nsource:\n  tools: \"catalog\"\n",
     );
 

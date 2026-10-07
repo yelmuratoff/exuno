@@ -150,9 +150,9 @@ fn write_payloads(tools: &[String], src: &str) -> Result<Vec<String>, Error> {
     Ok(written)
 }
 
-/// `agent_sync.yaml`, unless the project already has one in `.ai/` or its root.
+/// `exuno.yaml`, unless the project already has one in `.ai/` or its root.
 fn write_project_config(s: &Scaffold, version: &str) -> Result<(), Error> {
-    let config_file = format!("{}/agent_sync.yaml", s.ai_dir);
+    let config_file = format!("{}/exuno.yaml", s.ai_dir);
     if names::CONFIG_CANDIDATES
         .iter()
         .any(|rel| Path::new(&format!("{}/{rel}", s.target)).is_file())
@@ -258,7 +258,7 @@ fn project_config_text(version: &str, tools: &[String], outputs: &str) -> String
         "# Exuno — Project Configuration
 # All keys are optional — remove any that you leave at the default.
 
-agentsync_version: \"{version}\"
+exuno_version: \"{version}\"
 format: {}
 
 # Tools: which ones to sync for this project.
@@ -315,7 +315,7 @@ mod tests {
         let run = call(&root, &["--tools", "claude", "--yes", "--no-sync"], quiet());
         assert_eq!(run.status, 0);
         assert!(run.out.contains(&format!(
-            "Initializing Exuno in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted .claude/settings.json → .ai/src/tools/claude/settings.json\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n\n   Created .ai/agent_sync.yaml"
+            "Initializing Exuno in {root}\n\n\n   Adopted .claude/rules/legacy.md → .ai/src/rules/legacy.md\n   Adopted .claude/settings.json → .ai/src/tools/claude/settings.json\n   Adopted CLAUDE.md → .ai/src/AGENTS.md\n\n\n   Created .ai/exuno.yaml"
         )));
         assert!(
             run.out
@@ -393,7 +393,7 @@ mod tests {
             &["--tools", "claude", "--yes", "--ci", "github", "--no-sync"],
             quiet(),
         );
-        assert!(run.out.contains(&format!("Initializing Exuno in {root}\n\n   Created .github/workflows/agentsync-check.yml — CI gate (exuno check)\n\n   Created .ai/agent_sync.yaml")));
+        assert!(run.out.contains(&format!("Initializing Exuno in {root}\n\n   Created .github/workflows/agentsync-check.yml — CI gate (exuno check)\n\n   Created .ai/exuno.yaml")));
         let workflow = Path::new(&root).join(".github/workflows/agentsync-check.yml");
         let text = std::fs::read_to_string(&workflow).unwrap();
         assert!(text.contains("AGENTSYNC_VERSION=9.9.9 bash"));

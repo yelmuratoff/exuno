@@ -116,7 +116,7 @@ pub(super) fn backup_targets(
 ) -> Result<Vec<String>, Error> {
     let mut targets = vec![
         format!("{target}/.ai/src"),
-        format!("{target}/.ai/agent_sync.yaml"),
+        format!("{target}/.ai/exuno.yaml"),
         format!("{target}/.ai/.template-manifest"),
     ];
     let paths = Paths::on_disk(target);

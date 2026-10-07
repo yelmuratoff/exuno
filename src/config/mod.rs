@@ -1,5 +1,5 @@
 //! What a project and the engine declare: the YAML subset and its edits,
-//! `agent_sync.yaml` and its profiles, the shipped catalog and the layered
+//! `exuno.yaml` and its profiles, the shipped catalog and the layered
 //! tool config, and the revisions and hashes that tell an update from drift.
 
 pub mod catalog;

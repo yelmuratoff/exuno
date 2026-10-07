@@ -6,7 +6,7 @@ use predicates::prelude::*;
 fn project() -> Project {
     let project = Project::empty();
     project.write(".ai/src/AGENTS.md", "# Agent\n");
-    project.write(".ai/agent_sync.yaml", "base_skills: false\n");
+    project.write(".ai/exuno.yaml", "base_skills: false\n");
     project
 }
 
@@ -44,7 +44,7 @@ fn list_neutralizes_invisible_formatting_in_skill_metadata() {
 #[test]
 fn list_reads_bundled_skill_and_folded_description() {
     let project = project();
-    project.write(".ai/agent_sync.yaml", "base_skills: true\n");
+    project.write(".ai/exuno.yaml", "base_skills: true\n");
     project.write(
         ".ai/src/skills/deploy/SKILL.md",
         "---\nname: deploy\ndescription: >-\n  Deploy the app\n  safely\n---\n",
@@ -93,7 +93,7 @@ fn check_reports_invalid_frontmatter_without_changing_sync() {
 fn list_uses_configured_source_path() {
     let project = project();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "base_skills: false\nsource:\n  skills: custom/skills\n",
     );
     project.write(
@@ -114,7 +114,7 @@ fn list_uses_configured_source_path() {
 fn list_includes_shared_skills_and_respects_child_precedence() {
     let project = project();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "base_skills: false\nshared:\n  path: parent\n  inherit: skills\n",
     );
     project.write(
@@ -146,7 +146,7 @@ fn list_includes_shared_skills_and_respects_child_precedence() {
 fn profile_list_uses_profile_overlay() {
     let project = project();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "base_skills: false\nprofiles:\n  work:\n    tools: [claude-work]\n",
     );
     project.write(
@@ -266,7 +266,7 @@ fn list_filters_names_without_affecting_check() {
 fn profile_reports_the_source_used_by_its_overlay() {
     let project = project();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "base_skills: false\nsource:\n  skills: custom/skills\nprofiles:\n  work:\n    tools: [claude-work]\n",
     );
     project.write(

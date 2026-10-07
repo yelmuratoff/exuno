@@ -15,10 +15,10 @@ use crate::{Error, config::catalog, config::edit_paths, config::payload, config:
 
 pub const ENABLE_HELP: Help = Help {
     command: "enable",
-    tagline: "add tools to tools.enabled in agent_sync.yaml",
+    tagline: "add tools to tools.enabled in exuno.yaml",
     synopsis: &["enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]"],
     description: &[
-        "Add one or more tools to the tools.enabled list in agent_sync.yaml.\nAfter enabling, run exuno sync to write that tool's outputs.",
+        "Add one or more tools to the tools.enabled list in exuno.yaml.\nAfter enabling, run exuno sync to write that tool's outputs.",
         "Run exuno list to see available tool slugs.",
     ],
     sections: &[Section {
@@ -45,10 +45,10 @@ pub const ENABLE_HELP: Help = Help {
 
 pub const DISABLE_HELP: Help = Help {
     command: "disable",
-    tagline: "remove tools from tools.enabled in agent_sync.yaml",
+    tagline: "remove tools from tools.enabled in exuno.yaml",
     synopsis: &["disable <slug> [<slug>...]"],
     description: &[
-        "Remove one or more tools from the tools.enabled list in agent_sync.yaml.\nA per-tool override with enabled: true is set to false as well. After\ndisabling, run exuno sync to clean up that tool's outputs.",
+        "Remove one or more tools from the tools.enabled list in exuno.yaml.\nA per-tool override with enabled: true is set to false as well. After\ndisabling, run exuno sync to clean up that tool's outputs.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -70,7 +70,7 @@ fn resolve_or_create_config(project: &Project) -> Result<PathBuf, Error> {
         return Ok(config.clone());
     }
     let ai = project.root.join(".ai");
-    let config = ai.join("agent_sync.yaml");
+    let config = ai.join("exuno.yaml");
     std::fs::create_dir_all(&ai).map_err(|e| Error::io(&ai, e))?;
     std::fs::write(
         &config,
@@ -352,7 +352,7 @@ mod tests {
         let root = std::fs::canonicalize(dir.path()).unwrap();
         std::fs::create_dir_all(root.join(".ai")).unwrap();
         std::fs::write(
-            root.join(".ai/agent_sync.yaml"),
+            root.join(".ai/exuno.yaml"),
             "tools:\n  enabled:\n    - cursor\n",
         )
         .unwrap();
@@ -395,7 +395,7 @@ mod tests {
             "\nEnabled 1 tool(s)\n    ● Claude Code (claude)\n\n1 tool(s) were already enabled\n\nUnknown tool(s):\n    nope\n\nRun exuno list to see available tool slugs.\n\n  Claude Code\n    Edit settings: .ai/src/tools/claude/settings.json\n    MCP:           exuno add mcp <server>  (shared — not yet configured)\n\nRun exuno sync to apply.\n\n"
         );
         assert_eq!(
-            std::fs::read_to_string(root.join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(root.join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled:\n    - cursor\n    - claude\n"
         );
         assert!(root.join(".ai/src/tools/claude/settings.json").is_file());
@@ -446,17 +446,17 @@ mod tests {
         assert_eq!((enable.status, enable.err.as_str()), (0, ""));
         assert_eq!(
             enable.out,
-            "\n  exuno enable — add tools to tools.enabled in agent_sync.yaml\n\n  USAGE\n    exuno enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n\n  DESCRIPTION\n    Add one or more tools to the tools.enabled list in agent_sync.yaml.\n    After enabling, run exuno sync to write that tool's outputs.\n\n    Run exuno list to see available tool slugs.\n\n  OPTIONS\n    --scaffold      Always scaffold payload files (settings/hooks/mcp)\n    --no-scaffold   Never scaffold; skip the payload prompt\n    -y, --yes       Accept any prompts (e.g. project-config creation)\n    -h, --help      Show this help\n\n  EXAMPLES\n    exuno enable claude\n    exuno enable claude cursor --no-scaffold\n    exuno enable codex --scaffold --yes\n\n"
+            "\n  exuno enable — add tools to tools.enabled in exuno.yaml\n\n  USAGE\n    exuno enable <slug> [<slug>...] [--no-scaffold|--scaffold] [--yes]\n\n  DESCRIPTION\n    Add one or more tools to the tools.enabled list in exuno.yaml.\n    After enabling, run exuno sync to write that tool's outputs.\n\n    Run exuno list to see available tool slugs.\n\n  OPTIONS\n    --scaffold      Always scaffold payload files (settings/hooks/mcp)\n    --no-scaffold   Never scaffold; skip the payload prompt\n    -y, --yes       Accept any prompts (e.g. project-config creation)\n    -h, --help      Show this help\n\n  EXAMPLES\n    exuno enable claude\n    exuno enable claude cursor --no-scaffold\n    exuno enable codex --scaffold --yes\n\n"
         );
 
         let disable = call(&root, "disable", &["cursor", "-h"]);
         assert_eq!((disable.status, disable.err.as_str()), (0, ""));
         assert_eq!(
             disable.out,
-            "\n  exuno disable — remove tools from tools.enabled in agent_sync.yaml\n\n  USAGE\n    exuno disable <slug> [<slug>...]\n\n  DESCRIPTION\n    Remove one or more tools from the tools.enabled list in agent_sync.yaml.\n    A per-tool override with enabled: true is set to false as well. After\n    disabling, run exuno sync to clean up that tool's outputs.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno disable cursor\n    exuno disable claude cursor\n\n"
+            "\n  exuno disable — remove tools from tools.enabled in exuno.yaml\n\n  USAGE\n    exuno disable <slug> [<slug>...]\n\n  DESCRIPTION\n    Remove one or more tools from the tools.enabled list in exuno.yaml.\n    A per-tool override with enabled: true is set to false as well. After\n    disabling, run exuno sync to clean up that tool's outputs.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno disable cursor\n    exuno disable claude cursor\n\n"
         );
         assert_eq!(
-            std::fs::read_to_string(root.join(".ai/agent_sync.yaml")).unwrap(),
+            std::fs::read_to_string(root.join(".ai/exuno.yaml")).unwrap(),
             "tools:\n  enabled:\n    - cursor\n"
         );
     }

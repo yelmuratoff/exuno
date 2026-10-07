@@ -1,4 +1,4 @@
-//! `lib/helpers/project_config.sh`: which `agent_sync.yaml` a project uses.
+//! `lib/helpers/project_config.sh`: which project config a project uses.
 
 use crate::config::{names, yaml_subset};
 
@@ -7,7 +7,7 @@ use crate::config::{names, yaml_subset};
 pub enum Selection {
     /// The config file to read.
     Found(String),
-    /// No explicit path, and neither `.ai/agent_sync.yaml` nor `agent_sync.yaml`.
+    /// No explicit path, and none of [`names::CONFIG_CANDIDATES`].
     None,
     /// `AGENTSYNC_CONFIG_PATH` names this path, which is not a regular file.
     Missing(String),
@@ -15,7 +15,7 @@ pub enum Selection {
 
 /// `project_config_path_r`: an explicit path, relative to `root` unless
 /// absolute, is authoritative and never falls back; otherwise
-/// `.ai/agent_sync.yaml`, then `agent_sync.yaml`. `is_file` answers `[[ -f ]]`.
+/// the first of [`names::CONFIG_CANDIDATES`]. `is_file` answers `[[ -f ]]`.
 pub fn select(root: &str, explicit: Option<&str>, is_file: &dyn Fn(&str) -> bool) -> Selection {
     if let Some(raw) = explicit.filter(|raw| !raw.is_empty()) {
         let path = if crate::paths::is_absolute(raw) {

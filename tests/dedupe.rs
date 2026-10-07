@@ -189,7 +189,7 @@ fn dedupe_yes_adds_template_derived_dupe_to_declined() {
     dedupe_in(&child_dir, &["--yes"]).success();
 
     assert!(!child_dir.join(".ai/src/rules/comments.md").exists());
-    let config = std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap();
+    let config = std::fs::read_to_string(child_dir.join(".ai/exuno.yaml")).unwrap();
     assert!(config.contains("  declined:"));
     assert!(config.contains("rules/comments.md"));
 }
@@ -211,7 +211,7 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
         child_dir.join(".ai/src/rules/comments.md"),
     )
     .unwrap();
-    let before = std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap();
+    let before = std::fs::read_to_string(child_dir.join(".ai/exuno.yaml")).unwrap();
     std::fs::write(child_dir.join("selected.yaml"), "tools:\n  enabled: []\n").unwrap();
 
     let mut command = assert_cmd::Command::new(env!("CARGO_BIN_EXE_exuno"));
@@ -226,7 +226,7 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
     let selected = std::fs::read_to_string(child_dir.join("selected.yaml")).unwrap();
     assert!(selected.contains("rules/comments.md"));
     assert_eq!(
-        std::fs::read_to_string(child_dir.join(".ai/agent_sync.yaml")).unwrap(),
+        std::fs::read_to_string(child_dir.join(".ai/exuno.yaml")).unwrap(),
         before
     );
 
@@ -251,7 +251,7 @@ fn dedupe_yes_does_not_add_non_template_duplicate_to_declined() {
     dedupe_in(&child, &["--yes"]).success();
 
     // rules/shared.md is NOT a shipped template — must not be added to declined.
-    let config = std::fs::read_to_string(child.join(".ai/agent_sync.yaml")).unwrap();
+    let config = std::fs::read_to_string(child.join(".ai/exuno.yaml")).unwrap();
     assert!(!config.contains("rules/shared.md"));
 }
 
@@ -341,7 +341,7 @@ fn dedupe_honors_shared_path_across_git_boundary() {
     use std::io::Write;
     let mut config = std::fs::OpenOptions::new()
         .append(true)
-        .open(inner.join(".ai/agent_sync.yaml"))
+        .open(inner.join(".ai/exuno.yaml"))
         .unwrap();
     write!(config, "\nshared:\n  path: \"../\"\n  inherit: rules\n").unwrap();
     drop(config);
@@ -374,7 +374,7 @@ fn dedupe_workspace_honors_per_project_shared_path_across_git_boundaries() {
     .unwrap();
     let mut config = std::fs::OpenOptions::new()
         .append(true)
-        .open(samerepo.join(".ai/agent_sync.yaml"))
+        .open(samerepo.join(".ai/exuno.yaml"))
         .unwrap();
     write!(config, "\nshared:\n  path: \"../\"\n  inherit: rules\n").unwrap();
     drop(config);
@@ -390,7 +390,7 @@ fn dedupe_workspace_honors_per_project_shared_path_across_git_boundaries() {
     .unwrap();
     let mut config = std::fs::OpenOptions::new()
         .append(true)
-        .open(ownrepo.join(".ai/agent_sync.yaml"))
+        .open(ownrepo.join(".ai/exuno.yaml"))
         .unwrap();
     write!(config, "\nshared:\n  path: \"../\"\n  inherit: rules\n").unwrap();
     drop(config);

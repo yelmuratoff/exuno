@@ -560,7 +560,7 @@ fn adopt_writes_an_edited_rule_into_the_source_rules_directory_sync_reads() {
     let project = Project::seeded(&[]);
     project.write("docs/rules/team.md", "# Team\n");
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "tools:\n  enabled:\n    - claude\nsource:\n  rules: \"docs/rules\"\n",
     );
     project.exuno().arg("sync").assert().success();

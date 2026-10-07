@@ -231,7 +231,7 @@ impl Customize<'_> {
                 "#\n# Only fields you write here are \"owned\" by you.\n# Everything else inherits from the base template and receives updates.\n#\n# See base fields:          exuno show {slug} --base\n# See effective config:     exuno show {slug}\n# See your vs base diff:    exuno diff {slug}\n"
             ));
         } else {
-            stub.push_str("#\n# This is a custom tool — no base template exists.\n# Define the full config here, then add to tools.enabled in agent_sync.yaml.\n");
+            stub.push_str("#\n# This is a custom tool — no base template exists.\n# Define the full config here, then add to tools.enabled in exuno.yaml.\n");
         }
         stub.push('\n');
         std::fs::write(&user_file, stub).map_err(|e| Error::io(&user_file, e))?;

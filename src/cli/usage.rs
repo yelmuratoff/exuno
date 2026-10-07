@@ -66,10 +66,7 @@ const COMMANDS: [(&str, &str); 31] = [
         "update",
         "Update Exuno to the latest version, or pin one: update <version>",
     ),
-    (
-        "upgrade-config",
-        "Re-pin agentsync_version in agent_sync.yaml",
-    ),
+    ("upgrade-config", "Re-pin exuno_version in exuno.yaml"),
     ("release", "Bump version, tag, and push (maintainer)"),
     ("version", "Print version"),
     ("help", "Show this message"),
@@ -191,7 +188,7 @@ mod tests {
             engine_version()
         )));
         assert!(text.contains(
-            "\n    upgrade-config Re-pin agentsync_version in agent_sync.yaml\n    release        Bump version, tag, and push (maintainer)\n    version        Print version\n    help           Show this message\n\n  SYNC OPTIONS\n    --only <tools>"
+            "\n    upgrade-config Re-pin exuno_version in exuno.yaml\n    release        Bump version, tag, and push (maintainer)\n    version        Print version\n    help           Show this message\n\n  SYNC OPTIONS\n    --only <tools>"
         ));
         assert!(text.contains("\n    eval \"$(exuno shell-init zsh)\"   # add to ~/.zshrc\n"));
         assert!(text.ends_with(

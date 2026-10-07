@@ -302,7 +302,7 @@ fn the_latest_binary_release_is_downloaded_verified_and_linked() {
 }
 
 #[test]
-fn agentsync_version_pins_a_binary_release() {
+fn exuno_version_pins_a_binary_release() {
     let fx = Fixture::new();
     fx.publish(FIXTURE_NEW);
     let output = fx.run_install(Some(FIXTURE_NEW));
@@ -337,7 +337,7 @@ fn without_a_pin_an_unreachable_github_fails_clearly() {
 }
 
 #[test]
-fn agentsync_version_pins_a_tag_without_a_binary_from_source() {
+fn exuno_version_pins_a_tag_without_a_binary_from_source() {
     let fx = Fixture::new();
     let output = fx.run_install(Some(FIXTURE_NEW));
     assert!(output.status.success(), "{}", stderr(&output));
@@ -352,7 +352,7 @@ fn agentsync_version_pins_a_tag_without_a_binary_from_source() {
 }
 
 #[test]
-fn an_unknown_agentsync_version_fails_clearly() {
+fn an_unknown_exuno_version_fails_clearly() {
     let fx = Fixture::new();
     let output = fx.run_install(Some(FIXTURE_ABSENT));
     assert!(!output.status.success());

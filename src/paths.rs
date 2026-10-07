@@ -252,7 +252,7 @@ pub fn find_parent_ai_src(start: &str) -> Option<String> {
 }
 
 /// `find_workspace_ai_dirs`: every `.ai` directory below `root` holding `src/`
-/// or `agent_sync.yaml`, deepest first and then in byte order. `.git` and
+/// or a project config, deepest first and then in byte order. `.git` and
 /// `node_modules` are not entered, nor is a `.ai` once found, nor a symlink.
 pub fn find_workspace_ai_dirs(root: &str) -> Vec<String> {
     fn walk(dir: &str, found: &mut Vec<String>) {

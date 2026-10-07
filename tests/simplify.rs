@@ -321,7 +321,7 @@ fn simplify_dry_run_on_payloads_reports_byte_identical_files() {
 fn simplify_reads_payload_overrides_from_the_configured_tools_directory() {
     let project = Project::seeded(&[]);
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "tools:\n  enabled: [cursor]\nsource:\n  tools: custom/tools\n",
     );
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

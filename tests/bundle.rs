@@ -139,7 +139,7 @@ fn export_writes_the_bundle_and_lists_its_contents() {
     assert!(archive.is_file());
     let listing = tar_list(&archive);
     assert!(listing.lines().any(|l| l == ".ai/src/AGENTS.md"));
-    assert!(listing.lines().any(|l| l == ".ai/agent_sync.yaml"));
+    assert!(listing.lines().any(|l| l == ".ai/exuno.yaml"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn import_copies_a_bundle_into_a_fresh_project() {
         .success()
         .stdout(predicate::str::contains("Imported!"));
     assert!(project.join("fresh/.ai/src/AGENTS.md").is_file());
-    assert!(project.join("fresh/.ai/agent_sync.yaml").is_file());
+    assert!(project.join("fresh/.ai/exuno.yaml").is_file());
     assert_eq!(
         project.read(".ai/src/rules/core.md"),
         project.read("fresh/.ai/src/rules/core.md")
@@ -271,24 +271,24 @@ fn import_only_that_matches_nothing_reports_an_up_to_date_project() {
 fn import_only_previews_a_config_only_change() {
     let project = Project::seeded(&[]);
     project.write("other/.ai/src/skills/new/SKILL.md", "# New skill\n");
-    project.write("other/.ai/agent_sync.yaml", "outputs: committed\n");
+    project.write("other/.ai/exuno.yaml", "outputs: committed\n");
     project
         .exuno()
         .args(["import", "other", "--only", "rules", "--dry-run"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("~ agent_sync.yaml (update)"))
+        .stdout(predicate::str::contains("~ exuno.yaml (update)"))
         .stdout(predicate::str::contains(
             "Summary: 0 new, 1 updated, 0 unchanged",
         ));
 }
 
 #[test]
-fn export_carries_an_ai_exuno_yaml() {
+fn export_carries_a_legacy_ai_agent_sync_yaml() {
     let project = Project::seeded(&[]);
     std::fs::rename(
-        project.join(".ai/agent_sync.yaml"),
         project.join(".ai/exuno.yaml"),
+        project.join(".ai/agent_sync.yaml"),
     )
     .unwrap();
     project
@@ -296,17 +296,17 @@ fn export_carries_an_ai_exuno_yaml() {
         .arg("export")
         .assert()
         .success()
-        .stdout(predicate::str::contains("exuno.yaml"));
+        .stdout(predicate::str::contains("agent_sync.yaml"));
     let listing = tar_list(&project.join("agentsync-bundle.tar.gz"));
-    assert!(listing.lines().any(|l| l == ".ai/exuno.yaml"));
+    assert!(listing.lines().any(|l| l == ".ai/agent_sync.yaml"));
 }
 
 #[test]
-fn import_reads_an_exuno_yaml_into_the_existing_exuno_yaml() {
+fn import_writes_into_a_legacy_agent_sync_yaml_the_project_already_has() {
     let project = Project::seeded(&[]);
     std::fs::rename(
-        project.join(".ai/agent_sync.yaml"),
         project.join(".ai/exuno.yaml"),
+        project.join(".ai/agent_sync.yaml"),
     )
     .unwrap();
     project.write("other/.ai/src/rules/core.md", "# Replaced core\n");
@@ -316,8 +316,8 @@ fn import_reads_an_exuno_yaml_into_the_existing_exuno_yaml() {
         .args(["import", "other", "--force"])
         .assert()
         .success();
-    assert_eq!(project.read(".ai/exuno.yaml"), "outputs: committed\n");
-    assert!(!project.exists(".ai/agent_sync.yaml"));
+    assert_eq!(project.read(".ai/agent_sync.yaml"), "outputs: committed\n");
+    assert!(!project.exists(".ai/exuno.yaml"));
 }
 
 #[test]

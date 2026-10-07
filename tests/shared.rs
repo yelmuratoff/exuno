@@ -28,13 +28,13 @@ fn append(path: &Path, content: &str) {
 
 fn add_shared_block(child: &Path, path: &str, inherit: &str) {
     append(
-        &child.join(".ai/agent_sync.yaml"),
+        &child.join(".ai/exuno.yaml"),
         &format!("\nshared:\n  path: \"{path}\"\n  inherit: {inherit}\n"),
     );
 }
 
 fn inherit_skills_too(child: &Path) {
-    let config = child.join(".ai/agent_sync.yaml");
+    let config = child.join(".ai/exuno.yaml");
     let text = std::fs::read_to_string(&config).unwrap();
     std::fs::write(
         &config,
@@ -117,7 +117,7 @@ fn make_sparse_pair(project: &Project) -> (PathBuf, PathBuf) {
         "child-rule\n",
     );
     write(&child_dir.join(".ai/AGENTS.md"), "# Child\n");
-    let config_path = child_dir.join(".ai/agent_sync.yaml");
+    let config_path = child_dir.join(".ai/exuno.yaml");
     let config = std::fs::read_to_string(&config_path).unwrap();
     let config = config.replace("agents: \".ai/src/AGENTS.md\"", "agents: \".ai/AGENTS.md\"");
     std::fs::write(&config_path, config).unwrap();
@@ -266,7 +266,7 @@ fn missing_parent_path_warns_and_skips_overlay() {
     let project = Project::seeded(&["--no-detect", "--yes"]);
     project.enable_tools(&["claude"]);
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nshared:\n  path: \"../does-not-exist\"\n  inherit: rules\n",
     );
 

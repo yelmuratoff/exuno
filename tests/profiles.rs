@@ -62,7 +62,7 @@ fn sync_refuses_a_hand_written_minimax_profile() {
     let project = seeded();
     project.write(".ai/src/tools/minimax-hub.yaml", "base: minimax\n");
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nprofiles:\n  hub:\n    overlay: \".ai/profiles/hub\"\n    active: true\n    tools: [minimax-hub]\n",
     );
     project
@@ -99,7 +99,7 @@ fn profile_add_nested_base_dest_keeps_internal_structure_not_basename() {
 fn profile_add_registers_a_profiles_block_in_agent_sync_yaml() {
     let project = seeded();
     add_hub(&project);
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.contains("\nprofiles:"));
     assert!(config.contains("claude-hub"));
 }
@@ -120,7 +120,7 @@ fn profile_add_second_profile_inserts_under_the_existing_profiles_block() {
         .success()
         .stdout(predicate::str::contains("hub"))
         .stdout(predicate::str::contains("klara"));
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert_eq!(config.matches("\nprofiles:").count(), 1);
 }
 
@@ -349,7 +349,7 @@ fn sync_profile_and_shared_overlays_compose() {
     project.write("parent/.ai/src/rules/parent-only.md", "from-parent\n");
 
     project.append(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "\nshared:\n  path: \"./parent\"\n  inherit: rules\n",
     );
     add_hub(&project);
@@ -394,7 +394,7 @@ fn profile_remove_deletes_config_home_output_variant_file_and_config_entry() {
     assert!(!project.join(".claude-hub").is_dir());
     assert!(!project.exists(".ai/src/tools/claude-hub.yaml"));
     // Last profile gone — the empty profiles: header is cleaned up too.
-    assert!(!project.read(".ai/agent_sync.yaml").contains("\nprofiles:"));
+    assert!(!project.read(".ai/exuno.yaml").contains("\nprofiles:"));
 }
 
 #[test]

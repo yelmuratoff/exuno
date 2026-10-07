@@ -25,7 +25,7 @@ fn project() -> Project {
         .assert()
         .success();
     project.write(
-        ".ai/agent_sync.yaml",
+        ".ai/exuno.yaml",
         "outputs: local\nbase_skills: false\ndefaults:\n  cleanup: false\ntools:\n  enabled: [claude, codex]\nbackup:\n  retention: preserve\n",
     );
     for tool in ["claude", "codex"] {

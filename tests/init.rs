@@ -148,7 +148,7 @@ fn init_no_detect_ignores_existing_tool_markers() {
         .assert()
         .success();
 
-    assert!(project.read(".ai/agent_sync.yaml").contains("enabled: []"));
+    assert!(project.read(".ai/exuno.yaml").contains("enabled: []"));
     assert!(!project.exists(".ai/src/settings"));
 }
 
@@ -162,7 +162,7 @@ fn init_tools_union_with_auto_detect() {
         .assert()
         .success();
 
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.lines().any(|l| l == "    - claude"));
     assert!(config.lines().any(|l| l == "    - cursor"));
 }
@@ -190,8 +190,8 @@ fn init_creates_agent_sync_yaml_with_tools_enabled_list() {
     let project = Project::empty();
     project.exuno().arg("init").assert().success();
 
-    assert!(project.exists(".ai/agent_sync.yaml"));
-    let config = project.read(".ai/agent_sync.yaml");
+    assert!(project.exists(".ai/exuno.yaml"));
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.lines().any(|l| l == "tools:"));
     assert!(config.contains("enabled:"));
 }
@@ -232,12 +232,15 @@ fn init_skips_if_ai_src_already_exists() {
 }
 
 #[test]
-fn init_keeps_an_existing_exuno_yaml_and_writes_no_legacy_config() {
+fn init_keeps_a_legacy_agent_sync_yaml_and_writes_no_exuno_yaml() {
     let project = Project::empty();
-    project.write(".ai/exuno.yaml", "tools:\n  enabled: []\n");
+    project.write(".ai/agent_sync.yaml", "tools:\n  enabled: []\n");
     project.exuno().arg("init").assert().success();
-    assert_eq!(project.read(".ai/exuno.yaml"), "tools:\n  enabled: []\n");
-    assert!(!project.exists(".ai/agent_sync.yaml"));
+    assert_eq!(
+        project.read(".ai/agent_sync.yaml"),
+        "tools:\n  enabled: []\n"
+    );
+    assert!(!project.exists(".ai/exuno.yaml"));
 }
 
 #[test]
@@ -356,7 +359,7 @@ fn init_agents_md_is_valid_markdown() {
 fn init_with_empty_project_enables_no_tools_by_default() {
     let project = Project::empty();
     project.exuno().arg("init").assert().success();
-    assert!(project.read(".ai/agent_sync.yaml").contains("enabled: []"));
+    assert!(project.read(".ai/exuno.yaml").contains("enabled: []"));
 }
 
 #[test]
@@ -366,7 +369,7 @@ fn init_auto_detects_existing_tool_markers() {
     std::fs::create_dir_all(project.join(".cursor")).unwrap();
     project.exuno().arg("init").assert().success();
 
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.lines().any(|l| l == "    - claude"));
     assert!(config.lines().any(|l| l == "    - cursor"));
 }
@@ -379,7 +382,7 @@ fn init_writes_only_the_defaults_sync_reads() {
         .args(["init", "--no-detect", "--no-sync"])
         .assert()
         .success();
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(
         config.contains("\ndefaults:\n  cleanup: true\n"),
         "{config}"
@@ -394,7 +397,7 @@ fn init_detects_cline_from_a_single_file_clinerules_and_keeps_it() {
 
     assert!(
         project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|l| l == "    - cline")
     );
@@ -438,8 +441,8 @@ fn init_backs_up_existing_destinations_for_enabled_tools() {
 #[test]
 fn init_restores_pre_init_state_after_a_partial_scaffold_failure() {
     let project = Project::empty();
-    std::fs::create_dir_all(project.join(".ai/agent_sync.yaml")).unwrap();
-    project.write(".ai/agent_sync.yaml/sentinel", "keep\n");
+    std::fs::create_dir_all(project.join(".ai/exuno.yaml")).unwrap();
+    project.write(".ai/exuno.yaml/sentinel", "keep\n");
 
     project
         .exuno()
@@ -449,7 +452,7 @@ fn init_restores_pre_init_state_after_a_partial_scaffold_failure() {
         .stderr(predicate::str::contains("Restored pre-init state"));
 
     assert!(!project.exists(".ai/src"));
-    assert!(project.exists(".ai/agent_sync.yaml/sentinel"));
+    assert!(project.exists(".ai/exuno.yaml/sentinel"));
     assert!(!project.exists(".ai/.template-manifest"));
 }
 
@@ -481,7 +484,7 @@ fn init_auto_detects_kimi_code_and_opencode_markers() {
     std::fs::create_dir_all(project.join(".opencode")).unwrap();
     project.exuno().arg("init").assert().success();
 
-    let config = project.read(".ai/agent_sync.yaml");
+    let config = project.read(".ai/exuno.yaml");
     assert!(config.lines().any(|l| l == "    - kimi"));
     assert!(config.lines().any(|l| l == "    - opencode"));
 }
@@ -494,7 +497,7 @@ fn init_does_not_treat_generic_agents_md_as_a_codex_marker() {
 
     assert!(
         !project
-            .read(".ai/agent_sync.yaml")
+            .read(".ai/exuno.yaml")
             .lines()
             .any(|l| l == "    - codex")
     );
@@ -516,7 +519,7 @@ fn init_dry_run_shows_plan_without_writing() {
         .stdout(predicate::str::contains("cursor"));
 
     assert!(!project.exists(".ai"));
-    assert!(!project.exists(".ai/agent_sync.yaml"));
+    assert!(!project.exists(".ai/exuno.yaml"));
 }
 
 #[test]
@@ -540,7 +543,7 @@ fn init_yes_in_non_tty_behaves_like_defaults() {
         .args(["init", "--yes", "--no-detect"])
         .assert()
         .success();
-    assert!(project.exists(".ai/agent_sync.yaml"));
+    assert!(project.exists(".ai/exuno.yaml"));
     assert!(project.exists(".ai/src/AGENTS.md"));
 }
 
@@ -549,7 +552,7 @@ fn init_non_tty_without_flags_runs_silently_with_defaults() {
     // No flags, no TTY → fall through to defaults; must NOT hang on prompts.
     let project = Project::empty();
     project.exuno().arg("init").assert().success();
-    assert!(project.exists(".ai/agent_sync.yaml"));
+    assert!(project.exists(".ai/exuno.yaml"));
 }
 
 #[test]

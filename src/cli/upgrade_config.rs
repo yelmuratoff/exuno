@@ -1,5 +1,5 @@
 //! `exuno upgrade-config`: `cmd_upgrade_config` of `lib/helpers/init.sh`,
-//! which pins `agentsync_version` to the running engine.
+//! which pins `exuno_version` to the running engine.
 
 use crate::paths::DiskText;
 use crate::project::Project;
@@ -10,14 +10,14 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::{Error, config::names, engine::staging};
 
-const KEY: &str = "agentsync_version";
+const KEY: &str = "exuno_version";
 
 pub const HELP: Help = Help {
     command: "upgrade-config",
-    tagline: "re-pin agentsync_version to the running engine",
+    tagline: "re-pin exuno_version to the running engine",
     synopsis: &["upgrade-config"],
     description: &[
-        "Re-pins agentsync_version in agent_sync.yaml to the running engine, after\nan exuno update. Re-sync and commit the outputs afterwards.",
+        "Re-pins exuno_version in exuno.yaml to the running engine, after\nan exuno update. Re-sync and commit the outputs afterwards.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -26,13 +26,20 @@ pub const HELP: Help = Help {
     examples: &["upgrade-config"],
 };
 
+fn pins(key: &str, line: &str) -> bool {
+    line.starts_with(&format!("{key}:"))
+}
+
+/// The version key a config already pins with, new spelling first.
+fn present_key(text: &str) -> Option<&'static str> {
+    names::VERSION_KEYS
+        .into_iter()
+        .find(|key| text.split('\n').any(|line| pins(key, line)))
+}
+
 /// The `awk` insertion or the `sed` rewrite, as `cmd_upgrade_config` picks it.
 pub fn upgrade_text(text: &str, version: &str) -> (String, bool) {
-    let pins = |key: &str, line: &str| line.starts_with(&format!("{key}:"));
-    let present = names::VERSION_KEYS
-        .into_iter()
-        .find(|key| text.split('\n').any(|line| pins(key, line)));
-    if let Some(key) = present {
+    if let Some(key) = present_key(text) {
         let pin = format!("{key}: \"{version}\"");
         let rewritten: Vec<String> = text
             .split('\n')
@@ -101,7 +108,7 @@ pub fn run(
         put(
             err,
             format!(
-                "{}: No agent_sync.yaml found in {}\nRun {} first.\n",
+                "{}: No exuno.yaml found in {}\nRun {} first.\n",
                 style.red("Error"),
                 project.root.disk_text(),
                 style.cyan("exuno init")
@@ -111,19 +118,15 @@ pub fn run(
         return Ok(1);
     };
     let bytes = std::fs::read(&config).map_err(|e| Error::io(&config, e))?;
-    let (text, added) = upgrade_text(&String::from_utf8_lossy(&bytes), version);
+    let before = String::from_utf8_lossy(&bytes);
+    let key = present_key(&before).unwrap_or(KEY);
+    let (text, added) = upgrade_text(&before, version);
     staging::write_beside(&config, text.as_bytes())?;
     let shown = style.dim(&config.disk_text());
     let line = if added {
-        format!(
-            "{}: agentsync_version: {version} → {shown}\n",
-            style.green("Added")
-        )
+        format!("{}: {key}: {version} → {shown}\n", style.green("Added"))
     } else {
-        format!(
-            "{}: agentsync_version → {version} {shown}\n",
-            style.green("Updated")
-        )
+        format!("{}: {key} → {version} {shown}\n", style.green("Updated"))
     };
     put(out, line.as_bytes())?;
     Ok(0)
@@ -137,14 +140,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config = dir.path().join(".ai").join("agent_sync.yaml");
         std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        std::fs::write(&config, "agentsync_version: \"0.1.0\"\n").unwrap();
+        std::fs::write(&config, "exuno_version: \"0.1.0\"\n").unwrap();
         let style = Style::plain();
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let discover = || Project::at(dir.path());
         let args = ["--help".to_string()];
         let status = run(&args, &discover, "9.9.9", &style, &mut out, &mut err).unwrap();
         assert_eq!(status, 0);
-        let help = "\n  exuno upgrade-config — re-pin agentsync_version to the running engine\n\n  USAGE\n    exuno upgrade-config\n\n  DESCRIPTION\n    Re-pins agentsync_version in agent_sync.yaml to the running engine, after\n    an exuno update. Re-sync and commit the outputs afterwards.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno upgrade-config\n\n";
+        let help = "\n  exuno upgrade-config — re-pin exuno_version to the running engine\n\n  USAGE\n    exuno upgrade-config\n\n  DESCRIPTION\n    Re-pins exuno_version in exuno.yaml to the running engine, after\n    an exuno update. Re-sync and commit the outputs afterwards.\n\n  OPTIONS\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno upgrade-config\n\n";
         assert_eq!(String::from_utf8(out).unwrap(), help);
         let args = ["--bogus".to_string()];
         let status = run(&args, &discover, "9.9.9", &style, &mut Vec::new(), &mut err).unwrap();
@@ -155,15 +158,19 @@ mod tests {
         );
         assert_eq!(
             std::fs::read_to_string(&config).unwrap(),
-            "agentsync_version: \"0.1.0\"\n"
+            "exuno_version: \"0.1.0\"\n"
         );
     }
 
     #[test]
-    fn an_exuno_pin_is_rewritten_in_place_and_the_legacy_key_left_alone() {
+    fn an_existing_pin_is_rewritten_under_its_own_key() {
         assert_eq!(
             upgrade_text("exuno_version: \"0.1\"\n", "9.9.9"),
             ("exuno_version: \"9.9.9\"\n".to_string(), false)
+        );
+        assert_eq!(
+            upgrade_text("agentsync_version: \"0.1\"\n", "9.9.9"),
+            ("agentsync_version: \"9.9.9\"\n".to_string(), false)
         );
         assert_eq!(
             upgrade_text(
@@ -182,25 +189,21 @@ mod tests {
         let cases: [(&str, &str, bool); 5] = [
             (
                 "# Exuno — Project Configuration\ntools:\n  enabled:\n    - claude\n\n",
-                "# Exuno — Project Configuration\nagentsync_version: \"9.9.9\"\n\ntools:\n  enabled:\n    - claude\n\n",
+                "# Exuno — Project Configuration\nexuno_version: \"9.9.9\"\n\ntools:\n  enabled:\n    - claude\n\n",
                 true,
             ),
             (
-                "# head\n\n# more\nformat: 2\nagentsync_version: \"0.1\"\nagentsync_version: \"0.2\"\n",
-                "# head\n\n# more\nformat: 2\nagentsync_version: \"9.9.9\"\nagentsync_version: \"9.9.9\"\n",
+                "# head\n\n# more\nformat: 2\nexuno_version: \"0.1\"\nexuno_version: \"0.2\"\n",
+                "# head\n\n# more\nformat: 2\nexuno_version: \"9.9.9\"\nexuno_version: \"9.9.9\"\n",
                 false,
             ),
             (
                 "# only comments\n\n",
-                "# only comments\n\nagentsync_version: \"9.9.9\"\n",
+                "# only comments\n\nexuno_version: \"9.9.9\"\n",
                 true,
             ),
-            ("", "agentsync_version: \"9.9.9\"\n", true),
-            (
-                "agentsync_version: 1",
-                "agentsync_version: \"9.9.9\"",
-                false,
-            ),
+            ("", "exuno_version: \"9.9.9\"\n", true),
+            ("exuno_version: 1", "exuno_version: \"9.9.9\"", false),
         ];
         for (text, expected, added) in cases {
             assert_eq!(
