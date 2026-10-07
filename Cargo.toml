@@ -1,7 +1,7 @@
 [package]
 name = "exuno"
 # Equal to VERSION: `exuno release` bumps both, and src/lib.rs tests the pair.
-version = "0.45.1"
+version = "0.45.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Sync AI agent instructions from .ai/src/ to every tool."
