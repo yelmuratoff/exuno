@@ -214,7 +214,7 @@ fn team_local_manual_edit_of_a_generated_file_is_still_refused_after_a_pull() {
 // ── committed mode ──────────────────────────────────────────────────────────
 
 #[test]
-fn team_committed_a_fresh_clone_has_generated_outputs_without_running_agentsync() {
+fn team_committed_a_fresh_clone_has_generated_outputs_without_running_exuno() {
     let team = team_dir();
     let team_path = team.path();
     let (_a, b) = seed_team(team_path, "committed");

@@ -96,7 +96,7 @@ fn profile_add_nested_base_dest_keeps_internal_structure_not_basename() {
 }
 
 #[test]
-fn profile_add_registers_a_profiles_block_in_agent_sync_yaml() {
+fn profile_add_registers_a_profiles_block_in_exuno_yaml() {
     let project = seeded();
     add_hub(&project);
     let config = project.read(".ai/exuno.yaml");
@@ -396,7 +396,7 @@ fn profile_remove_deletes_config_home_output_variant_file_and_config_entry() {
 }
 
 #[test]
-fn profile_remove_keeps_files_agentsync_did_not_generate_in_the_config_home() {
+fn profile_remove_keeps_files_exuno_did_not_generate_in_the_config_home() {
     let project = seeded();
     add_hub(&project);
     project.exuno().arg("sync").assert().success();

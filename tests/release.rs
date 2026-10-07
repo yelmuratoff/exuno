@@ -240,7 +240,7 @@ fn release_fails_with_unknown_bump_type() {
 }
 
 #[test]
-fn release_fails_when_cargo_lock_has_no_agentsync_entry_and_writes_nothing() {
+fn release_fails_when_cargo_lock_has_no_exuno_entry_and_writes_nothing() {
     let project = checkout();
     project.write("Cargo.lock", "version = 4\n");
     project.git(&["commit", "-qam", "lock without agentsync"]);

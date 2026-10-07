@@ -186,7 +186,7 @@ fn init_creates_starter_rules() {
 }
 
 #[test]
-fn init_creates_agent_sync_yaml_with_tools_enabled_list() {
+fn init_creates_exuno_yaml_with_tools_enabled_list() {
     let project = Project::empty();
     project.exuno().arg("init").assert().success();
 

@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn the_engine_owns_the_agentsync_skill_and_ships_the_migrate_prompt() {
+    fn the_engine_owns_the_exuno_skill_and_ships_the_migrate_prompt() {
         assert_eq!(base_src_skills(), ["exuno"]);
         assert!(MIGRATE_PROMPT.starts_with("I need you to safely migrate"));
     }

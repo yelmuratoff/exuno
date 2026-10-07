@@ -283,7 +283,7 @@ fn list_shows_payload_override_column_when_hooks_override_exists() {
 }
 
 #[test]
-fn init_pins_exuno_version_in_agent_sync_yaml() {
+fn init_pins_exuno_version_in_exuno_yaml() {
     let project = Project::seeded(&["--no-detect"]);
     assert!(
         project
