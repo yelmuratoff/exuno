@@ -136,6 +136,8 @@ On Windows, from PowerShell:
 irm https://github.com/yelmuratoff/exuno/releases/latest/download/exuno-installer.ps1 | iex
 ```
 
+This installer adds `exuno` only, without the `agentsync` link `install.sh` creates. In a project whose git hooks predate the rename, run `exuno setup-hooks` once; `exuno doctor` lists any hook still calling `agentsync`.
+
 To install the exact release a project pins in `exuno_version` — what CI should do when outputs are committed — set `EXUNO_VERSION`; the same variable moves an existing install, and `exuno update <version>` does it from the CLI:
 
 ```bash
