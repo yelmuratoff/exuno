@@ -15,7 +15,7 @@ fn generate_with_argument_outputs_prompt_with_context() {
         .success()
         .stdout(predicate::str::contains("My Project"))
         .stdout(predicate::str::contains("Flutter app with BLoC"))
-        .stdout(predicate::str::contains("AgentSync"));
+        .stdout(predicate::str::contains("Exuno"));
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn generate_piped_outputs_raw_prompt() {
         .write_stdin("")
         .assert()
         .success()
-        .stdout(predicate::str::contains("AgentSync"))
+        .stdout(predicate::str::contains("Exuno"))
         .stdout(predicate::str::contains(".ai/src/"));
 }
 
@@ -62,7 +62,7 @@ fn generate_context_appears_before_instructions() {
         .unwrap();
     let instructions_line = stdout
         .lines()
-        .position(|line| line.contains("AgentSync"))
+        .position(|line| line.contains("Exuno"))
         .unwrap();
     assert!(context_line < instructions_line);
 }

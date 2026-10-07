@@ -1,6 +1,6 @@
-I need you to generate AI agent configuration files for my project using the AgentSync format.
+I need you to generate AI agent configuration files for my project using the Exuno format.
 
-AgentSync keeps all AI instructions in `.ai/src/` and distributes them to tool-specific directories (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Windsurf, Junie, Cline, Amazon Q, Zed, Antigravity, Kimi Code, OpenCode) via `agentsync sync`. Your job is to study my project and produce tailored, specific configuration.
+Exuno keeps all AI instructions in `.ai/src/` and distributes them to tool-specific directories (Claude Code, Cursor, Copilot, Gemini CLI, Codex, Windsurf, Junie, Cline, Amazon Q, Zed, Antigravity, Kimi Code, OpenCode) via `exuno sync`. Your job is to study my project and produce tailored, specific configuration.
 
 ## How to start
 

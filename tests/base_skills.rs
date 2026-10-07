@@ -17,14 +17,14 @@ fn set_config(project: &Project, line: &str) {
 }
 
 #[test]
-fn base_skills_the_agentsync_skill_reaches_outputs_without_living_in_ai_src() {
+fn base_skills_the_exuno_skill_reaches_outputs_without_living_in_ai_src() {
     let project = synced_project();
     assert!(!project.join(".ai/src/skills/exuno").exists());
     assert!(project.exists(".claude/skills/exuno/SKILL.md"));
     assert!(
         project
             .read(".claude/skills/exuno/SKILL.md")
-            .contains("AgentSync")
+            .contains("Exuno")
     );
 }
 

@@ -46,9 +46,8 @@ pub fn base_payloads(resource: &str, slug: &str) -> Vec<&'static File<'static>> 
     matches
 }
 
-/// `lib/templates/ci/github-agentsync-check.yml`, the gate `init --ci github` writes.
-pub const CI_GITHUB_WORKFLOW: &str =
-    include_str!("../../lib/templates/ci/github-agentsync-check.yml");
+/// `lib/templates/ci/github-exuno-check.yml`, the gate `init --ci github` writes.
+pub const CI_GITHUB_WORKFLOW: &str = include_str!("../../lib/templates/ci/github-exuno-check.yml");
 
 /// The template set `refresh` and `dedupe` walk: the shipped `AGENTS.md`, the
 /// `*.md` files of `rules`, `commands`, and `agents`, and every file below
@@ -158,7 +157,7 @@ mod tests {
         assert!(base_payload("hooks", "claude-hub").is_none());
         assert_eq!(base_payloads("settings", "claude").len(), 1);
         assert_eq!(base_payloads("hooks", "code").len(), 0);
-        assert!(CI_GITHUB_WORKFLOW.contains("AGENTSYNC_VERSION=__AGENTSYNC_VERSION__ bash"));
+        assert!(CI_GITHUB_WORKFLOW.contains("EXUNO_VERSION=__EXUNO_VERSION__ bash"));
     }
 
     #[test]

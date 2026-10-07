@@ -2,7 +2,7 @@
 # https://developers.openai.com/codex/config-basic
 #
 # Add MCP servers through `.ai/src/mcp.json` or a per-tool Codex MCP source.
-# AgentSync composes them into this file at sync time. Direct [mcp_servers]
+# Exuno composes them into this file at sync time. Direct [mcp_servers]
 # settings are supported only when no separate MCP source is selected. In a
-# config home AgentSync owns only the keys declared here, so leave out what the
+# config home Exuno owns only the keys declared here, so leave out what the
 # Codex app writes itself: projects, hooks.state, plugins, its MCP servers.

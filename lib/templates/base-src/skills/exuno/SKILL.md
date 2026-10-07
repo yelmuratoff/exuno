@@ -1,11 +1,11 @@
 ---
 name: exuno
-description: AgentSync config — AGENTS.md, rules, skills, commands, subagents, settings, hooks, MCP, syncing .ai/src to Claude, Codex, Cursor, OpenCode. Use when editing them or asking why a skill did not load.
+description: Exuno config — AGENTS.md, rules, skills, commands, subagents, settings, hooks, MCP, syncing .ai/src to Claude, Codex, Cursor, OpenCode. Use when editing them or asking why a skill did not load.
 ---
 
-# Working with AgentSync
+# Working with Exuno
 
-Create and maintain AI agent instructions in the AgentSync format.
+Create and maintain AI agent instructions in the Exuno format.
 
 ## Structure
 
@@ -35,23 +35,23 @@ Create and maintain AI agent instructions in the AgentSync format.
         └── mcp.json            #     per-tool MCP override (shadows mcp.json above)
 ```
 
-After editing, run `agentsync sync` to distribute to all tools.
+After editing, run `exuno sync` to distribute to all tools.
 
-Group many skills into category directories — a directory without `SKILL.md` is a category, up to four levels deep. No tool reads categories the same way (Claude Code, VS Code Copilot, and Gemini CLI skip nested skills), so sync lands every skill flat at `<dest>/<name>/`. Leaf names stay unique across categories: two skills sharing a name stop sync. Filter a whole category with a path glob — `exclude: cloudflare/*` in a tool's `targets.skills` — and inspect the layout with `agentsync skills check`. A shipped skill moved into a category still receives `agentsync refresh` updates there.
+Group many skills into category directories — a directory without `SKILL.md` is a category, up to four levels deep. No tool reads categories the same way (Claude Code, VS Code Copilot, and Gemini CLI skip nested skills), so sync lands every skill flat at `<dest>/<name>/`. Leaf names stay unique across categories: two skills sharing a name stop sync. Filter a whole category with a path glob — `exclude: cloudflare/*` in a tool's `targets.skills` — and inspect the layout with `exuno skills check`. A shipped skill moved into a category still receives `exuno refresh` updates there.
 
-Settings, hooks, and per-tool MCP are overrides: they only exist once you opt in (`agentsync enable`, `agentsync customize`, `agentsync add mcp`). When absent, AgentSync falls back to its shipped base templates. The flat `settings/`, `mcp/`, and `hooks/` directories from older layouts still work but are deprecated — preview their move with `agentsync migrate --legacy` and apply it with `agentsync migrate --apply`.
+Settings, hooks, and per-tool MCP are overrides: they only exist once you opt in (`exuno enable`, `exuno customize`, `exuno add mcp`). When absent, Exuno falls back to its shipped base templates. The flat `settings/`, `mcp/`, and `hooks/` directories from older layouts still work but are deprecated — preview their move with `exuno migrate --legacy` and apply it with `exuno migrate --apply`.
 
 ## Scaffolding new content
 
-Use `agentsync add <kind> <name>` to create a new file with the correct frontmatter and placement:
+Use `exuno add <kind> <name>` to create a new file with the correct frontmatter and placement:
 
-- `agentsync add rule <name>` — creates `.ai/src/rules/<name>.md`
-- `agentsync add skill <name> [--category <path>]` — creates `.ai/src/skills/[<category>/]<name>/SKILL.md`
-- `agentsync add command <name>` — creates `.ai/src/commands/<name>.md`
-- `agentsync add subagent <name>` — creates `.ai/src/agents/<name>.md`
-- `agentsync add mcp <name> (--command CMD [--args '…'] [--env K=V,…] | --url URL)` — adds a server to the shared `.ai/src/mcp.json`
+- `exuno add rule <name>` — creates `.ai/src/rules/<name>.md`
+- `exuno add skill <name> [--category <path>]` — creates `.ai/src/skills/[<category>/]<name>/SKILL.md`
+- `exuno add command <name>` — creates `.ai/src/commands/<name>.md`
+- `exuno add subagent <name>` — creates `.ai/src/agents/<name>.md`
+- `exuno add mcp <name> (--command CMD [--args '…'] [--env K=V,…] | --url URL)` — adds a server to the shared `.ai/src/mcp.json`
 
-The command refuses to overwrite existing files; pass `--force` (or `-f`) to replace them. Names must contain only letters, digits, hyphens, and underscores — no path separators, no `..`, no leading `.` or `-`. `agentsync skills list` / `show <name>` / `check` inspect the effective skills and their metadata without changing sync output.
+The command refuses to overwrite existing files; pass `--force` (or `-f`) to replace them. Names must contain only letters, digits, hyphens, and underscores — no path separators, no `..`, no leading `.` or `-`. `exuno skills list` / `show <name>` / `check` inspect the effective skills and their metadata without changing sync output.
 
 ## Writing AGENTS.md
 
@@ -73,13 +73,13 @@ Always-on constraints. One file per topic in `.ai/src/rules/`.
 - **Constraints, not tutorials** — Tell the agent what behavior to produce. Skip concept explanations the model already knows.
 - **Prefer positive instructions** — Per Anthropic's prompt-engineering guidance, "respond in flowing prose" works better than a prohibition. Phrase rules as what to do; express hard boundaries as required behavior.
 - **20–50 lines per file** — If it grows beyond that, split by topic. Multiple small focused files beat one large catch-all.
-- **Always-on by default — scope domain rules with `paths:`** — A rule with no frontmatter loads on every task. For a domain rule (state, routing, data…), add `paths:` frontmatter (a list of globs) so it loads only when matching files are touched. AgentSync translates `paths:` to each tool's native trigger (Claude `paths:`, Cursor `globs`+`alwaysApply:false`, Copilot `applyTo`, Devin Desktop/Antigravity `trigger: glob`). Keep the always-on set lean — a wall of always-on rules dilutes attention and the agent starts ignoring individual instructions. Before adding an always-on line, apply the removal test — _would deleting this let a likely mistake through?_ If not, it's noise; cut it or scope it with `paths:`.
+- **Always-on by default — scope domain rules with `paths:`** — A rule with no frontmatter loads on every task. For a domain rule (state, routing, data…), add `paths:` frontmatter (a list of globs) so it loads only when matching files are touched. Exuno translates `paths:` to each tool's native trigger (Claude `paths:`, Cursor `globs`+`alwaysApply:false`, Copilot `applyTo`, Devin Desktop/Antigravity `trigger: glob`). Keep the always-on set lean — a wall of always-on rules dilutes attention and the agent starts ignoring individual instructions. Before adding an always-on line, apply the removal test — _would deleting this let a likely mistake through?_ If not, it's noise; cut it or scope it with `paths:`.
 - **Add a line only after a real failure, and after cheaper remedies** — first fix the code or the misused API behind the slip; then let a hook, lint, or test enforce the behavior deterministically (_Settings, permissions, and hooks_ below); add a rule line last. The failure it prevents justifies the line, and the line leaves when a code fix or a stronger model makes it redundant — the addition test that pairs with the removal test above.
 - **Compose rules by level in a workspace** — put broad infra/governance constraints in the parent `.ai/src/rules/` (inherited via `shared:` — `references/workspaces-and-profiles.md`) and keep feature-specific rules scoped at the leaf project. Layering this way keeps each level's always-on set minimal instead of one project carrying every rule.
 
 ## Writing Skills — The Most Important Part
 
-Skills are the highest-leverage configuration. AgentSync skills follow the open [agentskills.io](https://agentskills.io) format — a portable standard supported by Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenCode, and ~30 other agents. Validate with `skills-ref validate <path>`.
+Skills are the highest-leverage configuration. Exuno skills follow the open [agentskills.io](https://agentskills.io) format — a portable standard supported by Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenCode, and ~30 other agents. Validate with `skills-ref validate <path>`.
 
 The **description is the trigger** — vague descriptions never activate. Open with the domain keywords the user would say (`Flutter authentication — login, logout, session restore…`), then the "Use when…" conditions; be pushy about phrasings (list cases where the user doesn't name the domain) and keyword-rich, but keep the domain itself narrow: as short as it can be while the trigger is unambiguous. OpenAI's example for GPT-6 Astra — "Use when adding or changing a migration, or reviewing its rollout", not "Use when working with databases, queries, models, or persistence" — the broad form loads the skill whenever the model touches a database, and an over-emphasised description loads instructions that don't help the task. Hosts shorten descriptions once the skill listing is over budget — Codex shortens every description once many skills are installed — so the first 50 characters carry the match on their own, and "Use this skill when" spends them on nothing. Hard limit: 1024 chars.
 
@@ -145,31 +145,31 @@ A rule in `AGENTS.md`/`rules/` is **advisory** — context the model can ignore 
 
 ## Maintenance
 
-**Read [`references/maintenance.md`](references/maintenance.md) when running `agentsync update`, `resolve`, `simplify`, `check`, `doctor`, `rollback`, `migrate`, or `upgrade-config`, or when investigating stale-override or upstream-drift problems.** It covers `.ai/.pending-resolutions.yaml`, `--strict` in CI, simplify's dry-run and idempotency, backups, rollback and retention, version pins, where outputs live, and the recommended cadence.
+**Read [`references/maintenance.md`](references/maintenance.md) when running `exuno update`, `resolve`, `simplify`, `check`, `doctor`, `rollback`, `migrate`, or `upgrade-config`, or when investigating stale-override or upstream-drift problems.** It covers `.ai/.pending-resolutions.yaml`, `--strict` in CI, simplify's dry-run and idempotency, backups, rollback and retention, version pins, where outputs live, and the recommended cadence.
 
-**Recovering a directly-edited generated file.** `agentsync sync` records every generated file in `.ai/.sync-manifest` (SHA-256), so a generated file edited by hand — or one a tool writes into out of band — makes the next sync abort instead of overwriting it. Run `agentsync adopt <file>` (or `adopt --all`) to promote the current content into `.ai/src/`, then sync again. `adopt` refuses to run non-interactively without `--yes`.
+**Recovering a directly-edited generated file.** `exuno sync` records every generated file in `.ai/.sync-manifest` (SHA-256), so a generated file edited by hand — or one a tool writes into out of band — makes the next sync abort instead of overwriting it. Run `exuno adopt <file>` (or `adopt --all`) to promote the current content into `.ai/src/`, then sync again. `adopt` refuses to run non-interactively without `--yes`.
 
-**Read [`references/workspaces-and-profiles.md`](references/workspaces-and-profiles.md) when running `agentsync refresh`, when a parent workspace shares content with sub-projects, or when a tool needs a second config home.** It covers the three-way template diff and its outcome classes, `template_overrides`, declarative `shared:` inheritance with `dedupe` and `doctor` cross-project detection, the `category: governance` marker, and the profile overlay layout.
+**Read [`references/workspaces-and-profiles.md`](references/workspaces-and-profiles.md) when running `exuno refresh`, when a parent workspace shares content with sub-projects, or when a tool needs a second config home.** It covers the three-way template diff and its outcome classes, `template_overrides`, declarative `shared:` inheritance with `dedupe` and `doctor` cross-project detection, the `category: governance` marker, and the profile overlay layout.
 
 ## Who owns which file
 
 Two layers, and the difference decides whether an upgrade reaches you:
 
-- **Engine-owned** — this skill. It ships inside the `agentsync` binary and is resolved at sync time, so an engine upgrade updates it in every project. To add to it and keep the updates, create an `agentsync/` directory with no `SKILL.md` (at the skills root or in any category): its files join the engine's, a file at the same path replaces the engine's, and its `SKILL.append.md` is appended to this `SKILL.md` at sync. A directory with its own `SKILL.md` replaces this skill and stops the updates; `base_skills: false` drops it.
-- **Project-owned** — everything else under `.ai/src/`. Scaffolded once by `init`, updated only when you accept it via `agentsync refresh`, never overwritten by an upgrade.
+- **Engine-owned** — this skill. It ships inside the `exuno` binary and is resolved at sync time, so an engine upgrade updates it in every project. To add to it and keep the updates, create an `exuno/` directory with no `SKILL.md` (at the skills root or in any category): its files join the engine's, a file at the same path replaces the engine's, and its `SKILL.append.md` is appended to this `SKILL.md` at sync. A directory with its own `SKILL.md` replaces this skill and stops the updates; `base_skills: false` drops it.
+- **Project-owned** — everything else under `.ai/src/`. Scaffolded once by `init`, updated only when you accept it via `exuno refresh`, never overwritten by an upgrade.
 
-`format:` in `agent_sync.yaml` records which migrations the project has been through. When the engine ships a newer revision, the next command says so; `agentsync migrate` previews it and `migrate --apply` performs it.
+`format:` in `exuno.yaml` records which migrations the project has been through. When the engine ships a newer revision, the next command says so; `exuno migrate` previews it and `migrate --apply` performs it.
 
 ## Gotchas
 
-- Edit files in `.ai/src/`. Generated directories (`.claude/`, `.cursor/`, etc.) are sync output, not edit targets. A file you add by hand to a generated directory is preserved with a warning but never managed; move it into `.ai/src/`, or run `agentsync sync --force` to prune it.
-- Run `agentsync sync` after every change to distribute updates.
+- Edit files in `.ai/src/`. Generated directories (`.claude/`, `.cursor/`, etc.) are sync output, not edit targets. A file you add by hand to a generated directory is preserved with a warning but never managed; move it into `.ai/src/`, or run `exuno sync --force` to prune it.
+- Run `exuno sync` after every change to distribute updates.
 - Frontmatter is YAML: a `: ` (colon + space) inside an unquoted `description` invalidates the file and the consuming tool **silently skips the skill at load** — rephrase with `—` and re-validate (`skills-ref validate <path>`) after every frontmatter edit.
-- Tool-specific frontmatter fields (like `context: fork`) are passed through as-is — agentsync doesn't validate them.
+- Tool-specific frontmatter fields (like `context: fork`) are passed through as-is — exuno doesn't validate them.
 - Keep skill triggers mutually exclusive. When two skills could fire on the same task, merge them or sharpen their descriptions.
 - Native commands land in Claude, Cursor, Copilot, Gemini (as TOML), Junie, Cline, Devin Desktop, Antigravity, and OpenCode. Tools without a command surface get a conversion: Codex, Kimi Code, and Kiro emit generated skills under `command-*/`; Amazon Q and Zed inline a `## Commands` index into their agents file.
 - Native subagents land in Claude, Copilot, Cursor, Gemini, and Junie. Codex receives them converted to TOML, Amazon Q as custom-agent JSON, OpenCode as safe Markdown with translated permissions, and Kiro as Markdown agents with its tool tags. Cline, Kimi Code, Zed, Devin Desktop, and Antigravity have no custom subagent surface, so they get none.
 - The shared `.ai/src/mcp.json` reaches every compatible MCP target, but Claude Code reads it only at project scope — `references/mcp-and-tool-targets.md` has the per-host route.
-- AgentSync owns `.opencode/plugins/agentsync.ts`, not sibling OpenCode plugins, custom tools, themes, TUI preferences, or credentials. Kimi custom agents and project hooks are unavailable; leave Kimi's global config untouched.
+- Exuno owns `.opencode/plugins/agentsync.ts`, not sibling OpenCode plugins, custom tools, themes, TUI preferences, or credentials. Kimi custom agents and project hooks are unavailable; leave Kimi's global config untouched.
 - A third-party or plugin skill is executable trust, not just docs — its bundled scripts run with your permissions and its instructions steer the agent. Audit the SKILL.md and every bundled file before installing one; skills that fetch from an external URL at runtime are the highest risk. Treat installing a skill like adding a dependency: private data, untrusted content, and an outbound path in one place make it as dangerous as an unvetted MCP server.
 - Popularity is not quality. A widely-starred third-party skill can still raise token cost _and_ worsen results — most shared skills are never rigorously evaluated, and a star count only measures reach, not effect. Before adopting one, benchmark it with-skill-vs-baseline (`references/evaluating-skills.md`) and prefer skills whose authors publish a real evaluation over ones that merely _claim_ to make the agent better.

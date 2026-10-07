@@ -170,10 +170,10 @@ fn init_ci_github_writes_the_check_workflow_with_the_pinned_version() {
         .args(["init", "--tools", "claude", "--yes", "--ci", "github"])
         .assert()
         .success();
-    let workflow = project.read(".github/workflows/agentsync-check.yml");
-    assert!(workflow.contains("agentsync check"));
-    assert!(workflow.contains(&format!("AGENTSYNC_VERSION={}", engine_version())));
-    assert!(!workflow.contains("__AGENTSYNC_VERSION__"));
+    let workflow = project.read(".github/workflows/exuno-check.yml");
+    assert!(workflow.contains("exuno check"));
+    assert!(workflow.contains(&format!("EXUNO_VERSION={}", engine_version())));
+    assert!(!workflow.contains("__EXUNO_VERSION__"));
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn init_the_ci_workflow_ships_the_autofix_job_disabled() {
         .args(["init", "--tools", "claude", "--yes", "--ci", "github"])
         .assert()
         .success();
-    let workflow = project.read(".github/workflows/agentsync-check.yml");
+    let workflow = project.read(".github/workflows/exuno-check.yml");
     assert!(workflow.contains("autofix:"));
     assert!(workflow.contains("if: false"));
 }
@@ -192,14 +192,14 @@ fn init_the_ci_workflow_ships_the_autofix_job_disabled() {
 #[test]
 fn init_an_existing_ci_workflow_is_never_overwritten() {
     let project = Project::empty();
-    project.write(".github/workflows/agentsync-check.yml", "name: mine\n");
+    project.write(".github/workflows/exuno-check.yml", "name: mine\n");
     project
         .exuno()
         .args(["init", "--tools", "claude", "--yes", "--ci", "github"])
         .assert()
         .success();
     assert_eq!(
-        project.read(".github/workflows/agentsync-check.yml"),
+        project.read(".github/workflows/exuno-check.yml"),
         "name: mine\n"
     );
 }
@@ -213,7 +213,7 @@ fn init_no_ci_workflow_without_ci() {
         .args(["init", "--tools", "claude", "--yes"])
         .assert()
         .success();
-    assert!(!project.exists(".github/workflows/agentsync-check.yml"));
+    assert!(!project.exists(".github/workflows/exuno-check.yml"));
 }
 
 #[test]

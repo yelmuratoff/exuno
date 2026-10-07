@@ -45,9 +45,9 @@ fn migrate_outputs_a_grounded_upgrade_prompt() {
             "Project-pinned Exuno version: 0.7.0",
         ))
         .stdout(predicate::str::contains("CHANGELOG.md"))
-        .stdout(predicate::str::contains("latest stable AgentSync release"))
-        .stdout(predicate::str::contains("agentsync doctor"))
-        .stdout(predicate::str::contains("agentsync check"));
+        .stdout(predicate::str::contains("latest stable Exuno release"))
+        .stdout(predicate::str::contains("exuno doctor"))
+        .stdout(predicate::str::contains("exuno check"));
 }
 
 // The pbcopy stand-in is a shell script the binary cannot spawn on Windows.
@@ -87,7 +87,7 @@ fn migrate_copies_the_full_prompt_with_an_available_clipboard_tool() {
     let captured = std::fs::read_to_string(&clipboard_capture).unwrap();
     assert!(!captured.is_empty());
     assert!(captured.contains("Exuno migration context"));
-    assert!(captured.contains("latest stable AgentSync release"));
+    assert!(captured.contains("latest stable Exuno release"));
 }
 
 #[test]

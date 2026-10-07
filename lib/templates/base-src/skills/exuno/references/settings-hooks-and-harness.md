@@ -4,7 +4,7 @@ Read this when overriding a tool's settings or permissions, writing a hook, or t
 
 ## Settings & Permissions
 
-Each tool ships with base settings. To diverge, scaffold an override with `agentsync enable <tool>` or `agentsync customize <tool> settings` — it writes `.ai/src/tools/<tool>/settings.<ext>`, which wins over the base on sync. Delete the file to resume inheriting the base.
+Each tool ships with base settings. To diverge, scaffold an override with `exuno enable <tool>` or `exuno customize <tool> settings` — it writes `.ai/src/tools/<tool>/settings.<ext>`, which wins over the base on sync. Delete the file to resume inheriting the base.
 
 Permission decisions are three-valued — `allow`, `deny`, and `ask`. Keep `ask` populated: with only the two extremes, every uncertain case has to be filed as one of them, so either the agent proceeds unattended on something consequential or the entry is widened until it stops protecting anything.
 
@@ -26,7 +26,7 @@ A permission entry is matched per tool call and cannot reason about intent acros
 
 ## Hooks — advisory rules vs. enforced gates
 
-Tool hook overrides live at `.ai/src/tools/<tool>/hooks.<ext>` and are scaffolded with `agentsync customize <tool> hooks`. OpenCode hooks render to AgentSync's owned project plugin; Kimi hooks are global-only and stay outside project sync.
+Tool hook overrides live at `.ai/src/tools/<tool>/hooks.<ext>` and are scaffolded with `exuno customize <tool> hooks`. OpenCode hooks render to Exuno's owned project plugin; Kimi hooks are global-only and stay outside project sync.
 
 The distinction that decides whether to write a rule or a hook: a rule in `AGENTS.md`/`rules/` is **advisory** — loaded as context the model can choose to ignore under pressure; a hook is **enforced** — the harness runs it every time, regardless of what the model decided. Reach for a hook when something _must_ happen, not merely _should_ — a commit-message check, say, rather than a rule asking the agent to remember it.
 
@@ -42,8 +42,8 @@ Claude Code's hook events (mechanics are per-tool — each receives the tool-cal
 Three layers keep an agent (and a person) editing the source instead of the output:
 
 1. The shipped `AGENTS.md` and `rules/core.md` say where instructions live, so it is in context every session.
-2. Claude Code gets a generated `PreToolUse` hook at `.claude/hooks/agentsync-guard.sh`, wired up by `hooks.PreToolUse` in the base settings. It checks the target path against `.ai/.sync-manifest` and exits 2 — blocking the write — with the source path to edit instead. Override it per project at `.ai/src/tools/claude/guard.sh`, or drop the `hooks` block from your settings override to remove it. The target declares `profile_scoped: false`, so config-home profiles share this one script rather than each getting a copy nothing invokes; `agentsync doctor` warns when a settings override never references it.
-3. `agentsync sync` refuses to overwrite a generated file that changed since the last sync, and `agentsync adopt <file>` promotes such an edit back into `.ai/src/`.
+2. Claude Code gets a generated `PreToolUse` hook at `.claude/hooks/agentsync-guard.sh`, wired up by `hooks.PreToolUse` in the base settings. It checks the target path against `.ai/.sync-manifest` and exits 2 — blocking the write — with the source path to edit instead. Override it per project at `.ai/src/tools/claude/guard.sh`, or drop the `hooks` block from your settings override to remove it. The target declares `profile_scoped: false`, so config-home profiles share this one script rather than each getting a copy nothing invokes; `exuno doctor` warns when a settings override never references it.
+3. `exuno sync` refuses to overwrite a generated file that changed since the last sync, and `exuno adopt <file>` promotes such an edit back into `.ai/src/`.
 
 ## Turning an agent mistake into a harness change
 

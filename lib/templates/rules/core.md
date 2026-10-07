@@ -4,9 +4,9 @@ Write code that fits the project's existing patterns, surfaces failures explicit
 
 ## Agent Configuration
 
-- Change agent instructions in `.ai/src/` only — `AGENTS.md`, `rules/`, `skills/`, `commands/`, `agents/` — then run `agentsync sync`.
+- Change agent instructions in `.ai/src/` only — `AGENTS.md`, `rules/`, `skills/`, `commands/`, `agents/` — then run `exuno sync`.
 - Treat every generated tool directory as output: `CLAUDE.md`, `.claude/`, `.cursor/`, `.github/copilot-instructions.md`, and the rest are rewritten from `.ai/src/` on the next sync.
-- Recover an edit made in the wrong place with `agentsync adopt <file>`, which promotes it back into `.ai/src/`.
+- Recover an edit made in the wrong place with `exuno adopt <file>`, which promotes it back into `.ai/src/`.
 
 ## Scope of Changes
 

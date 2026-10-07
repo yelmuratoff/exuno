@@ -5,4 +5,4 @@
 - Cross-cutting rules are always-on context for every task, so every line should
   change behavior. For a domain rule (state, routing, data…), add `paths:`
   frontmatter (a list of globs) so it loads only when matching files are touched
-  instead of always — agentsync translates it to each tool's native glob trigger.
+  instead of always — exuno translates it to each tool's native glob trigger.

@@ -913,7 +913,7 @@ mod tests {
         assert!(ci.out.contains("\n\n\nPlan:\n"));
         assert!(
             Path::new(&root)
-                .join(".github/workflows/agentsync-check.yml")
+                .join(".github/workflows/exuno-check.yml")
                 .is_file()
         );
     }

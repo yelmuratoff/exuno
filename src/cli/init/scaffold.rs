@@ -14,7 +14,9 @@ use crate::{Error, config::catalog, config::format_rev, config::names, engine::s
 
 /// `AGENTSYNC_REPO` of `lib/helpers/update.sh`, which the CI template's install
 /// URL names.
-const REPO: &str = "yelmuratoff/agent_sync";
+const REPO: &str = "yelmuratoff/exuno";
+const CI_WORKFLOW: &str = ".github/workflows/exuno-check.yml";
+const LEGACY_CI_WORKFLOW: &str = ".github/workflows/agentsync-check.yml";
 
 pub(super) struct Scaffold<'a> {
     pub(super) target: &'a str,
@@ -220,26 +222,31 @@ fn adopt_existing(run: &mut Run, target: &str, existing: &[String]) -> Result<()
 /// `_init_write_ci_workflow`.
 fn write_ci_workflow(run: &mut Run, target: &str) -> Result<(), Error> {
     let style = run.style;
-    let dest = format!("{target}/.github/workflows/agentsync-check.yml");
-    if Path::new(&dest).is_file() {
+    let present = [CI_WORKFLOW, LEGACY_CI_WORKFLOW]
+        .into_iter()
+        .find(|rel| Path::new(&format!("{target}/{rel}")).is_file());
+    if let Some(rel) = present {
         return run.say(&format!(
             "   {} {} {}\n",
             style.yellow("Kept"),
-            style.cyan(".github/workflows/agentsync-check.yml"),
+            style.cyan(rel),
             style.dim("(already exists)")
         ));
     }
     create_dir(&format!("{target}/.github/workflows"))?;
     let text = catalog::CI_GITHUB_WORKFLOW
-        .replace("__AGENTSYNC_VERSION__", run.env.version)
+        .replace("__EXUNO_VERSION__", run.env.version)
         .replace(
-            "__AGENTSYNC_INSTALL_URL__",
+            "__EXUNO_INSTALL_URL__",
             &format!("https://raw.githubusercontent.com/{REPO}/main/install.sh"),
         );
-    staging::write_beside(Path::new(&dest), text.as_bytes())?;
+    staging::write_beside(
+        Path::new(&format!("{target}/{CI_WORKFLOW}")),
+        text.as_bytes(),
+    )?;
     run.say(&format!(
         "   Created {} — CI gate (exuno check)\n",
-        style.cyan(".github/workflows/agentsync-check.yml")
+        style.cyan(CI_WORKFLOW)
     ))
 }
 
@@ -393,16 +400,15 @@ mod tests {
             &["--tools", "claude", "--yes", "--ci", "github", "--no-sync"],
             quiet(),
         );
-        assert!(run.out.contains(&format!("Initializing Exuno in {root}\n\n   Created .github/workflows/agentsync-check.yml — CI gate (exuno check)\n\n   Created .ai/exuno.yaml")));
-        let workflow = Path::new(&root).join(".github/workflows/agentsync-check.yml");
+        assert!(run.out.contains(&format!("Initializing Exuno in {root}\n\n   Created .github/workflows/exuno-check.yml — CI gate (exuno check)\n\n   Created .ai/exuno.yaml")));
+        let workflow = Path::new(&root).join(".github/workflows/exuno-check.yml");
         let text = std::fs::read_to_string(&workflow).unwrap();
-        assert!(text.contains("AGENTSYNC_VERSION=9.9.9 bash"));
+        assert!(text.contains("EXUNO_VERSION=9.9.9 bash"));
+        assert!(text.contains("run: exuno check\n"));
         assert!(
-            text.contains(
-                "https://raw.githubusercontent.com/yelmuratoff/agent_sync/main/install.sh"
-            )
+            text.contains("https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh")
         );
-        assert!(!text.contains("__AGENTSYNC_"));
+        assert!(!text.contains("__EXUNO_"));
         {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(
@@ -425,6 +431,11 @@ mod tests {
             std::fs::read_to_string(Path::new(&root).join(".github/workflows/agentsync-check.yml"))
                 .unwrap(),
             "name: mine\n"
+        );
+        assert!(
+            !Path::new(&root)
+                .join(".github/workflows/exuno-check.yml")
+                .exists()
         );
         let none = call(
             &root,

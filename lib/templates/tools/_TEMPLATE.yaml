@@ -8,14 +8,14 @@ name: "Tool Name"
 enabled: false
 
 # Set to false when a client reads only project-root files and cannot consume
-# the config-home paths created by `agentsync profile add`.
+# the config-home paths created by `exuno profile add`.
 # profile_supported: false
 
 # Optional: profile variant. A thin variant tool (e.g. claude-hub.yaml) declares
 # `base:` to inherit every field it does not set from the base tool, so it only
 # needs to override the config-home dests below. `profile_home` records the
 # config-home directory the variant writes into. Both are managed by
-# `agentsync profile add` — you rarely write them by hand.
+# `exuno profile add` — you rarely write them by hand.
 # base: claude
 # profile_home: ".claude-hub"
 
@@ -30,7 +30,7 @@ targets:
     dest: ".tool/AGENTS.md"
 
     # Set false when the output includes generated content that cannot be
-    # copied back into source AGENTS.md by `agentsync adopt`.
+    # copied back into source AGENTS.md by `exuno adopt`.
     # adoptable: false
 
     # Optional: opt this tool out of this category entirely (works on any target).
@@ -155,14 +155,14 @@ targets:
   #   dest: ".tool/hooks.json"
 
   # Guard (optional, file copy + chmod +x) — a script the tool runs before it
-  # edits a file, to refuse writes to generated output. AgentSync ships a base
+  # edits a file, to refuse writes to generated output. Exuno ships a base
   # guard per tool; a project overrides it at .ai/src/tools/<tool>/guard.sh.
   # Register it from the tool's settings.
   # guard:
   #   dest: ".tool/hooks/agentsync-guard.sh"
   #   profile_scoped: false   # config-home profiles share one copy at this path
 
-  # `profile_scoped: false` works on any target: `agentsync profile add` keeps
+  # `profile_scoped: false` works on any target: `exuno profile add` keeps
   # the base dest instead of rewriting it into the profile's config home, for
   # project-level content every home shares.
 
