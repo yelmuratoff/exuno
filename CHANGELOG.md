@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Migrate:** run as `agentsync`, suggests `agentsync migrate --apply` and `agentsync sync` rather than an `exuno` command that is not installed yet.
+
 ## 0.45.1
 
 ### Changed

@@ -254,6 +254,7 @@ fn migrate_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let path_var = var("PATH");
     let mut env = cli::migrate::Env {
         version: engine_version(),
+        program: program_name(),
         prompt_root,
         no_clipboard: setting("NO_CLIPBOARD").as_deref() == Some("1"),
         stdout_tty: std::io::stdout().is_terminal(),

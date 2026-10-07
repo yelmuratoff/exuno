@@ -72,6 +72,8 @@ type Discover<'a> = &'a dyn Fn() -> Result<Project, Error>;
 /// What `migrate` takes from the process and the terminal.
 pub struct Env<'a> {
     pub version: &'a str,
+    /// The name the binary was run as, used in the commands a run suggests.
+    pub program: &'a str,
     /// `${AGENTSYNC_REPO_ROOT:-$(pwd)}` as the prompt reads it, unchecked.
     pub prompt_root: String,
     pub no_clipboard: bool,
@@ -534,7 +536,8 @@ fn legacy(
     for dir in ["hooks", "mcp", "settings"] {
         let _ = std::fs::remove_dir(root_path.join(".ai/src").join(dir));
     }
-    run.say(&tally.summary(style))?;
+    let summary = tally.summary(style, run.env.program);
+    run.say(&summary)?;
     Ok(0)
 }
 
@@ -573,7 +576,7 @@ impl MoveTally {
         }
     }
 
-    fn summary(&self, style: &Style) -> String {
+    fn summary(&self, style: &Style, program: &str) -> String {
         let mut summary = format!(
             "\n{}\n{}\n",
             style.green("  Migration complete."),
@@ -595,7 +598,7 @@ impl MoveTally {
         summary.push_str(&format!(
             "\n{} {}{}\n\n",
             style.dim("  Run"),
-            style.cyan("exuno sync"),
+            style.cyan(&format!("{program} sync")),
             style.dim(" to confirm outputs are unchanged.")
         ));
         summary
@@ -646,7 +649,7 @@ impl Run<'_, '_> {
         self.say(&format!(
             "{} {}{}\n\n",
             style.dim("  Dry-run. Re-run with"),
-            style.cyan("exuno migrate --apply"),
+            style.cyan(&format!("{} migrate --apply", self.env.program)),
             style.dim(what)
         ))
     }
@@ -659,7 +662,7 @@ impl Run<'_, '_> {
         format!(
             "{} {}{}\n\n",
             style.dim("  Dry-run — re-run with"),
-            style.cyan("exuno migrate --apply"),
+            style.cyan(&format!("{} migrate --apply", self.env.program)),
             style.dim(" to apply.")
         )
     }
@@ -952,6 +955,7 @@ mod tests {
         let mut copy = |_: &str| copied;
         let mut env = Env {
             version: "9.9.9",
+            program: "exuno",
             prompt_root: root.to_string(),
             no_clipboard: false,
             stdout_tty: false,
