@@ -486,7 +486,7 @@ impl Paths {
                 };
                 if !self.is_safe_source(&target) && !self.is_trusted_external(&target) {
                     return Err(format!(
-                        "Source symlink {shown} resolves outside the project: {target}; add that directory (or a parent) to AGENTSYNC_EXTERNAL_SOURCE_ROOTS to read it"
+                        "Source symlink {shown} resolves outside the project: {target}; add that directory (or a parent) to EXUNO_EXTERNAL_SOURCE_ROOTS to read it"
                     ));
                 }
                 if Path::new(&target).is_dir() && !visited.contains(&target) {
@@ -1038,7 +1038,7 @@ mod tests {
         assert_eq!(
             p.escaping_source_link(&roots),
             Err(format!(
-                "Source symlink .ai/src/rules/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to AGENTSYNC_EXTERNAL_SOURCE_ROOTS to read it"
+                "Source symlink .ai/src/rules/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to EXUNO_EXTERNAL_SOURCE_ROOTS to read it"
             ))
         );
         p.trust_external_roots(Some(&format!("{base}/outside")));
@@ -1060,7 +1060,7 @@ mod tests {
         assert_eq!(
             p.escaping_source_link(&roots),
             Err(format!(
-                "Source symlink vendor/skill/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to AGENTSYNC_EXTERNAL_SOURCE_ROOTS to read it"
+                "Source symlink vendor/skill/leak.md resolves outside the project: {base}/outside/rules/o.md; add that directory (or a parent) to EXUNO_EXTERNAL_SOURCE_ROOTS to read it"
             ))
         );
 

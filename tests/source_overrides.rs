@@ -1,6 +1,6 @@
 //! `tests/source_overrides.bats`: `source.*` layouts that live outside the
 //! default `.ai/src` tree — relative and absolute `source.tools`, symlink
-//! containment, and the `AGENTSYNC_EXTERNAL_SOURCE_ROOTS` trust list.
+//! containment, and the `EXUNO_EXTERNAL_SOURCE_ROOTS` trust list.
 
 mod common;
 
@@ -450,7 +450,7 @@ fn source_containment_an_outside_source_rules_not_listed_in_agentsync_external_s
             "source.rules points outside the project at",
         ))
         .stderr(predicate::str::contains(
-            "which AGENTSYNC_EXTERNAL_SOURCE_ROOTS does not list",
+            "which EXUNO_EXTERNAL_SOURCE_ROOTS does not list",
         ));
     assert!(!project.exists(".claude"));
 
@@ -502,7 +502,7 @@ fn doctor_fails_an_outside_source_that_agentsync_external_source_roots_does_not_
         .assert()
         .code(2)
         .stdout(predicate::str::contains(
-            "source.rules points outside the project and AGENTSYNC_EXTERNAL_SOURCE_ROOTS does not list it",
+            "source.rules points outside the project and EXUNO_EXTERNAL_SOURCE_ROOTS does not list it",
         ));
 }
 

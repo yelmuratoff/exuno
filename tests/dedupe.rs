@@ -239,7 +239,7 @@ fn dedupe_declines_into_the_config_agentsync_config_path_names() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "AGENTSYNC_CONFIG_PATH is set but file not found",
+            "EXUNO_CONFIG_PATH is set but file not found",
         ));
 }
 

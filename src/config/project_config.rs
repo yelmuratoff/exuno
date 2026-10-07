@@ -38,7 +38,7 @@ pub fn select(root: &str, explicit: Option<&str>, is_file: &dyn Fn(&str) -> bool
 
 /// The sentence every command prints for [`Selection::Missing`].
 pub fn missing_message(path: &str) -> String {
-    format!("AGENTSYNC_CONFIG_PATH is set but file not found: {path}")
+    format!("EXUNO_CONFIG_PATH is set but file not found: {path}")
 }
 
 /// Where a config keeps its generated files: `outputs:` when it says
@@ -149,7 +149,7 @@ mod tests {
     fn the_missing_message_is_the_bash_sentence() {
         assert_eq!(
             missing_message("/q/missing.yaml"),
-            "AGENTSYNC_CONFIG_PATH is set but file not found: /q/missing.yaml"
+            "EXUNO_CONFIG_PATH is set but file not found: /q/missing.yaml"
         );
     }
 }

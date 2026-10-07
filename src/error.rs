@@ -13,7 +13,7 @@ pub enum Error {
     Backup(String),
     #[error("Repository root not found: {}", .0.display())]
     ProjectRootNotFound(PathBuf),
-    #[error("AGENTSYNC_CONFIG_PATH is set but file not found: {}", .0.display())]
+    #[error("EXUNO_CONFIG_PATH is set but file not found: {}", .0.display())]
     ConfigPathNotFound(PathBuf),
 }
 

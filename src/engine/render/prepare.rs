@@ -235,7 +235,7 @@ fn register_explicit_sources(s: &mut Session, env: &Env, config: Option<&str>) -
             }
             paths::ExplicitSource::Untrusted(canonical) => {
                 s.log.error(&format!(
-                    "source.{key} points outside the project at {canonical}, which AGENTSYNC_EXTERNAL_SOURCE_ROOTS does not list; add that directory (or a parent) to the variable to read from it"
+                    "source.{key} points outside the project at {canonical}, which EXUNO_EXTERNAL_SOURCE_ROOTS does not list; add that directory (or a parent) to the variable to read from it"
                 ));
                 return Err(Stop(1));
             }
@@ -285,7 +285,7 @@ pub fn refuse_configless_cleanup(s: &mut Session, run: &Run) -> Step {
         return Ok(());
     }
     s.log.error(
-        "No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/exuno.yaml, or set AGENTSYNC_CONFIG_PATH.",
+        "No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/exuno.yaml, or set EXUNO_CONFIG_PATH.",
     );
     Err(Stop(1))
 }
@@ -501,7 +501,7 @@ mod tests {
         assert_eq!(render(&mut s, &with_config("missing.yaml")), Err(Stop(1)));
         assert_eq!(
             s.log.tail(5),
-            ["[ERROR] AGENTSYNC_CONFIG_PATH is set but file not found: /proj/missing.yaml"]
+            ["[ERROR] EXUNO_CONFIG_PATH is set but file not found: /proj/missing.yaml"]
         );
     }
 
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(
             s.log.tail(5),
             [
-                "[ERROR] No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/exuno.yaml, or set AGENTSYNC_CONFIG_PATH."
+                "[ERROR] No project configuration found and no tool is enabled; refusing a sync that would remove every tool's outputs. Run 'exuno enable <tool>' to create .ai/exuno.yaml, or set EXUNO_CONFIG_PATH."
             ]
         );
     }

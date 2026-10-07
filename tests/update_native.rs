@@ -321,7 +321,7 @@ fn a_tag_older_than_the_binary_releases_points_at_the_installer() {
         .code(1)
         .stderr(predicate::str::contains("0.1.0 predates the binary releases"))
         .stderr(predicate::str::contains(
-            "AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash",
+            "EXUNO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash",
         ));
     assert!(install.installed_unchanged());
 }

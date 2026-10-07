@@ -26,7 +26,7 @@ pub const HELP: Help = Help {
     synopsis: &["doctor"],
     description: &[
         "Checks the project section by section and prints one line per\nfinding: project layout, enabled tools, edit paths, user overrides,\nsource directories, drift, security, skills, rules, tool outputs, and\ncross-project duplicates. The report goes to stdout; the summary line\nnames every command to run next.",
-        "Honours AGENTSYNC_CONFIG_PATH for the project config and\nAGENTSYNC_EXTERNAL_SOURCE_ROOTS for source directories that live\noutside the project.",
+        "Honours EXUNO_CONFIG_PATH for the project config and\nEXUNO_EXTERNAL_SOURCE_ROOTS for source directories that live\noutside the project.",
     ],
     sections: &[
         Section {
@@ -195,7 +195,7 @@ pub fn doctor(
             put(
                 err,
                 format!(
-                    "{}: AGENTSYNC_CONFIG_PATH is set but file not found: {}\n",
+                    "{}: EXUNO_CONFIG_PATH is set but file not found: {}\n",
                     style.red("Error"),
                     path.display()
                 )
@@ -450,7 +450,7 @@ impl Doctor<'_> {
                 }
                 Some(external) if external.untrusted => {
                     self.fail(&format!(
-                        "source.{key} points outside the project and AGENTSYNC_EXTERNAL_SOURCE_ROOTS does not list it: {}",
+                        "source.{key} points outside the project and EXUNO_EXTERNAL_SOURCE_ROOTS does not list it: {}",
                         external.raw
                     ))?;
                     continue;

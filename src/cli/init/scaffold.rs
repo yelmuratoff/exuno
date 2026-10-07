@@ -287,7 +287,7 @@ defaults:
   cleanup: true
 
 # Post-sync hooks run arbitrary shell — enabling them requires the out-of-repo
-# signal AGENTSYNC_ALLOW_POST_SYNC=true, never this in-repo file.
+# signal EXUNO_ALLOW_POST_SYNC=true, never this in-repo file.
 # `skip: true` here always disables them.
 post_sync:
   skip: false

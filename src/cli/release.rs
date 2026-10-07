@@ -17,7 +17,7 @@ pub const HELP: Help = Help {
     tagline: "bump the version, commit, tag, and push",
     synopsis: &["release [major|minor|patch] [--no-push]"],
     description: &[
-        "Bumps VERSION, Cargo.toml, and Cargo.lock together, commits, tags with\nthe changelog section of the new version, and pushes main and the tag.\nRuns from the Exuno repository checkout, or from AGENTSYNC_HOME when\nthat holds one.",
+        "Bumps VERSION, Cargo.toml, and Cargo.lock together, commits, tags with\nthe changelog section of the new version, and pushes main and the tag.\nRuns from the Exuno repository checkout, or from EXUNO_HOME when\nthat holds one.",
     ],
     sections: &[
         Section {
@@ -669,7 +669,7 @@ mod checkout_tests {
         assert_eq!((status, err.as_str()), (0, ""));
         assert_eq!(
             out,
-            "\n  exuno release — bump the version, commit, tag, and push\n\n  USAGE\n    exuno release [major|minor|patch] [--no-push]\n\n  DESCRIPTION\n    Bumps VERSION, Cargo.toml, and Cargo.lock together, commits, tags with\n    the changelog section of the new version, and pushes main and the tag.\n    Runs from the Exuno repository checkout, or from AGENTSYNC_HOME when\n    that holds one.\n\n  ARGUMENTS\n    major   Bump the major version (x+1.0.0)\n    minor   Bump the minor version (x.y+1.0)\n    patch   Bump the patch version (x.y.z+1); the default\n\n  OPTIONS\n    --no-push    Commit and tag locally without pushing to origin\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno release\n    exuno release minor\n    exuno release major --no-push\n\n"
+            "\n  exuno release — bump the version, commit, tag, and push\n\n  USAGE\n    exuno release [major|minor|patch] [--no-push]\n\n  DESCRIPTION\n    Bumps VERSION, Cargo.toml, and Cargo.lock together, commits, tags with\n    the changelog section of the new version, and pushes main and the tag.\n    Runs from the Exuno repository checkout, or from EXUNO_HOME when\n    that holds one.\n\n  ARGUMENTS\n    major   Bump the major version (x+1.0.0)\n    minor   Bump the minor version (x.y+1.0)\n    patch   Bump the patch version (x.y.z+1); the default\n\n  OPTIONS\n    --no-push    Commit and tag locally without pushing to origin\n    -h, --help   Show this help\n\n  EXAMPLES\n    exuno release\n    exuno release minor\n    exuno release major --no-push\n\n"
         );
         std::fs::write(root.join("dirty.txt"), "x\n").unwrap();
         let (status, out, err) = run(&["patch", "--no-push"], &root, None, Some("y"));

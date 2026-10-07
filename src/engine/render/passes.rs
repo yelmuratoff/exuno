@@ -295,13 +295,13 @@ fn run_post_sync_hook(
     }
     if run.skip_post_sync {
         s.log.info(&format!(
-            "Skipping post-sync hook for {display} (AGENTSYNC_SKIP_POST_SYNC=true)"
+            "Skipping post-sync hook for {display} (EXUNO_SKIP_POST_SYNC=true)"
         ));
         return Ok(true);
     }
     if !run.allow_post_sync {
         s.log.warning(&format!(
-            "Skipping post-sync hook for {display} (set AGENTSYNC_ALLOW_POST_SYNC=true to enable)"
+            "Skipping post-sync hook for {display} (set EXUNO_ALLOW_POST_SYNC=true to enable)"
         ));
         return Ok(true);
     }

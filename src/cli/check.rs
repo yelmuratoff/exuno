@@ -29,7 +29,7 @@ pub const HELP: Help = Help {
     description: &[
         "Renders what exuno sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, and outputs no longer\ngenerated. Nothing on disk is written.",
         "The report goes to stdout so a hook or CI step can read it; the exit\nstatus carries the verdict, following grep's shape.",
-        "Honours AGENTSYNC_CONFIG_PATH for the project config and\nAGENTSYNC_REPO_ROOT for the project root, as exuno sync does.",
+        "Honours EXUNO_CONFIG_PATH for the project config and\nEXUNO_REPO_ROOT for the project root, as exuno sync does.",
     ],
     sections: &[
         Section {
@@ -530,7 +530,7 @@ mod tests {
             Report {
                 stdout: String::new(),
                 stderr: format!(
-                    "✗ AGENTSYNC_CONFIG_PATH is set but file not found: {root}/missing.yaml\n"
+                    "✗ EXUNO_CONFIG_PATH is set but file not found: {root}/missing.yaml\n"
                 ),
                 status: 1,
             }

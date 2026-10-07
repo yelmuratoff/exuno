@@ -681,7 +681,7 @@ mod tests {
         assert_eq!(
             String::from_utf8(err).unwrap(),
             format!(
-                "Error: AGENTSYNC_CONFIG_PATH is set but file not found: {root}/missing.yaml\n"
+                "Error: EXUNO_CONFIG_PATH is set but file not found: {root}/missing.yaml\n"
             )
         );
     }

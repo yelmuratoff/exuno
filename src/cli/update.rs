@@ -505,7 +505,7 @@ impl Download<'_, '_> {
         let tag_url = format!("https://api.github.com/repos/{REPO}/git/ref/tags/{tag}");
         match (self.env.fetch)(&tag_url, &probe) {
             Ok(200) => format!(
-                "Exuno {tag} predates the binary releases, so update cannot install it.\n  {}\n    AGENTSYNC_VERSION={tag} curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash",
+                "Exuno {tag} predates the binary releases, so update cannot install it.\n  {}\n    EXUNO_VERSION={tag} curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | bash",
                 style.dim("Pin it with the installer instead:")
             ),
             _ => format!(
@@ -1109,7 +1109,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(
             err,
-            "  Error: Exuno 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    AGENTSYNC_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n"
+            "  Error: Exuno 0.1.0 predates the binary releases, so update cannot install it.\n  Pin it with the installer instead:\n    EXUNO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash\n"
         );
         fixture.publish("9.9.9");
         let target = target().unwrap();

@@ -430,7 +430,7 @@ fn retention_invalid_explicit_config_rejects_init_and_rollback_without_fallback(
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "AGENTSYNC_CONFIG_PATH is set but file not found",
+            "EXUNO_CONFIG_PATH is set but file not found",
         ));
     assert_eq!(snapshot_tree(project.path()), before);
     project
@@ -440,7 +440,7 @@ fn retention_invalid_explicit_config_rejects_init_and_rollback_without_fallback(
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "AGENTSYNC_CONFIG_PATH is set but file not found",
+            "EXUNO_CONFIG_PATH is set but file not found",
         ));
     assert_eq!(snapshot_tree(project.path()), before);
 }

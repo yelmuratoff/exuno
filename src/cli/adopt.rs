@@ -540,7 +540,7 @@ pub fn adopt(
             put(
                 err,
                 format!(
-                    "{}: AGENTSYNC_CONFIG_PATH is set but file not found: {}\n",
+                    "{}: EXUNO_CONFIG_PATH is set but file not found: {}\n",
                     style.red("Error"),
                     path.disk_text()
                 )

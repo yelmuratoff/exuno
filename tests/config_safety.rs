@@ -27,7 +27,7 @@ fn an_invalid_explicit_config_path_fails_without_falling_back_or_mutating_output
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "AGENTSYNC_CONFIG_PATH is set but file not found",
+            "EXUNO_CONFIG_PATH is set but file not found",
         ))
         .stderr(predicate::str::contains("falling back").not());
     assert!(project.exists(".claude/skills/config-safety-sentinel.md"));
@@ -142,7 +142,7 @@ fn check_rejects_an_invalid_explicit_config_path_instead_of_using_the_local_conf
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "AGENTSYNC_CONFIG_PATH is set but file not found",
+            "EXUNO_CONFIG_PATH is set but file not found",
         ));
 }
 
@@ -156,7 +156,7 @@ fn read_only_commands_reject_an_invalid_explicit_config_path_instead_of_using_th
         .success();
     let missing_config = project.join("missing-agent-sync.yaml");
     let expected = format!(
-        "AGENTSYNC_CONFIG_PATH is set but file not found: {}",
+        "EXUNO_CONFIG_PATH is set but file not found: {}",
         common::engine_path(&missing_config)
     );
 
