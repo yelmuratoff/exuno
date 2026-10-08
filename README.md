@@ -287,8 +287,8 @@ exuno <command> [options]
 | `generate [context]`     | `gen` | Print AI prompt for project-specific config generation                                         |
 | `setup-hooks`            |       | Install the git hooks that suit the project's `outputs:` mode (`--pre-commit` in `local` mode)  |
 | `shell-init [zsh\|bash]` |       | Print a shell hook that auto-syncs the nearest project on directory change                      |
-| `export`                 |       | Bundle `.ai/src/` into a shareable archive                                                      |
-| `import <src>`           |       | Import config from a GitHub repo, archive, or directory                                         |
+| `export`                 |       | Bundle `.ai/src/` into a shareable archive; `--skill <name>` packages one skill as `.skill`     |
+| `import <src>`           |       | Import config or skills from a GitHub repo, `.tar.gz`/`.zip`/`.skill` archive, or directory     |
 | `list`                   | `ls`  | Show configured tools and status                                                               |
 | `skills list\|show\|check` |     | Inspect effective project skills and check their `SKILL.md` metadata (`--profile <name>`)     |
 | `mcp list\|show\|validate\|render\|use` |     | Inspect a selected offline MCP catalog or prepare a per-tool source without running servers     |

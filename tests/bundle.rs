@@ -343,7 +343,7 @@ fn import_refuses_a_source_without_ai() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "No .ai/src/ (or .ai/) directory found in source.",
+            "No .ai/src/ (or .ai/) directory or SKILL.md found in source.",
         ));
 }
 
@@ -408,4 +408,338 @@ fn import_reports_a_branch_that_cannot_be_downloaded() {
         .stderr(predicate::str::contains(
             "Failed to download branch 'nope'.",
         ));
+}
+
+const JURY: &str = "---\nname: jury\ndescription: Judge a submission.\n---\n# Jury\n";
+
+fn zip_entry(path: &str, data: &str, executable: bool) -> exuno::zip::Entry {
+    exuno::zip::Entry {
+        path: path.to_string(),
+        data: data.as_bytes().to_vec(),
+        executable,
+    }
+}
+
+fn write_zip(project: &Project, rel: &str, entries: &[exuno::zip::Entry]) {
+    std::fs::write(project.join(rel), exuno::zip::write(entries).unwrap()).unwrap();
+}
+
+#[test]
+fn import_installs_a_skill_package() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "jury.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("jury/scripts/run.sh", "#!/bin/sh\n", true),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (2 new)"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let script = project.join(".ai/src/skills/jury/scripts/run.sh");
+        let mode = std::fs::metadata(script).unwrap().permissions().mode();
+        assert_eq!(mode & 0o111, 0o111);
+    }
+}
+
+#[test]
+fn import_names_a_root_skill_by_its_frontmatter() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "Download (1).zip",
+        &[zip_entry("SKILL.md", JURY, false)],
+    );
+    project
+        .exuno()
+        .args(["import", "Download (1).zip"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+}
+
+#[test]
+fn import_names_a_root_skill_without_a_name_after_the_archive() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "plain-notes.ZIP",
+        &[zip_entry("SKILL.md", "# Notes\n", false)],
+    );
+    project
+        .exuno()
+        .args(["import", "plain-notes.ZIP"])
+        .assert()
+        .success();
+    assert_eq!(
+        project.read(".ai/src/skills/plain-notes/SKILL.md"),
+        "# Notes\n"
+    );
+}
+
+#[test]
+fn import_updates_a_skill_where_the_project_keeps_it() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/judging/jury/SKILL.md", "# Old\n");
+    write_zip(
+        &project,
+        "jury.skill",
+        &[zip_entry("jury/SKILL.md", JURY, false)],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (1 updated)"));
+    assert_eq!(project.read(".ai/src/skills/judging/jury/SKILL.md"), JURY);
+    assert!(!project.join(".ai/src/skills/jury").exists());
+}
+
+#[test]
+fn import_finds_skills_below_a_wrapping_folder() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "bundle.zip",
+        &[
+            zip_entry("my-skills/jury/SKILL.md", JURY, false),
+            zip_entry("my-skills/jury/.DS_Store", "finder", false),
+            zip_entry("__MACOSX/my-skills/jury/._SKILL.md", "fork", false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "bundle.zip"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (1 new)"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert!(!project.join(".ai/src/skills/jury/.DS_Store").exists());
+}
+
+#[test]
+fn import_reads_a_zip_bundle_of_ai_sources() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "config.zip",
+        &[zip_entry(".ai/src/rules/zipped.md", "# Zipped\n", false)],
+    );
+    project
+        .exuno()
+        .args(["import", "config.zip"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/zipped.md"), "# Zipped\n");
+}
+
+#[test]
+fn import_reads_an_uncompressed_tar() {
+    let project = Project::seeded(&[]);
+    project.write("staging/jury/SKILL.md", JURY);
+    let status = StdCommand::new("tar")
+        .arg("-cf")
+        .arg(project.join("jury.tar"))
+        .arg("-C")
+        .arg(project.join("staging"))
+        .arg("jury")
+        .status()
+        .unwrap();
+    assert!(status.success());
+    project
+        .exuno()
+        .args(["import", "jury.tar"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+}
+
+#[test]
+fn import_refuses_an_archive_entry_that_escapes() {
+    let project = Project::seeded(&[]);
+    std::fs::create_dir_all(project.join("inbox")).unwrap();
+    write_zip(
+        &project,
+        "inbox/evil.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("../escaped.md", "x", false),
+        ],
+    );
+    exuno_in(&project.join("inbox"))
+        .args(["import", "evil.skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Failed to extract archive: ../escaped.md: path escapes the archive root",
+        ));
+    assert!(!project.join("escaped.md").exists());
+    assert!(!project.join(".ai/src/skills/jury").exists());
+}
+
+#[test]
+fn import_installs_a_skill_folder() {
+    let project = Project::seeded(&[]);
+    project.write("incoming/jury/SKILL.md", JURY);
+    project.write("incoming/jury/scripts/run.sh", "#!/bin/sh\n");
+    project
+        .exuno()
+        .args(["import", "incoming/jury"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (2 new)"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert!(project.join(".ai/src/skills/jury/scripts/run.sh").is_file());
+}
+
+#[test]
+fn import_installs_the_skill_folders_below_a_directory() {
+    let project = Project::seeded(&[]);
+    project.write("shelf/judging/jury/SKILL.md", JURY);
+    project.write("shelf/notes/SKILL.md", "# Notes\n");
+    project.write("shelf/README.md", "not a skill\n");
+    project.exuno().args(["import", "shelf"]).assert().success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert_eq!(project.read(".ai/src/skills/notes/SKILL.md"), "# Notes\n");
+    assert!(!project.join(".ai/src/skills/README.md").exists());
+}
+
+#[test]
+fn import_refuses_two_skills_with_the_same_name() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "twins.zip",
+        &[
+            zip_entry("a/SKILL.md", JURY, false),
+            zip_entry("b/SKILL.md", JURY, false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "twins.zip"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Two skills in the source are named 'jury': a and b",
+        ));
+    assert!(!project.join(".ai/src/skills/jury").exists());
+}
+
+#[test]
+fn import_refuses_an_archive_past_the_size_limit_before_reading_it() {
+    let project = Project::seeded(&[]);
+    let file = std::fs::File::create(project.join("huge.skill")).unwrap();
+    file.set_len((256 << 20) + 1).unwrap();
+    project
+        .exuno()
+        .args(["import", "huge.skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Failed to extract archive: larger than 256 MB",
+        ));
+}
+
+#[test]
+fn import_reports_a_corrupt_zip() {
+    let project = Project::seeded(&[]);
+    project.write("broken.skill", "not a zip\n");
+    project
+        .exuno()
+        .args(["import", "broken.skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Failed to extract archive: not a ZIP archive",
+        ));
+}
+
+#[test]
+fn export_skill_packages_one_skill_as_a_skill_archive() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/judging/jury/SKILL.md", JURY);
+    project.write(".ai/src/skills/judging/jury/references/rubric.md", "# R\n");
+    project
+        .exuno()
+        .args(["export", "--skill", "jury"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("• jury/ (2 files)"))
+        .stdout(predicate::str::contains("Exported! → "));
+    let entries = exuno::zip::read(&std::fs::read(project.join("jury.skill")).unwrap()).unwrap();
+    let paths: Vec<&str> = entries.iter().map(|entry| entry.path.as_str()).collect();
+    assert_eq!(paths, ["jury/SKILL.md", "jury/references/rubric.md"]);
+    assert_eq!(entries[0].data, JURY.as_bytes());
+}
+
+#[test]
+fn export_skill_dry_run_writes_nothing() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", JURY);
+    project
+        .exuno()
+        .args(["export", "--skill", "jury", "--dry-run", "-o", "out.skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Would create: out.skill"));
+    assert!(!project.join("out.skill").exists());
+}
+
+#[test]
+fn an_exported_skill_imports_into_another_project() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", JURY);
+    project.write(".ai/src/skills/jury/scripts/run.sh", "#!/bin/sh\n");
+    project
+        .exuno()
+        .args(["export", "--skill", "jury"])
+        .assert()
+        .success();
+    let other = Project::seeded(&[]);
+    other
+        .exuno()
+        .args(["import", &project.join("jury.skill").to_string_lossy()])
+        .assert()
+        .success();
+    assert_eq!(other.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert_eq!(
+        other.read(".ai/src/skills/jury/scripts/run.sh"),
+        "#!/bin/sh\n"
+    );
+}
+
+#[test]
+fn export_skill_refuses_an_unknown_skill() {
+    Project::seeded(&[])
+        .exuno()
+        .args(["export", "--skill", "nope"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("Skill not found: nope"));
+}
+
+#[test]
+fn export_skill_refuses_frontmatter_the_upload_would_reject() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", "---\nname: jury\n---\n");
+    project
+        .exuno()
+        .args(["export", "--skill", "jury"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            ".ai/src/skills/jury/SKILL.md: description must be 1–1024 characters",
+        ));
+    assert!(!project.join("jury.skill").exists());
 }

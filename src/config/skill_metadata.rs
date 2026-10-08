@@ -37,6 +37,16 @@ pub fn description(bytes: &[u8]) -> Option<String> {
         .filter(|description| !description.is_empty())
 }
 
+/// The `name` a `SKILL.md` declares; `None` when it declares none or cannot
+/// be read. Checks nothing else.
+pub fn name(bytes: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    field(&frontmatter(text).ok()?, "name")
+        .ok()
+        .flatten()
+        .filter(|name| !name.is_empty())
+}
+
 pub fn read(bytes: &[u8], directory: &str) -> Result<SkillMetadata, String> {
     let text = std::str::from_utf8(bytes).map_err(|_| "SKILL.md is not UTF-8".to_string())?;
     let frontmatter = frontmatter(text)?;
@@ -217,6 +227,16 @@ mod tests {
         assert_eq!(card.use_when.as_deref(), Some("Changes need review"));
         assert_eq!(card.not_for.as_deref(), Some("Writing code"));
         assert_eq!(card.requirements.as_deref(), Some("A selected diff"));
+    }
+
+    #[test]
+    fn name_reads_the_declared_name_alone() {
+        assert_eq!(
+            name(b"---\nname: \"jury\"\n---\n# Jury\n").as_deref(),
+            Some("jury")
+        );
+        assert_eq!(name(b"---\ndescription: x\n---\n"), None);
+        assert_eq!(name(b"# No frontmatter\n"), None);
     }
 
     #[test]

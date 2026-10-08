@@ -42,6 +42,7 @@ src/transaction/               → what makes a mutating run restorable:
   interrupt.rs                                     signal traps a transaction arms.
 src/output/                    → log.rs / style.rs / prompts.rs / changelog.rs: engine log voice, command colours, terminal prompts, changelog rendering.
 src/paths.rs / text.rs         → containment, drive-aware `/`-separated paths; byte-level line and whitespace handling.
+src/zip.rs                     → ZIP read and deterministic write for `.skill` packages and `.zip` imports.
 src/project.rs                 → the project being operated on: its root and `exuno.yaml`.
 src/error.rs                   → the single error type; `main` maps variants to messages and exit codes.
 src/lib.rs                     → the library root: the group list and the test that pins the crate version to `VERSION`.

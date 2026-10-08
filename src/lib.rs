@@ -13,6 +13,7 @@ pub mod paths;
 pub mod project;
 pub mod text;
 pub mod transaction;
+pub mod zip;
 
 pub use error::Error;
 
