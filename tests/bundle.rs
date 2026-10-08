@@ -118,7 +118,7 @@ fn import_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. Every import is backed up first, so\n    exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    -b, --branch <name>   "))
         .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));
@@ -599,6 +599,69 @@ fn a_failed_import_restores_what_it_already_wrote() {
     assert_eq!(project.read(".ai/src/skills/jury/old.md"), "# Dropped\n");
     assert!(!locked.join("new.md").exists());
     common::chmod(&locked, 0o755);
+}
+
+#[test]
+fn import_moves_a_skill_the_bundle_keeps_in_another_category() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/judging/jury/SKILL.md", "# Old\n");
+    project.write(".ai/src/skills/judging/jury/extra.md", "# Extra\n");
+    project.write("other/.ai/src/skills/panel/jury/SKILL.md", JURY);
+    project
+        .exuno()
+        .args(["import", "other", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "- skills/judging/jury/extra.md (removed)",
+        ));
+    assert_eq!(project.read(".ai/src/skills/panel/jury/SKILL.md"), JURY);
+    assert!(!project.join(".ai/src/skills/judging").exists());
+}
+
+#[test]
+fn import_turns_a_skill_file_into_a_folder() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", "# Old\n");
+    project.write(".ai/src/skills/jury/references", "a file\n");
+    write_zip(
+        &project,
+        "jury.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("jury/references/x.md", "# X\n", false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/skills/jury/references/x.md"), "# X\n");
+}
+
+#[test]
+fn import_turns_a_skill_folder_into_a_file() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", "# Old\n");
+    project.write(".ai/src/skills/jury/references/a.md", "# A\n");
+    write_zip(
+        &project,
+        "jury.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("jury/references", "now a file\n", false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .success();
+    assert_eq!(
+        project.read(".ai/src/skills/jury/references"),
+        "now a file\n"
+    );
 }
 
 #[test]

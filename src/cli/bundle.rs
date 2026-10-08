@@ -15,6 +15,7 @@ use super::{files_below, put};
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
+use crate::transaction::interrupt::{self, Interrupt};
 use crate::transaction::{backup, witness};
 use crate::{Error, config::names, config::skill_metadata, config::yaml_subset};
 
@@ -467,7 +468,7 @@ pub const IMPORT_HELP: Help = Help {
     tagline: "import config from GitHub, archive, or directory",
     synopsis: &["import <source> [OPTIONS]"],
     description: &[
-        "An imported skill replaces the project's copy whole: files the new\nversion no longer has are removed. Every import is backed up first, so\nexuno rollback undoes it.",
+        "An imported skill replaces the project's copy whole: files the new\nversion no longer has are removed. An import that changes files is\nbacked up first, so exuno rollback undoes it.",
     ],
     sections: &[
         Section {
@@ -812,26 +813,40 @@ impl Diff {
         self.counts.updated += updated;
     }
 
-    /// The files of each skill below `dest` that the skill of the same place
-    /// below `src` no longer has: a skill is replaced as a whole.
+    /// The installed files each skill below `src` replaces: a skill is
+    /// replaced as a whole, and by name, so a copy the project keeps under
+    /// another category goes entirely.
     fn dropped_skill_files(&mut self, src: &Path, dest: &Path, label: &str) {
         let src_text = src.disk_text();
+        let dest_text = dest.disk_text();
         let incoming = skill_tree::discover(&Workspace::on_disk(&src_text), &src_text).skills;
-        for skill in incoming {
-            let installed = dest.join(&skill.rel);
-            let mut files = Vec::new();
-            files_below(&installed, &mut files);
-            files.sort();
-            for file in files {
-                let rel = file.strip_prefix(&installed).unwrap_or(&file);
-                if src.join(&skill.rel).join(rel).is_file() {
-                    continue;
-                }
-                let shown = format!("{label}/{}/{}", skill.rel, rel.disk_text());
-                self.changes.push(Change::Remove(shown));
-                self.counts.removed += 1;
-                self.removals.push(file);
+        let installed = skill_tree::discover(&Workspace::on_disk(&dest_text), &dest_text).skills;
+        for skill in &incoming {
+            let kept = src.join(&skill.rel);
+            self.drop_missing(&dest.join(&skill.rel), &skill.rel, Some(&kept), label);
+            for moved in installed
+                .iter()
+                .filter(|copy| copy.name == skill.name && copy.rel != skill.rel)
+            {
+                self.drop_missing(&dest.join(&moved.rel), &moved.rel, None, label);
             }
+        }
+    }
+
+    /// Every file below `installed` that `kept` lacks, or all of them.
+    fn drop_missing(&mut self, installed: &Path, rel: &str, kept: Option<&Path>, label: &str) {
+        let mut files = Vec::new();
+        files_below(installed, &mut files);
+        files.sort();
+        for file in files {
+            let inner = file.strip_prefix(installed).unwrap_or(&file);
+            if kept.is_some_and(|kept| kept.join(inner).is_file()) {
+                continue;
+            }
+            let shown = format!("{label}/{rel}/{}", inner.disk_text());
+            self.changes.push(Change::Remove(shown));
+            self.counts.removed += 1;
+            self.removals.push(file);
         }
     }
 }
@@ -1317,15 +1332,18 @@ fn plan_text(style: &Style, plan: &ImportPlan, dry_run: bool) -> String {
     text
 }
 
-fn apply_import(plan: &ImportPlan) -> Result<(), Error> {
-    for (src, dest) in &plan.diff.writes {
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-        }
-        copy_file(src, dest)?;
-    }
+/// Applies `plan`, removals first so a path that turns from a file into a
+/// folder, or back, is free when its write comes. `Some(signal)` once
+/// `interrupted` reports one between two steps, the rest left undone.
+fn apply_import(
+    plan: &ImportPlan,
+    interrupted: &dyn Fn() -> Option<i32>,
+) -> Result<Option<i32>, Error> {
     let skills = plan.dest_base.join("skills");
     for file in &plan.diff.removals {
+        if let Some(signal) = interrupted() {
+            return Ok(Some(signal));
+        }
         std::fs::remove_file(file).map_err(|e| Error::io(file, e))?;
         let mut dir = file.parent();
         while let Some(parent) = dir.filter(|parent| *parent != skills.as_path()) {
@@ -1335,26 +1353,50 @@ fn apply_import(plan: &ImportPlan) -> Result<(), Error> {
             dir = parent.parent();
         }
     }
-    if plan.config_action.is_empty() {
-        return Ok(());
+    for (src, dest) in &plan.diff.writes {
+        if let Some(signal) = interrupted() {
+            return Ok(Some(signal));
+        }
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+        }
+        copy_file(src, dest)?;
     }
-    let Some(imported) = &plan.imported_config else {
-        return Ok(());
+    if let Some(signal) = interrupted() {
+        return Ok(Some(signal));
+    }
+    let Some(imported) = plan
+        .imported_config
+        .as_ref()
+        .filter(|_| !plan.config_action.is_empty())
+    else {
+        return Ok(None);
     };
     if let Some(parent) = plan.config_dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
-    std::fs::write(&plan.config_dest, imported).map_err(|e| Error::io(&plan.config_dest, e))
+    std::fs::write(&plan.config_dest, imported).map_err(|e| Error::io(&plan.config_dest, e))?;
+    Ok(None)
 }
 
-/// Every project-relative path `plan` writes or removes.
+/// Every project-relative path `plan` writes or removes; a write below a
+/// removed file is covered by that file's entry.
 fn backup_targets(root: &str, plan: &ImportPlan) -> Vec<String> {
-    let mut changed: Vec<&Path> = plan
-        .diff
-        .writes
+    let removals = &plan.diff.removals;
+    let mut changed: Vec<&Path> = removals
         .iter()
-        .map(|(_, dest)| dest.as_path())
-        .chain(plan.diff.removals.iter().map(PathBuf::as_path))
+        .map(PathBuf::as_path)
+        .chain(
+            plan.diff
+                .writes
+                .iter()
+                .map(|(_, dest)| dest.as_path())
+                .filter(|dest| {
+                    !removals
+                        .iter()
+                        .any(|removed| dest.starts_with(removed) && dest != removed)
+                }),
+        )
         .collect();
     if !plan.config_action.is_empty() {
         changed.push(&plan.config_dest);
@@ -1365,10 +1407,23 @@ fn backup_targets(root: &str, plan: &ImportPlan) -> Vec<String> {
         .collect()
 }
 
+/// How a backed-up import ended.
+enum Applied {
+    /// Sealed under this snapshot id.
+    Done(String),
+    /// Stopped by this signal and restored; the caller re-raises it.
+    Interrupted(i32),
+}
+
 /// Applies `plan` inside an `import` backup of every path it touches, as
-/// `sync` and `mcp` back up theirs: a failed write restores the project from
-/// it. The snapshot's id once the import is sealed.
-fn apply_backed_up(root: &str, plan: &ImportPlan, err: &mut dyn Write) -> Result<String, Error> {
+/// `sync` and `mcp` back up theirs: a failed write, or a signal `interrupted`
+/// reports, restores the project from it.
+fn apply_backed_up(
+    root: &str,
+    plan: &ImportPlan,
+    err: &mut dyn Write,
+    interrupted: &dyn Fn() -> Option<i32>,
+) -> Result<Applied, Error> {
     let config = present_config(Path::new(root)).and_then(|rel| {
         Some((
             rel,
@@ -1385,18 +1440,28 @@ fn apply_backed_up(root: &str, plan: &ImportPlan, err: &mut dyn Write) -> Result
     )?;
     let snapshot = backup::create(root, "import", &backup_targets(root, plan), retention)?;
     let id = crate::paths::leaf(&snapshot);
-    if let Err(error) = apply_import(plan) {
+    let stopped = match apply_import(plan, interrupted) {
+        Ok(None) => None,
+        Ok(Some(signal)) => Some(Ok(signal)),
+        Err(error) => Some(Err(error)),
+    };
+    if let Some(stopped) = stopped {
+        let cause = if stopped.is_ok() {
+            "interrupted"
+        } else {
+            "failed"
+        };
         let note = match backup::restore(root, &snapshot) {
             Ok(()) => {
                 let _ = witness::seal(root, &snapshot);
-                format!("  Import failed; restored the project from backup {id}.\n")
+                format!("  Import {cause}; restored the project from backup {id}.\n")
             }
             Err(restore) => format!(
-                "  Automatic restore failed ({restore}). Backup retained at .ai/backups/{id}\n"
+                "  Import {cause}; automatic restore failed ({restore}). Backup retained at .ai/backups/{id}\n"
             ),
         };
         put(err, note.as_bytes())?;
-        return Err(error);
+        return stopped.map(Applied::Interrupted);
     }
     if let Err(reason) = witness::seal(root, &snapshot) {
         let text = format!("  Warning: Could not record the import backup state: {reason}\n");
@@ -1408,7 +1473,7 @@ fn apply_backed_up(root: &str, plan: &ImportPlan, err: &mut dyn Write) -> Result
             format!("  Warning: Could not prune backups: {error}\n").as_bytes(),
         )?;
     }
-    Ok(id)
+    Ok(Applied::Done(id))
 }
 
 /// `cmd_import`.
@@ -1506,7 +1571,15 @@ pub fn import(
             return Ok(0);
         }
     }
-    let backup_id = apply_backed_up(root, &plan, importer.err)?;
+    let mut interrupt = Interrupt::arm();
+    let backup_id = match apply_backed_up(root, &plan, importer.err, &|| interrupt.received())? {
+        Applied::Done(id) => id,
+        Applied::Interrupted(signal) => {
+            interrupt.resend(signal);
+            return Ok(interrupt::status(signal));
+        }
+    };
+    drop(interrupt);
     put(
         importer.out,
         format!(
@@ -1539,7 +1612,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. Every import is backed up first, so\n    exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
@@ -1634,6 +1707,34 @@ mod tests {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn a_signal_between_two_steps_restores_the_project() {
+        let project = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(project.path()).unwrap().disk_text();
+        write(project.path(), ".ai/src/skills/jury/SKILL.md", "# Old\n");
+        write(project.path(), ".ai/src/skills/jury/old.md", "# Dropped\n");
+        let source = tempfile::tempdir().unwrap();
+        write(source.path(), ".ai/src/skills/jury/SKILL.md", "# New\n");
+        let plan = plan_import(&root, source.path().join(".ai/src"), "");
+        assert_eq!(plan.diff.removals.len(), 1);
+        let steps = std::cell::Cell::new(0);
+        let after_one_step = || {
+            steps.set(steps.get() + 1);
+            (steps.get() > 1).then_some(2)
+        };
+        let mut err = Vec::new();
+        let applied = apply_backed_up(&root, &plan, &mut err, &after_one_step).unwrap();
+        assert!(matches!(applied, Applied::Interrupted(2)));
+        assert!(
+            String::from_utf8(err)
+                .unwrap()
+                .contains("Import interrupted; restored")
+        );
+        let read = |rel: &str| std::fs::read_to_string(project.path().join(rel)).unwrap();
+        assert_eq!(read(".ai/src/skills/jury/SKILL.md"), "# Old\n");
+        assert_eq!(read(".ai/src/skills/jury/old.md"), "# Dropped\n");
     }
 
     /// The four-file project of `tiny_probe.sh`.
