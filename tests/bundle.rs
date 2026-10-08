@@ -343,7 +343,7 @@ fn import_refuses_a_source_without_ai() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
-            "No .ai/src/ (or .ai/) directory found in source.",
+            "No .ai/src/ (or .ai/) directory or SKILL.md found in source.",
         ));
 }
 
@@ -407,5 +407,196 @@ fn import_reports_a_branch_that_cannot_be_downloaded() {
         .code(1)
         .stderr(predicate::str::contains(
             "Failed to download branch 'nope'.",
+        ));
+}
+
+const JURY: &str = "---\nname: jury\ndescription: Judge a submission.\n---\n# Jury\n";
+
+fn zip_entry(path: &str, data: &str, executable: bool) -> exuno::zip::Entry {
+    exuno::zip::Entry {
+        path: path.to_string(),
+        data: data.as_bytes().to_vec(),
+        executable,
+    }
+}
+
+fn write_zip(project: &Project, rel: &str, entries: &[exuno::zip::Entry]) {
+    std::fs::write(project.join(rel), exuno::zip::write(entries).unwrap()).unwrap();
+}
+
+#[test]
+fn import_installs_a_skill_package() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "jury.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("jury/scripts/run.sh", "#!/bin/sh\n", true),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (2 new)"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let script = project.join(".ai/src/skills/jury/scripts/run.sh");
+        let mode = std::fs::metadata(script).unwrap().permissions().mode();
+        assert_eq!(mode & 0o111, 0o111);
+    }
+}
+
+#[test]
+fn import_names_a_root_skill_by_its_frontmatter() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "Download (1).zip",
+        &[zip_entry("SKILL.md", JURY, false)],
+    );
+    project
+        .exuno()
+        .args(["import", "Download (1).zip"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+}
+
+#[test]
+fn import_names_a_root_skill_without_a_name_after_the_archive() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "plain-notes.ZIP",
+        &[zip_entry("SKILL.md", "# Notes\n", false)],
+    );
+    project
+        .exuno()
+        .args(["import", "plain-notes.ZIP"])
+        .assert()
+        .success();
+    assert_eq!(
+        project.read(".ai/src/skills/plain-notes/SKILL.md"),
+        "# Notes\n"
+    );
+}
+
+#[test]
+fn import_updates_a_skill_where_the_project_keeps_it() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/judging/jury/SKILL.md", "# Old\n");
+    write_zip(
+        &project,
+        "jury.skill",
+        &[zip_entry("jury/SKILL.md", JURY, false)],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (1 updated)"));
+    assert_eq!(project.read(".ai/src/skills/judging/jury/SKILL.md"), JURY);
+    assert!(!project.join(".ai/src/skills/jury").exists());
+}
+
+#[test]
+fn import_finds_skills_below_a_wrapping_folder() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "bundle.zip",
+        &[
+            zip_entry("my-skills/jury/SKILL.md", JURY, false),
+            zip_entry("my-skills/jury/.DS_Store", "finder", false),
+            zip_entry("__MACOSX/my-skills/jury/._SKILL.md", "fork", false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "bundle.zip"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (1 new)"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert!(!project.join(".ai/src/skills/jury/.DS_Store").exists());
+}
+
+#[test]
+fn import_reads_a_zip_bundle_of_ai_sources() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "config.zip",
+        &[zip_entry(".ai/src/rules/zipped.md", "# Zipped\n", false)],
+    );
+    project
+        .exuno()
+        .args(["import", "config.zip"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/zipped.md"), "# Zipped\n");
+}
+
+#[test]
+fn import_reads_an_uncompressed_tar() {
+    let project = Project::seeded(&[]);
+    project.write("staging/jury/SKILL.md", JURY);
+    let status = StdCommand::new("tar")
+        .arg("-cf")
+        .arg(project.join("jury.tar"))
+        .arg("-C")
+        .arg(project.join("staging"))
+        .arg("jury")
+        .status()
+        .unwrap();
+    assert!(status.success());
+    project
+        .exuno()
+        .args(["import", "jury.tar"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+}
+
+#[test]
+fn import_refuses_an_archive_entry_that_escapes() {
+    let project = Project::seeded(&[]);
+    std::fs::create_dir_all(project.join("inbox")).unwrap();
+    write_zip(
+        &project,
+        "inbox/evil.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("../escaped.md", "x", false),
+        ],
+    );
+    exuno_in(&project.join("inbox"))
+        .args(["import", "evil.skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Failed to extract archive: ../escaped.md: path escapes the archive root",
+        ));
+    assert!(!project.join("escaped.md").exists());
+    assert!(!project.join(".ai/src/skills/jury").exists());
+}
+
+#[test]
+fn import_reports_a_corrupt_zip() {
+    let project = Project::seeded(&[]);
+    project.write("broken.skill", "not a zip\n");
+    project
+        .exuno()
+        .args(["import", "broken.skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Failed to extract archive: not a ZIP archive",
         ));
 }
