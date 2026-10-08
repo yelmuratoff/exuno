@@ -118,7 +118,7 @@ fn import_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. Every import is backed up first, so\n    exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
         ))
         .stdout(predicate::str::contains("\n  OPTIONS\n    -b, --branch <name>   "))
         .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));
@@ -484,6 +484,139 @@ fn import_names_a_root_skill_without_a_name_after_the_archive() {
         project.read(".ai/src/skills/plain-notes/SKILL.md"),
         "# Notes\n"
     );
+}
+
+/// A project holding `jury` with a file the next version drops, and that
+/// next version packaged as `jury.skill`.
+fn project_with_an_outdated_jury() -> Project {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", "# Old\n");
+    project.write(".ai/src/skills/jury/references/old.md", "# Dropped\n");
+    write_zip(
+        &project,
+        "jury.skill",
+        &[zip_entry("jury/SKILL.md", JURY, false)],
+    );
+    project
+}
+
+#[test]
+fn import_removes_files_the_newer_skill_version_dropped() {
+    let project = project_with_an_outdated_jury();
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "- skills/jury/references/old.md (removed)",
+        ))
+        .stdout(predicate::str::contains("1 updated, 1 removed"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert!(
+        !project
+            .join(".ai/src/skills/jury/references/old.md")
+            .exists()
+    );
+}
+
+#[test]
+fn import_dry_run_lists_removals_without_removing() {
+    let project = project_with_an_outdated_jury();
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "- skills/jury/references/old.md (removed)",
+        ))
+        .stdout(predicate::str::contains("Dry run"));
+    assert!(
+        project
+            .join(".ai/src/skills/jury/references/old.md")
+            .is_file()
+    );
+    let snapshots = std::fs::read_dir(project.join(".ai/backups")).unwrap();
+    assert!(
+        snapshots
+            .filter_map(Result::ok)
+            .all(|entry| !entry.file_name().to_string_lossy().contains("-import-"))
+    );
+}
+
+#[test]
+fn rollback_undoes_an_import() {
+    let project = project_with_an_outdated_jury();
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("undo with exuno rollback"));
+    project
+        .exuno()
+        .args(["rollback", "--yes"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), "# Old\n");
+    assert_eq!(
+        project.read(".ai/src/skills/jury/references/old.md"),
+        "# Dropped\n"
+    );
+}
+
+// `chmod` bits are POSIX, and root writes through a read-only directory.
+#[cfg(unix)]
+#[test]
+fn a_failed_import_restores_what_it_already_wrote() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/jury/SKILL.md", "# Old\n");
+    project.write(".ai/src/skills/jury/old.md", "# Dropped\n");
+    let locked = project.join(".ai/src/skills/jury/locked");
+    std::fs::create_dir_all(&locked).unwrap();
+    common::chmod(&locked, 0o555);
+    write_zip(
+        &project,
+        "jury.skill",
+        &[
+            zip_entry("jury/SKILL.md", JURY, false),
+            zip_entry("jury/locked/new.md", "# New\n", false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "jury.skill", "--force"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Import failed; restored the project from backup",
+        ));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), "# Old\n");
+    assert_eq!(project.read(".ai/src/skills/jury/old.md"), "# Dropped\n");
+    assert!(!locked.join("new.md").exists());
+    common::chmod(&locked, 0o755);
+}
+
+#[test]
+fn import_keeps_local_files_outside_the_imported_skills() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/rules/local.md", "# Local\n");
+    project.write(".ai/src/skills/mine/SKILL.md", "# Mine\n");
+    project.write("other/.ai/src/rules/other.md", "# Other\n");
+    project.write("other/.ai/src/skills/jury/SKILL.md", JURY);
+    project
+        .exuno()
+        .args(["import", "other", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed").not());
+    assert!(project.join(".ai/src/rules/local.md").is_file());
+    assert!(project.join(".ai/src/skills/mine/SKILL.md").is_file());
+    assert!(project.join(".ai/src/skills/jury/SKILL.md").is_file());
 }
 
 #[test]
