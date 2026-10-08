@@ -244,9 +244,11 @@ fn safe_path(name: &str) -> Result<String, String> {
 fn find_end(bytes: &[u8]) -> Option<usize> {
     let last = bytes.len().checked_sub(END_LEN)?;
     let first = last.saturating_sub(MAX_COMMENT);
-    (first..=last)
-        .rev()
-        .find(|&at| u32_at(bytes, at) == Some(END_OF_DIRECTORY))
+    (first..=last).rev().find(|&at| {
+        u32_at(bytes, at) == Some(END_OF_DIRECTORY)
+            && u16_at(bytes, at + 20)
+                .is_some_and(|comment| at + END_LEN + usize::from(comment) == bytes.len())
+    })
 }
 
 fn u16_at(bytes: &[u8], at: usize) -> Option<u16> {
@@ -372,6 +374,20 @@ mod tests {
         let len = bytes.len();
         bytes[len - 2..].copy_from_slice(&7u16.to_le_bytes());
         bytes.extend_from_slice(b"comment");
+        assert_eq!(read(&bytes).unwrap()[0].data, b"data");
+    }
+
+    #[test]
+    fn a_signature_inside_the_comment_is_not_taken_for_the_directory() {
+        let mut comment = END_OF_DIRECTORY.to_le_bytes().to_vec();
+        comment.extend_from_slice(&[0; 16]);
+        comment.extend_from_slice(&99u16.to_le_bytes());
+        comment.extend_from_slice(b"tail");
+        let mut bytes = write(&[entry("f", b"data", false)]).unwrap();
+        let len = bytes.len();
+        let comment_len = u16::try_from(comment.len()).unwrap();
+        bytes[len - 2..].copy_from_slice(&comment_len.to_le_bytes());
+        bytes.extend_from_slice(&comment);
         assert_eq!(read(&bytes).unwrap()[0].data, b"data");
     }
 

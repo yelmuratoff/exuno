@@ -588,6 +588,70 @@ fn import_refuses_an_archive_entry_that_escapes() {
 }
 
 #[test]
+fn import_installs_a_skill_folder() {
+    let project = Project::seeded(&[]);
+    project.write("incoming/jury/SKILL.md", JURY);
+    project.write("incoming/jury/scripts/run.sh", "#!/bin/sh\n");
+    project
+        .exuno()
+        .args(["import", "incoming/jury"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skills (2 new)"));
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert!(project.join(".ai/src/skills/jury/scripts/run.sh").is_file());
+}
+
+#[test]
+fn import_installs_the_skill_folders_below_a_directory() {
+    let project = Project::seeded(&[]);
+    project.write("shelf/judging/jury/SKILL.md", JURY);
+    project.write("shelf/notes/SKILL.md", "# Notes\n");
+    project.write("shelf/README.md", "not a skill\n");
+    project.exuno().args(["import", "shelf"]).assert().success();
+    assert_eq!(project.read(".ai/src/skills/jury/SKILL.md"), JURY);
+    assert_eq!(project.read(".ai/src/skills/notes/SKILL.md"), "# Notes\n");
+    assert!(!project.join(".ai/src/skills/README.md").exists());
+}
+
+#[test]
+fn import_refuses_two_skills_with_the_same_name() {
+    let project = Project::seeded(&[]);
+    write_zip(
+        &project,
+        "twins.zip",
+        &[
+            zip_entry("a/SKILL.md", JURY, false),
+            zip_entry("b/SKILL.md", JURY, false),
+        ],
+    );
+    project
+        .exuno()
+        .args(["import", "twins.zip"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Two skills in the source are named 'jury': a and b",
+        ));
+    assert!(!project.join(".ai/src/skills/jury").exists());
+}
+
+#[test]
+fn import_refuses_an_archive_past_the_size_limit_before_reading_it() {
+    let project = Project::seeded(&[]);
+    let file = std::fs::File::create(project.join("huge.skill")).unwrap();
+    file.set_len((256 << 20) + 1).unwrap();
+    project
+        .exuno()
+        .args(["import", "huge.skill"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Failed to extract archive: larger than 256 MB",
+        ));
+}
+
+#[test]
 fn import_reports_a_corrupt_zip() {
     let project = Project::seeded(&[]);
     project.write("broken.skill", "not a zip\n");

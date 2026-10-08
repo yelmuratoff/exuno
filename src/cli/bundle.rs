@@ -477,7 +477,7 @@ pub const IMPORT_HELP: Help = Help {
                 ),
                 (
                     "Skill package",
-                    "path/to/my-skill.skill, or an archive of skill folders",
+                    "path/to/my-skill.skill, or a folder or archive of skills",
                 ),
                 ("Local directory", "path/to/project/"),
             ],
@@ -611,29 +611,52 @@ fn find_ai_src(search_root: &Path) -> Option<PathBuf> {
         .find_map(|name| direct(&search_root.join(name)))
 }
 
-/// The skills of a source without `.ai/` — `SKILL.md` at its root, or skill
-/// directories below it — laid out under `<staged>/.ai/src/skills/` as an
-/// import of that tree. Each skill takes the name its `SKILL.md` declares
-/// and lands where the project already keeps a skill of that name; `None`
-/// when the source holds no skill.
+/// The skill directories of a tree without `.ai/`: the tree itself when
+/// `SKILL.md` sits at its root, named `stem`, else every skill folder below
+/// it, named by its folder.
+fn skill_dirs(tree: &Path, stem: &str) -> Vec<(PathBuf, String)> {
+    if tree.join("SKILL.md").is_file() {
+        return vec![(tree.to_path_buf(), stem.to_string())];
+    }
+    let tree_text = tree.disk_text();
+    skill_tree::discover(&Workspace::on_disk(&tree_text), &tree_text)
+        .skills
+        .into_iter()
+        .map(|skill| (tree.join(&skill.rel), skill.name))
+        .collect()
+}
+
+/// The skills of a source without `.ai/` laid out under
+/// `<staged>/.ai/src/skills/` as an import of that tree. Each skill takes the
+/// name its `SKILL.md` declares and lands where the project already keeps a
+/// skill of that name. `Ok(None)` when the source holds no skill; the inner
+/// `Err` names two skills of the source that share a name.
 fn stage_skills(
     root: &str,
     fetched: &Path,
     staged: &Path,
     source: &str,
-) -> Result<Option<PathBuf>, Error> {
-    let found: Vec<(PathBuf, String)> = if fetched.join("SKILL.md").is_file() {
-        vec![(fetched.to_path_buf(), source_stem(source))]
-    } else {
-        let fetched_text = fetched.disk_text();
-        skill_tree::discover(&Workspace::on_disk(&fetched_text), &fetched_text)
-            .skills
-            .into_iter()
-            .map(|skill| (fetched.join(&skill.rel), skill.name))
-            .collect()
-    };
+) -> Result<Result<Option<PathBuf>, String>, Error> {
+    let found = skill_dirs(fetched, &source_stem(source));
     if found.is_empty() {
-        return Ok(None);
+        return Ok(Ok(None));
+    }
+    let mut named: Vec<(PathBuf, String)> = Vec::new();
+    for (dir, fallback) in found {
+        let declared = std::fs::read(dir.join("SKILL.md"))
+            .ok()
+            .and_then(|bytes| skill_metadata::name(&bytes))
+            .filter(|name| skill_metadata::valid_name(name));
+        let name = declared.unwrap_or_else(|| skill_slug(&fallback));
+        if let Some((first, _)) = named.iter().find(|(_, taken)| *taken == name) {
+            let shown = |dir: &Path| dir.strip_prefix(fetched).unwrap_or(dir).disk_text();
+            return Ok(Err(format!(
+                "Two skills in the source are named '{name}': {} and {}",
+                shown(first),
+                shown(&dir)
+            )));
+        }
+        named.push((dir, name));
     }
     let base = match resolve_sources(root).base.as_str() {
         "" => ".ai/src".to_string(),
@@ -642,16 +665,11 @@ fn stage_skills(
     let existing =
         skill_tree::discover(&Workspace::on_disk(root), &format!("{root}/{base}/skills"));
     let skills_root = staged.join(".ai/src/skills");
-    for (dir, fallback) in found {
-        let declared = std::fs::read(dir.join("SKILL.md"))
-            .ok()
-            .and_then(|bytes| skill_metadata::name(&bytes))
-            .filter(|name| skill_metadata::valid_name(name));
-        let name = declared.unwrap_or_else(|| skill_slug(&fallback));
+    for (dir, name) in named {
         let rel = existing.find(&name).map_or(name, |skill| skill.rel.clone());
         copy_tree(&dir, &skills_root.join(rel))?;
     }
-    Ok(Some(staged.join(".ai/src")))
+    Ok(Ok(Some(staged.join(".ai/src"))))
 }
 
 /// `text` as a valid skill name: ASCII letters and digits lowercased, every
@@ -912,6 +930,16 @@ impl Importer<'_, '_> {
         let style = self.style;
         let base_name = source.rsplit('/').next().unwrap_or(source).to_string();
         self.say(&format!("  Extracting {}...\n", style.cyan(&base_name)))?;
+        let size = std::fs::metadata(source)
+            .map_err(|e| Error::io(source, e))?
+            .len();
+        let limit = crate::zip::MAX_EXPANDED;
+        if u64::try_from(limit).is_ok_and(|limit| size > limit) {
+            return self.fail(&format!(
+                "Failed to extract archive: larger than {} MB",
+                limit >> 20
+            ));
+        }
         let bytes = std::fs::read(source).map_err(|e| Error::io(source, e))?;
         let entries = match crate::zip::read(&bytes) {
             Ok(entries) => entries,
@@ -1021,6 +1049,11 @@ impl Importer<'_, '_> {
         let src_dir = Path::new(&shown);
         if src_dir.join(".ai").is_dir() {
             copy_tree(&src_dir.join(".ai"), &tmp.join(".ai"))?;
+        } else {
+            for (dir, _) in skill_dirs(src_dir, "") {
+                let rel = dir.strip_prefix(src_dir).unwrap_or(&dir);
+                copy_tree(&dir, &tmp.join(rel))?;
+            }
         }
         for (rel, _) in export_items(&shown, &resolve_sources(&shown), self.style) {
             let outside_ai = !rel.starts_with(".ai/")
@@ -1315,7 +1348,13 @@ pub fn import(
     )?;
     let src_root = match find_ai_src(&fetched) {
         Some(found) => Some(found),
-        None => stage_skills(root, &fetched, &tmp.join("staged"), &parsed.source)?,
+        None => match stage_skills(root, &fetched, &tmp.join("staged"), &parsed.source)? {
+            Ok(staged) => staged,
+            Err(message) => {
+                importer.fail(&message)?;
+                return Ok(1);
+            }
+        },
     };
     let Some(src_root) = src_root else {
         put(
@@ -1385,7 +1424,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or an archive of skill folders\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
