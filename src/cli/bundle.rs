@@ -1702,7 +1702,6 @@ mod tests {
         assert_eq!(human_size(None), "? B");
     }
 
-    #[cfg(unix)]
     fn write(root: &Path, rel: &str, text: &str) {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
