@@ -3,7 +3,7 @@
 //! bundle a project's sources into a `tar.gz` and bring a bundle, a directory,
 //! or a GitHub archive back in. Tar archives go through the `tar` and `curl`
 //! executables, as Bash ran them; ZIP archives and `.skill` packages through
-//! [`crate::zip`].
+//! [`crate::zip`], which `export --skill` also writes.
 
 use crate::paths::DiskText;
 use std::io::Write;
@@ -135,11 +135,20 @@ pub const EXPORT_HELP: Help = Help {
                 "-o, --output <path>",
                 "Output file path (default: ./exuno-bundle.tar.gz)",
             ),
+            (
+                "--skill <name>",
+                "Package one skill as ./<name>.skill (Claude skill upload)",
+            ),
             ("--dry-run", "Preview what would be exported"),
             ("-h, --help", "Show this help"),
         ],
     }],
-    examples: &["export", "export -o my-config.tar.gz", "export --dry-run"],
+    examples: &[
+        "export",
+        "export -o my-config.tar.gz",
+        "export --skill my-skill",
+        "export --dry-run",
+    ],
 };
 
 /// `stat -f%z` rendered as `cmd_export` prints it.
@@ -152,9 +161,19 @@ fn human_size(size: Option<u64>) -> String {
     }
 }
 
-/// `--output` (empty when not given) and `--dry-run`.
-fn parse_export(args: &[String]) -> Result<(String, bool), BundleStop> {
-    let (mut output, mut dry_run) = (String::new(), false);
+/// `export`'s options; `output` and `skill` are empty when not given.
+struct ExportArgs {
+    output: String,
+    dry_run: bool,
+    skill: String,
+}
+
+fn parse_export(args: &[String]) -> Result<ExportArgs, BundleStop> {
+    let mut parsed = ExportArgs {
+        output: String::new(),
+        dry_run: false,
+        skill: String::new(),
+    };
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -162,14 +181,20 @@ fn parse_export(args: &[String]) -> Result<(String, bool), BundleStop> {
                 let Some(value) = args.next() else {
                     return Err(refuse("--output requires a path".into(), false));
                 };
-                output = value.clone();
+                parsed.output = value.clone();
             }
-            "--dry-run" => dry_run = true,
+            "--skill" => {
+                let Some(value) = args.next() else {
+                    return Err(refuse("--skill requires a name".into(), false));
+                };
+                parsed.skill = value.clone();
+            }
+            "--dry-run" => parsed.dry_run = true,
             "--help" | "-h" => return Err(BundleStop::Help),
             other => return Err(refuse(format!("Unknown option: {other}"), true)),
         }
     }
-    Ok((output, dry_run))
+    Ok(parsed)
 }
 
 /// Each path the bundle archives, relative to `root`, with the label the
@@ -209,7 +234,11 @@ pub fn export(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> Result<u8, Error> {
-    let (mut output, dry_run) = match parse_export(args) {
+    let ExportArgs {
+        mut output,
+        dry_run,
+        skill,
+    } = match parse_export(args) {
         Ok(parsed) => parsed,
         Err(BundleStop::Help) => {
             put(out, EXPORT_HELP.render(style).as_bytes())?;
@@ -238,6 +267,14 @@ pub fn export(
             .as_bytes(),
         )?;
         return Ok(1);
+    }
+    if !skill.is_empty() {
+        let request = SkillExport {
+            name: &skill,
+            output: &output,
+            dry_run,
+        };
+        return export_skill(root, &sources, &request, style, out, err);
     }
     if output.is_empty() {
         output = format!("{root}/exuno-bundle.tar.gz");
@@ -292,6 +329,118 @@ pub fn export(
         return Ok(1);
     }
     put(out, exported_text(style, root, &output).as_bytes()).map(|()| 0)
+}
+
+struct SkillExport<'a> {
+    name: &'a str,
+    output: &'a str,
+    dry_run: bool,
+}
+
+/// `export --skill <name>`: the project's skill as a `.skill` package, a ZIP
+/// of `<name>/` as Claude's skill upload takes it. Refuses a skill whose
+/// `SKILL.md` frontmatter the upload would reject.
+fn export_skill(
+    root: &str,
+    sources: &Sources,
+    request: &SkillExport,
+    style: &Style,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> Result<u8, Error> {
+    let name = request.name;
+    let mut refuse_with = |message: String| -> Result<u8, Error> {
+        put(
+            err,
+            format!("{}: {message}\n", style.red("Error")).as_bytes(),
+        )?;
+        Ok(1)
+    };
+    let skills_rel = sources
+        .dirs
+        .iter()
+        .find(|(target, _)| *target == "skills")
+        .map_or("", |(_, path)| path.as_str());
+    let skills_root = Path::new(root).join(skills_rel).disk_text();
+    let found = (!skills_rel.is_empty())
+        .then(|| skill_tree::discover(&Workspace::on_disk(root), &skills_root))
+        .and_then(|tree| tree.find(name).cloned());
+    let Some(skill) = found else {
+        return refuse_with(format!("Skill not found: {name}"));
+    };
+    let dir = Path::new(&skills_root).join(&skill.rel);
+    let manifest = dir.join("SKILL.md");
+    let bytes = std::fs::read(&manifest).map_err(|e| Error::io(&manifest, e))?;
+    if let Err(reason) = skill_metadata::read(&bytes, name) {
+        return refuse_with(format!("{skills_rel}/{}/SKILL.md: {reason}", skill.rel));
+    }
+    let entries = skill_entries(&dir, name)?;
+    let output = if request.output.is_empty() {
+        format!("{root}/{name}.skill")
+    } else {
+        request.output.to_string()
+    };
+    put(
+        out,
+        format!(
+            "\n{}\n\n  {}\n    {} {name}/ ({} files)\n\n",
+            style.bold("  Exuno Export"),
+            style.green("Contents:"),
+            style.dim("•"),
+            entries.len()
+        )
+        .as_bytes(),
+    )?;
+    if request.dry_run {
+        let text = format!(
+            "  {} — no files written.\n  Would create: {}\n\n",
+            style.yellow("Dry run"),
+            style.cyan(&output)
+        );
+        return put(out, text.as_bytes()).map(|()| 0);
+    }
+    let archive = match crate::zip::write(&entries) {
+        Ok(archive) => archive,
+        Err(reason) => return refuse_with(format!("Failed to create archive: {reason}")),
+    };
+    let dest = if crate::paths::is_absolute(&output) {
+        PathBuf::from(&output)
+    } else {
+        Path::new(root).join(&output)
+    };
+    std::fs::write(&dest, archive).map_err(|e| Error::io(&dest, e))?;
+    put(out, exported_text(style, root, &output).as_bytes()).map(|()| 0)
+}
+
+/// Every regular file below `dir` as an archive entry under `<name>/`, in
+/// byte order so the package is reproducible.
+fn skill_entries(dir: &Path, name: &str) -> Result<Vec<crate::zip::Entry>, Error> {
+    let mut files = Vec::new();
+    files_below(dir, &mut files);
+    files.sort();
+    files
+        .iter()
+        .map(|file| {
+            let rel = file.strip_prefix(dir).unwrap_or(file).disk_text();
+            let meta = std::fs::metadata(file).map_err(|e| Error::io(file, e))?;
+            Ok(crate::zip::Entry {
+                path: format!("{name}/{rel}"),
+                data: std::fs::read(file).map_err(|e| Error::io(file, e))?,
+                executable: is_executable(&meta),
+            })
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+fn is_executable(meta: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_: &std::fs::Metadata) -> bool {
+    false
 }
 
 fn exported_text(style: &Style, root: &str, output: &str) -> String {
@@ -1228,7 +1377,7 @@ mod tests {
     fn export_help_has_the_shared_shape() {
         assert_eq!(
             EXPORT_HELP.render(&Style::plain()),
-            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./exuno-bundle.tar.gz)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --dry-run\n\n"
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./exuno-bundle.tar.gz)\n    --skill <name>        Package one skill as ./<name>.skill (Claude skill upload)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --skill my-skill\n    exuno export --dry-run\n\n"
         );
     }
 
