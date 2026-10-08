@@ -3,6 +3,7 @@
 //! tool config, and the revisions and hashes that tell an update from drift.
 
 pub mod catalog;
+pub mod command_surfaces;
 pub mod edit_paths;
 pub mod format_rev;
 pub mod leftovers;

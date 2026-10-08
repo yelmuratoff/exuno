@@ -29,6 +29,7 @@ src/config/                    → what a project and the engine declare:
   edit_paths.rs                                    where payload overrides are edited.
   mcp_catalog.rs                                   bounded, read-only MCP catalog manifests.
   skill_metadata.rs / skill_cards.rs / skill_source.rs  `SKILL.md` frontmatter, the skill-card TSV, the pinned Git blob behind a card.
+  command_surfaces.rs                              what a source has a tool run: MCP commands, hooks, skill scripts.
 src/engine/                    → the render:
   render/ / session.rs                             sync and check orchestration: prepare, per-tool passes, steps, checkpoint.
   overlay.rs / workspace.rs                        source overlays, the virtual file tree.

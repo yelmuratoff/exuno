@@ -142,6 +142,150 @@ fn export_writes_the_bundle_and_lists_its_contents() {
     assert!(listing.lines().any(|l| l == ".ai/exuno.yaml"));
 }
 
+const MCP: &str = "{\n  \"mcpServers\": {\n    \"github\": {\"command\": \"npx\", \"args\": [\"-y\", \"@github/mcp-server\"]}\n  }\n}\n";
+
+/// A seeded project that also carries shared MCP and a per-tool override,
+/// the files a fixed target list used to leave out of the bundle.
+fn project_with_every_source() -> Project {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/mcp.json", MCP);
+    project.write(
+        ".ai/src/tools/claude/settings.json",
+        "{\"permissions\": {\"allow\": [\"Bash(ls)\"]}}\n",
+    );
+    project
+}
+
+/// Imports `bundle` into a fresh project beside `project` and returns it.
+fn import_into_fresh(project: &Project, bundle: &str) -> std::path::PathBuf {
+    let fresh = project.join("fresh");
+    std::fs::create_dir_all(&fresh).unwrap();
+    exuno_in(&fresh)
+        .args(["import", &project.join(bundle).to_string_lossy(), "--force"])
+        .assert()
+        .success();
+    fresh
+}
+
+#[test]
+fn a_bundle_round_trip_keeps_every_source_file() {
+    let project = project_with_every_source();
+    project
+        .exuno()
+        .args(["export", "-o", "bundle.tar.gz"])
+        .assert()
+        .success();
+    let fresh = import_into_fresh(&project, "bundle.tar.gz");
+    assert_eq!(
+        std::fs::read_to_string(fresh.join(".ai/src/mcp.json")).unwrap(),
+        MCP
+    );
+    assert!(fresh.join(".ai/src/tools/claude/settings.json").is_file());
+}
+
+#[test]
+fn export_writes_a_zip_when_the_output_says_so() {
+    let project = project_with_every_source();
+    project
+        .exuno()
+        .args(["export", "-o", "bundle.zip"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Exported!"));
+    let bytes = std::fs::read(project.join("bundle.zip")).unwrap();
+    let entries = exuno::zip::read(&bytes).unwrap();
+    assert!(entries.iter().any(|entry| entry.path == ".ai/src/mcp.json"));
+    assert!(entries.iter().any(|entry| entry.path == ".ai/exuno.yaml"));
+    let fresh = import_into_fresh(&project, "bundle.zip");
+    assert!(fresh.join(".ai/src/mcp.json").is_file());
+}
+
+#[test]
+fn import_keeps_the_project_config_unless_asked_to_replace_it() {
+    let project = Project::seeded(&[]);
+    let local = project.read(".ai/exuno.yaml");
+    project.write("other/.ai/src/rules/other.md", "# Other\n");
+    project.write("other/.ai/exuno.yaml", "outputs: committed\n");
+    project
+        .exuno()
+        .args(["import", "other", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "exuno.yaml kept (pass --config to replace)",
+        ));
+    assert_eq!(project.read(".ai/exuno.yaml"), local);
+    project
+        .exuno()
+        .args(["import", "other", "--force", "--config"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/exuno.yaml"), "outputs: committed\n");
+}
+
+#[test]
+fn import_only_mcp_takes_the_shared_mcp_file() {
+    let project = Project::seeded(&[]);
+    project.write("other/.ai/src/mcp.json", MCP);
+    project.write("other/.ai/src/rules/other.md", "# Other\n");
+    project
+        .exuno()
+        .args(["import", "other", "--only", "mcp", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/mcp.json"), MCP);
+    assert!(!project.join(".ai/src/rules/other.md").exists());
+}
+
+#[test]
+fn import_lists_what_would_run_commands_and_refuses_without_force() {
+    let project = Project::seeded(&[]);
+    project.write("other/.ai/src/mcp.json", MCP);
+    project.write(
+        "other/.ai/src/tools/claude/settings.json",
+        "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"./notify.sh\"}]}]}}\n",
+    );
+    project.write("other/.ai/src/skills/jury/SKILL.md", JURY);
+    project.write("other/.ai/src/skills/jury/scripts/audit.sh", "#!/bin/sh\n");
+    project
+        .exuno()
+        .args(["import", "other"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("Runs commands:"))
+        .stdout(predicate::str::contains(
+            "MCP server github: npx -y @github/mcp-server",
+        ))
+        .stdout(predicate::str::contains(
+            "hooks in tools/claude/settings.json",
+        ))
+        .stdout(predicate::str::contains(
+            "script skills/jury/scripts/audit.sh",
+        ))
+        .stderr(predicate::str::contains("--force"));
+    assert!(!project.join(".ai/src/mcp.json").exists());
+    project
+        .exuno()
+        .args(["import", "other", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/mcp.json"), MCP);
+}
+
+#[test]
+fn import_dry_run_shows_what_would_run_commands() {
+    let project = Project::seeded(&[]);
+    project.write("other/.ai/src/mcp.json", MCP);
+    project
+        .exuno()
+        .args(["import", "other", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Runs commands:"))
+        .stdout(predicate::str::contains("Dry run"));
+    assert!(!project.join(".ai/src/mcp.json").exists());
+}
+
 #[test]
 fn export_dry_run_writes_nothing() {
     let project = Project::seeded(&[]);
@@ -191,7 +335,7 @@ fn import_copies_a_bundle_into_a_fresh_project() {
     std::fs::create_dir_all(project.join("fresh")).unwrap();
     std::fs::rename(project.join("bundle.tgz"), project.join("fresh/bundle.tgz")).unwrap();
     exuno_in(&project.join("fresh"))
-        .args(["import", "bundle.tgz"])
+        .args(["import", "bundle.tgz", "--force"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Imported!"));
@@ -274,7 +418,14 @@ fn import_only_previews_a_config_only_change() {
     project.write("other/.ai/exuno.yaml", "outputs: committed\n");
     project
         .exuno()
-        .args(["import", "other", "--only", "rules", "--dry-run"])
+        .args([
+            "import",
+            "other",
+            "--only",
+            "rules",
+            "--dry-run",
+            "--config",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("~ exuno.yaml (update)"))
@@ -313,7 +464,7 @@ fn import_writes_into_a_legacy_agent_sync_yaml_the_project_already_has() {
     project.write("other/.ai/exuno.yaml", "outputs: committed\n");
     project
         .exuno()
-        .args(["import", "other", "--force"])
+        .args(["import", "other", "--force", "--config"])
         .assert()
         .success();
     assert_eq!(project.read(".ai/agent_sync.yaml"), "outputs: committed\n");
@@ -437,7 +588,7 @@ fn import_installs_a_skill_package() {
     );
     project
         .exuno()
-        .args(["import", "jury.skill"])
+        .args(["import", "jury.skill", "--force"])
         .assert()
         .success()
         .stdout(predicate::str::contains("skills (2 new)"));
@@ -790,7 +941,7 @@ fn import_installs_a_skill_folder() {
     project.write("incoming/jury/scripts/run.sh", "#!/bin/sh\n");
     project
         .exuno()
-        .args(["import", "incoming/jury"])
+        .args(["import", "incoming/jury", "--force"])
         .assert()
         .success()
         .stdout(predicate::str::contains("skills (2 new)"));
@@ -905,7 +1056,11 @@ fn an_exported_skill_imports_into_another_project() {
     let other = Project::seeded(&[]);
     other
         .exuno()
-        .args(["import", &project.join("jury.skill").to_string_lossy()])
+        .args([
+            "import",
+            &project.join("jury.skill").to_string_lossy(),
+            "--force",
+        ])
         .assert()
         .success();
     assert_eq!(other.read(".ai/src/skills/jury/SKILL.md"), JURY);
