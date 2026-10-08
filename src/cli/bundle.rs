@@ -1,9 +1,9 @@
 //! `exuno export` and `exuno import`: `cmd_export` of
 //! `lib/helpers/export.sh` and `cmd_import` of `lib/helpers/import.sh`, which
 //! bundle a project's sources into a `tar.gz` and bring a bundle, a directory,
-//! or a GitHub archive back in. Tar archives go through the `tar` and `curl`
-//! executables, as Bash ran them; ZIP archives and `.skill` packages through
-//! [`crate::zip`], which `export --skill` also writes.
+//! or a git remote back in. Tar archives go through the `tar` executable, as
+//! Bash ran it; ZIP archives and `.skill` packages through [`crate::zip`],
+//! which `export --skill` also writes; remotes through [`crate::remote`].
 
 use crate::paths::DiskText;
 use std::io::Write;
@@ -17,6 +17,7 @@ use crate::config::{command_surfaces, names, skill_metadata, yaml_subset};
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
+use crate::remote;
 use crate::transaction::interrupt::{self, Interrupt};
 use crate::transaction::{backup, witness};
 
@@ -50,8 +51,6 @@ pub struct Env<'a> {
     pub cwd: String,
     /// `[[ -t 0 ]]`: the confirmation is asked only when stdin is a terminal.
     pub interactive: bool,
-    /// `PATH`, for the `command -v curl` check.
-    pub path: Option<String>,
     /// `read -r answer` on stdin.
     pub read_line: &'a mut dyn FnMut() -> String,
 }
@@ -592,7 +591,7 @@ fn exported_text(style: &Style, root: &str, output: &str) -> String {
 
 pub const IMPORT_HELP: Help = Help {
     command: "import",
-    tagline: "import config from GitHub, archive, or directory",
+    tagline: "import config from a git remote, archive, or directory",
     synopsis: &["import <source> [OPTIONS]"],
     description: &[
         "An imported skill replaces the project's copy whole: files the new\nversion no longer has are removed. An import that changes files is\nbacked up first, so exuno rollback undoes it.",
@@ -601,7 +600,10 @@ pub const IMPORT_HELP: Help = Help {
         Section {
             title: "SOURCES",
             entries: &[
-                ("GitHub URL", "https://github.com/user/repo"),
+                (
+                    "Git repository",
+                    "https://github.com/user/repo[/tree/<ref>/<folder>],\ngit@host:org/repo.git, or user/repo for GitHub",
+                ),
                 (
                     "Archive file",
                     "path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)",
@@ -617,8 +619,12 @@ pub const IMPORT_HELP: Help = Help {
             title: "OPTIONS",
             entries: &[
                 (
-                    "-b, --branch <name>",
-                    "Git branch to download (default: main)",
+                    "--ref <name>",
+                    "Branch, tag, or commit to fetch (default: the remote's\ndefault branch); -b and --branch are aliases",
+                ),
+                (
+                    "--path <folder>",
+                    "Folder of the repository that holds its .ai/",
                 ),
                 (
                     "--only <targets>",
@@ -639,7 +645,9 @@ pub const IMPORT_HELP: Help = Help {
     ],
     examples: &[
         "import https://github.com/user/repo",
-        "import https://github.com/user/repo/tree/develop",
+        "import https://github.com/user/repo/tree/v2/packages/app",
+        "import user/repo --ref develop",
+        "import git@github.com:org/private.git",
         "import exuno-bundle.tar.gz",
         "import my-skill.skill",
         "import ../other-project/",
@@ -647,24 +655,6 @@ pub const IMPORT_HELP: Help = Help {
         "import bundle.tar.gz --dry-run",
     ],
 };
-
-/// `_import_is_github_url`: `^https?://(www\.)?github\.com/[^/]+/[^/]+`.
-fn github_segments(source: &str) -> Option<(&str, &str)> {
-    let rest = source
-        .strip_prefix("https://")
-        .or_else(|| source.strip_prefix("http://"))?;
-    let rest = rest.strip_prefix("www.").unwrap_or(rest);
-    let rest = rest.strip_prefix("github.com/")?;
-    let (owner, rest) = rest.split_once('/')?;
-    let repo = rest.split('/').next().unwrap_or("");
-    (!owner.is_empty() && !repo.is_empty()).then_some((owner, repo))
-}
-
-/// A GitHub source without its trailing `/`, then without a `.git` suffix.
-fn github_url(source: &str) -> &str {
-    let url = source.strip_suffix('/').unwrap_or(source);
-    url.strip_suffix(".git").unwrap_or(url)
-}
 
 /// A scratch directory under the system temp dir, removed on drop as the run
 /// directory was.
@@ -705,22 +695,19 @@ fn copy_tree(src: &Path, dest: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-/// `curl -sfL --max-time 30 -o <file> <url>`, silenced as Bash silenced it.
-fn download(url: &str, to: &Path) -> bool {
-    Command::new("curl")
-        .args(["-sfL", "--max-time", "30", "-o"])
-        .arg(to)
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-fn curl_on_path(path: Option<&str>) -> bool {
-    path.is_some_and(|path| std::env::split_paths(path).any(|dir| dir.join("curl").is_file()))
+/// The folder that holds `path` as its `.ai/`: a link straight to `.ai` or
+/// `.ai/src` names the config, not a project to search.
+fn ai_owner(path: &Path) -> PathBuf {
+    let named = |path: &Path, name: &str| path.file_name().is_some_and(|leaf| leaf == name);
+    let ai = if named(path, "src") && path.parent().is_some_and(|ai| named(ai, ".ai")) {
+        path.parent()
+    } else {
+        Some(path)
+    };
+    match ai.filter(|ai| named(ai, ".ai")).and_then(Path::parent) {
+        Some(owner) => owner.to_path_buf(),
+        None => path.to_path_buf(),
+    }
 }
 
 /// `_import_find_ai_src`: `.ai/src` over `.ai`, directly or one level down.
@@ -1015,7 +1002,10 @@ struct ImportArgs {
     force: bool,
     config: bool,
     only: String,
-    branch: String,
+    /// `--ref`: the branch, tag, or commit to fetch from a remote.
+    reference: String,
+    /// `--path`: the folder of a remote that holds its `.ai/`.
+    path: String,
 }
 
 /// How a command line that imports nothing ends: help on stdout, or an error
@@ -1063,7 +1053,8 @@ fn parse_import(args: &[String]) -> Result<ImportArgs, BundleStop> {
         force: false,
         config: false,
         only: String::new(),
-        branch: String::new(),
+        reference: String::new(),
+        path: String::new(),
     };
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -1071,20 +1062,20 @@ fn parse_import(args: &[String]) -> Result<ImportArgs, BundleStop> {
             "--dry-run" => parsed.dry_run = true,
             "--force" => parsed.force = true,
             "--config" => parsed.config = true,
-            flag @ ("--only" | "--branch" | "-b") => {
-                let name = if flag == "--only" {
-                    "--only"
-                } else {
-                    "--branch"
+            flag @ ("--only" | "--ref" | "--branch" | "-b" | "--path") => {
+                let name = match flag {
+                    "--only" | "--path" => flag,
+                    _ => "--ref",
                 };
                 let Some(value) = args.next() else {
                     return Err(refuse(format!("{name} requires a value"), false));
                 };
-                if flag == "--only" {
-                    parsed.only = value.clone();
-                } else {
-                    parsed.branch = value.clone();
-                }
+                let field = match name {
+                    "--only" => &mut parsed.only,
+                    "--path" => &mut parsed.path,
+                    _ => &mut parsed.reference,
+                };
+                *field = value.clone();
             }
             "--help" | "-h" => return Err(BundleStop::Help),
             flag if flag.starts_with('-') => {
@@ -1162,10 +1153,8 @@ impl Importer<'_, '_> {
 
     /// Fetches `source` into `tmp`: the label the report names it by, or `None`
     /// once the failure is printed.
-    fn fetch(&mut self, source: &str, branch: &str, tmp: &Path) -> Result<Option<String>, Error> {
-        if github_segments(source).is_some() {
-            return self.fetch_github(source, branch, tmp);
-        }
+    fn fetch(&mut self, parsed: &ImportArgs, tmp: &Path) -> Result<Option<String>, Error> {
+        let source = parsed.source.as_str();
         let path = Path::new(source);
         let lower = source.to_ascii_lowercase();
         if path.is_file() && ZIP_SUFFIXES.iter().any(|suffix| lower.ends_with(suffix)) {
@@ -1177,9 +1166,58 @@ impl Importer<'_, '_> {
         if path.is_dir() {
             return self.copy_directory(source, tmp);
         }
+        if let Some(remote) = remote::parse(source).filter(|_| !path.exists()) {
+            return self.fetch_git(&remote, parsed, tmp);
+        }
         self.fail(&format!(
-            "Cannot recognize source: {source}\n  Expected: GitHub URL, archive (.tar.gz, .zip, .skill), or directory path."
+            "Cannot recognize source: {source}\n  Expected: git URL, archive (.tar.gz, .zip, .skill), or directory path."
         ))
+    }
+
+    /// Fetches the remote's ref and folder — from `--ref` and `--path`, else
+    /// from the link — and moves that folder to `tmp`.
+    fn fetch_git(
+        &mut self,
+        remote: &remote::Remote,
+        parsed: &ImportArgs,
+        tmp: &Path,
+    ) -> Result<Option<String>, Error> {
+        let (reference, folder) = match &remote.tree {
+            Some(tree) if parsed.reference.is_empty() && parsed.path.is_empty() => {
+                match remote::refs(&remote.url) {
+                    Ok(refs) => remote::split_tree(tree, &refs),
+                    Err(message) => return self.fail(&message),
+                }
+            }
+            _ => (
+                parsed.reference.clone(),
+                parsed.path.trim_matches('/').to_string(),
+            ),
+        };
+        let place = match (reference.as_str(), folder.as_str()) {
+            ("", "") => String::new(),
+            (reference, "") => format!(" at {reference}"),
+            ("", folder) => format!(" at the default branch, {folder}"),
+            (reference, folder) => format!(" at {reference}, {folder}"),
+        };
+        let shown = format!("{}{place}", remote.url);
+        self.say(&format!("  Fetching {}...\n", self.style.cyan(&shown)))?;
+        let checkout = tmp.with_file_name("repo");
+        std::fs::create_dir_all(&checkout).map_err(|e| Error::io(&checkout, e))?;
+        let request = remote::Request {
+            url: &remote.url,
+            reference: &reference,
+            folder: &folder,
+        };
+        let fetched = match remote::fetch(&request, &checkout) {
+            Ok(fetched) => fetched,
+            Err(message) => return self.fail(&message),
+        };
+        let root = ai_owner(&fetched);
+        std::fs::remove_dir(tmp).map_err(|e| Error::io(tmp, e))?;
+        std::fs::rename(&root, tmp).map_err(|e| Error::io(&root, e))?;
+        self.say(&format!("  {}\n", self.style.green("Fetched.")))?;
+        Ok(Some(format!("Git: {shown}")))
     }
 
     fn extract_zip(&mut self, source: &str, tmp: &Path) -> Result<Option<String>, Error> {
@@ -1221,57 +1259,6 @@ impl Importer<'_, '_> {
         }
         self.say(&format!("  {}\n", style.green("Extracted.")))?;
         Ok(Some(format!("Archive: {base_name}")))
-    }
-
-    fn fetch_github(
-        &mut self,
-        source: &str,
-        branch: &str,
-        tmp: &Path,
-    ) -> Result<Option<String>, Error> {
-        let style = self.style;
-        if !curl_on_path(self.env.path.as_deref()) {
-            return self.fail("curl is required for GitHub import.");
-        }
-        let url = github_url(source);
-        let (owner, repo) = github_segments(url)
-            .or_else(|| github_segments(source))
-            .unwrap_or(("", ""));
-        let repo_path = format!("{owner}/{repo}");
-        let mut branch = branch.to_string();
-        if branch.is_empty()
-            && let Some((_, after)) = url.split_once("/tree/")
-        {
-            branch = after.split('/').next().unwrap_or("").to_string();
-        }
-        if branch.is_empty() {
-            branch = "main".to_string();
-        }
-        self.say(&format!(
-            "  Downloading {} (branch: {branch})...\n",
-            style.cyan(&repo_path)
-        ))?;
-        let archive = tmp.join("repo.tar.gz");
-        let archive_url = |branch: &str| {
-            format!("https://github.com/{repo_path}/archive/refs/heads/{branch}.tar.gz")
-        };
-        if !download(&archive_url(&branch), &archive) {
-            if branch != "main" {
-                return self.fail(&format!("Failed to download branch '{branch}'."));
-            }
-            let note = style.dim("Branch 'main' not found, trying 'master'...");
-            self.say(&format!("  {note}\n"))?;
-            if !download(&archive_url("master"), &archive) {
-                return self.fail(
-                    "Failed to download repository.\n  Check the URL and your network connection.",
-                );
-            }
-        }
-        if !tar_extract(&archive, tmp) {
-            return self.fail("Failed to extract archive.");
-        }
-        self.say(&format!("  {}\n", style.green("Downloaded.")))?;
-        Ok(Some(format!("GitHub: {source}")))
     }
 
     fn extract_archive(&mut self, source: &str, tmp: &Path) -> Result<Option<String>, Error> {
@@ -1760,7 +1747,7 @@ pub fn import(
     };
     let fetched = tmp.join("source");
     std::fs::create_dir_all(&fetched).map_err(|e| Error::io(&fetched, e))?;
-    let Some(label) = importer.fetch(&parsed.source, &parsed.branch, &fetched)? else {
+    let Some(label) = importer.fetch(&parsed, &fetched)? else {
         return Ok(1);
     };
     put(
@@ -1858,7 +1845,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --config              Replace the project's exuno.yaml with the source's\n    --force               Skip confirmations, config that runs commands included\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from a git remote, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    Git repository    https://github.com/user/repo[/tree/<ref>/<folder>],\n                      git@host:org/repo.git, or user/repo for GitHub\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    --ref <name>       Branch, tag, or commit to fetch (default: the remote's\n                       default branch); -b and --branch are aliases\n    --path <folder>    Folder of the repository that holds its .ai/\n    --only <targets>   Import only specific targets (comma-separated)\n                       Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --config           Replace the project's exuno.yaml with the source's\n    --force            Skip confirmations, config that runs commands included\n    --dry-run          Preview changes without writing\n    -h, --help         Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/v2/packages/app\n    exuno import user/repo --ref develop\n    exuno import git@github.com:org/private.git\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
@@ -1901,41 +1888,6 @@ mod tests {
         );
         assert_eq!(filter_targets(targets(), "mcp"), vec!["mcp", "mcp.json"]);
         assert!(filter_targets(targets(), "nothing").is_empty());
-    }
-
-    #[test]
-    fn github_urls_are_recognised_like_import_is_github_url() {
-        assert_eq!(
-            github_segments("https://github.com/user/repo"),
-            Some(("user", "repo"))
-        );
-        assert_eq!(
-            github_segments("https://www.github.com/user/repo/tree/x"),
-            Some(("user", "repo"))
-        );
-        assert_eq!(
-            github_segments("http://github.com/a/b.git"),
-            Some(("a", "b.git"))
-        );
-        assert_eq!(github_segments("https://github.com/user"), None);
-        assert_eq!(github_segments("https://gitlab.com/a/b"), None);
-        assert_eq!(github_segments("bundle.tar.gz"), None);
-    }
-
-    #[test]
-    fn a_github_source_loses_its_trailing_slash_and_git_suffix() {
-        for source in [
-            "https://github.com/user/repo",
-            "https://github.com/user/repo/",
-            "https://github.com/user/repo.git",
-            "https://github.com/user/repo.git/",
-        ] {
-            assert_eq!(
-                github_url(source),
-                "https://github.com/user/repo",
-                "{source}"
-            );
-        }
     }
 
     #[test]
@@ -2054,7 +2006,6 @@ mod tests {
         let mut env = Env {
             cwd: root.to_string(),
             interactive: false,
-            path: None,
             read_line: &mut read_line,
         };
         let status = import(&args, root, &Style::plain(), &mut env, &mut out, &mut err).unwrap();
@@ -2165,7 +2116,7 @@ mod tests {
         assert_eq!((status, out.as_str()), (1, "\n  Exuno Import\n\n"));
         assert_eq!(
             err,
-            "  Error: Cannot recognize source: nothing.txt\n  Expected: GitHub URL, archive (.tar.gz, .zip, .skill), or directory path.\n"
+            "  Error: Cannot recognize source: nothing.txt\n  Expected: git URL, archive (.tar.gz, .zip, .skill), or directory path.\n"
         );
     }
 }

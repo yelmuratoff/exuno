@@ -327,7 +327,6 @@ fn import_command(rest: &[String], style: &Style) -> Result<u8, Error> {
     let mut env = cli::bundle::Env {
         cwd: logical_cwd()?,
         interactive: std::io::stdin().is_terminal(),
-        path: var("PATH"),
         read_line: &mut read_line,
     };
     cli::bundle::import(
