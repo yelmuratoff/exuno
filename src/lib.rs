@@ -11,6 +11,7 @@ pub mod error;
 pub mod output;
 pub mod paths;
 pub mod project;
+pub mod remote;
 pub mod text;
 pub mod transaction;
 pub mod zip;
