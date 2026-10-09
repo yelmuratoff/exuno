@@ -12,12 +12,13 @@ use std::process::{Command, Stdio};
 
 use super::update::tar_extract;
 use super::{files_below, put};
+use crate::Error;
+use crate::config::{command_surfaces, names, skill_metadata, yaml_subset};
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::transaction::interrupt::{self, Interrupt};
 use crate::transaction::{backup, witness};
-use crate::{Error, config::names, config::skill_metadata, config::yaml_subset};
 
 /// `_BUNDLE_DIR_TARGETS`, in the order `init` creates them.
 const DIR_TARGETS: [&str; 8] = [
@@ -135,7 +136,7 @@ pub const EXPORT_HELP: Help = Help {
         entries: &[
             (
                 "-o, --output <path>",
-                "Output file path (default: ./exuno-bundle.tar.gz)",
+                "Output file; .zip writes a ZIP (default: ./exuno-bundle.tar.gz)",
             ),
             (
                 "--skill <name>",
@@ -199,22 +200,77 @@ fn parse_export(args: &[String]) -> Result<ExportArgs, BundleStop> {
     Ok(parsed)
 }
 
+/// The order a bundle lists the entries `init` creates; any other entry
+/// follows in byte order.
+const ENTRY_ORDER: [&str; 10] = [
+    "AGENTS.md",
+    "rules",
+    "skills",
+    "commands",
+    "agents",
+    "settings",
+    "mcp",
+    "mcp.json",
+    "hooks",
+    "tools",
+];
+
+/// The entries of a source base a bundle carries: everything but hidden
+/// engine state, the backup store, and the config, which travels apart.
+fn source_entries(base: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return Vec::new();
+    };
+    let state = ["backups", "exuno.yaml", CONFIG_LEGACY];
+    let mut names: Vec<String> = entries
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_ok_and(|kind| !kind.is_symlink()))
+        .map(|entry| entry.file_name().disk_text())
+        .filter(|name| !name.starts_with('.') && !state.contains(&name.as_str()))
+        .collect();
+    let rank = |name: &String| {
+        ENTRY_ORDER
+            .iter()
+            .position(|known| known == name)
+            .unwrap_or(ENTRY_ORDER.len())
+    };
+    names.sort_by(|a, b| rank(a).cmp(&rank(b)).then_with(|| a.cmp(b)));
+    names
+}
+
+/// `path`'s label in a contents list, `None` for an empty directory.
+fn entry_label(root: &str, rel: &str, name: &str) -> Option<String> {
+    let path = Path::new(root).join(rel);
+    if path.is_file() {
+        return Some(name.to_string());
+    }
+    let count = count_files(&path);
+    (count > 0).then(|| format!("{name}/ ({count} files)"))
+}
+
 /// Each path the bundle archives, relative to `root`, with the label the
-/// contents list shows for it.
+/// contents list shows for it: every entry of the source base, the
+/// `source.*` paths declared outside it, and the config.
 fn export_items(root: &str, sources: &Sources, style: &Style) -> Vec<(String, String)> {
     let mut items = Vec::new();
-    if !sources.agents.is_empty() && Path::new(root).join(&sources.agents).is_file() {
-        let name = sources.agents.rsplit('/').next().unwrap_or(&sources.agents);
-        items.push((sources.agents.clone(), name.to_string()));
+    for name in source_entries(&Path::new(root).join(&sources.base)) {
+        let rel = format!("{}/{name}", sources.base);
+        if let Some(label) = entry_label(root, &rel, &name) {
+            items.push((rel, label));
+        }
     }
-    for (name, path) in &sources.dirs {
-        let dir = Path::new(root).join(path);
-        if path.is_empty() || !dir.is_dir() {
+    let declared = std::iter::once(("AGENTS.md", &sources.agents))
+        .chain(sources.dirs.iter().map(|(name, path)| (*name, path)));
+    for (name, path) in declared {
+        let outside_base = !path.is_empty()
+            && !path.starts_with(&format!("{}/", sources.base))
+            && !crate::paths::is_absolute(path)
+            && !path.split('/').any(|segment| segment == "..");
+        if !outside_base || !Path::new(root).join(path).exists() {
             continue;
         }
-        let count = count_files(&dir);
-        if count > 0 {
-            items.push((path.clone(), format!("{name}/ ({count} files)")));
+        if let Some(label) = entry_label(root, path, name) {
+            items.push((path.clone(), label));
         }
     }
     match present_config(Path::new(root)) {
@@ -242,20 +298,7 @@ pub fn export(
         skill,
     } = match parse_export(args) {
         Ok(parsed) => parsed,
-        Err(BundleStop::Help) => {
-            put(out, EXPORT_HELP.render(style).as_bytes())?;
-            return Ok(0);
-        }
-        Err(BundleStop::Refuse { message, with_help }) => {
-            put(
-                err,
-                format!("{}: {message}\n", style.red("Error")).as_bytes(),
-            )?;
-            if with_help {
-                put(err, EXPORT_HELP.render(style).as_bytes())?;
-            }
-            return Ok(1);
-        }
+        Err(stop) => return stopped(stop, &EXPORT_HELP, style, out, err),
     };
     let sources = resolve_sources(root);
     if sources.base.is_empty() {
@@ -286,6 +329,8 @@ pub fn export(
         format!("\n{}\n\n", style.bold("  Exuno Export")).as_bytes(),
     )?;
 
+    let base = Path::new(root).join(&sources.base);
+    std::fs::read_dir(&base).map_err(|e| Error::io(&base, e))?;
     let (items, labels): (Vec<String>, Vec<String>) =
         export_items(root, &sources, style).into_iter().unzip();
     if items.is_empty() {
@@ -315,15 +360,7 @@ pub fn export(
     }
     put(out, text.as_bytes())?;
     out.flush().map_err(|e| Error::io("<stdout>", e))?;
-    let archived = Command::new("tar")
-        .arg("-czf")
-        .arg(&output)
-        .args(&items)
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
-    if !archived {
+    if !write_bundle(root, &output, &items)? {
         put(
             err,
             format!("  {}: Failed to create archive.\n", style.red("Error")).as_bytes(),
@@ -331,6 +368,49 @@ pub fn export(
         return Ok(1);
     }
     put(out, exported_text(style, root, &output).as_bytes()).map(|()| 0)
+}
+
+/// Archives the files of `items` at `output`: a ZIP when its name says so,
+/// else a `tar.gz` through `tar`, both from the same file list.
+/// `false` when the archive could not be made.
+fn write_bundle(root: &str, output: &str, items: &[String]) -> Result<bool, Error> {
+    let files = bundle_files(root, items)?;
+    if output.to_ascii_lowercase().ends_with(".zip") {
+        return write_zip_bundle(root, output, &files);
+    }
+    let Ok(mut tar) = Command::new("tar")
+        .args(["-czf", output, "-T", "-"])
+        .current_dir(root)
+        .stdin(Stdio::piped())
+        .spawn()
+    else {
+        return Ok(false);
+    };
+    let listed = tar
+        .stdin
+        .take()
+        .is_some_and(|mut stdin| stdin.write_all(files.join("\n").as_bytes()).is_ok());
+    Ok(tar.wait().is_ok_and(|status| status.success()) && listed)
+}
+
+/// Writes `files` (paths relative to `root`) as a ZIP at `output`, itself
+/// relative to `root` unless absolute; `false` when the archive cannot hold
+/// them.
+fn write_zip_bundle(root: &str, output: &str, files: &[String]) -> Result<bool, Error> {
+    let entries = files
+        .iter()
+        .map(|rel| file_entry(&Path::new(root).join(rel), rel.clone()))
+        .collect::<Result<Vec<_>, Error>>()?;
+    let Ok(archive) = crate::zip::write(&entries) else {
+        return Ok(false);
+    };
+    let dest = if crate::paths::is_absolute(output) {
+        PathBuf::from(output)
+    } else {
+        Path::new(root).join(output)
+    };
+    std::fs::write(&dest, archive).map_err(|e| Error::io(&dest, e))?;
+    Ok(true)
 }
 
 struct SkillExport<'a> {
@@ -376,7 +456,7 @@ fn export_skill(
     if let Err(reason) = skill_metadata::read(&bytes, name) {
         return refuse_with(format!("{skills_rel}/{}/SKILL.md: {reason}", skill.rel));
     }
-    let entries = skill_entries(&dir, name)?;
+    let entries = entries_below(&dir, name)?;
     let output = if request.output.is_empty() {
         format!("{root}/{name}.skill")
     } else {
@@ -414,24 +494,71 @@ fn export_skill(
     put(out, exported_text(style, root, &output).as_bytes()).map(|()| 0)
 }
 
-/// Every regular file below `dir` as an archive entry under `<name>/`, in
-/// byte order so the package is reproducible.
-fn skill_entries(dir: &Path, name: &str) -> Result<Vec<crate::zip::Entry>, Error> {
+/// The regular files below `dir`, each as `<prefix>/<path below dir>`: a
+/// hidden entry or a symbolic link at any depth stays out of an archive,
+/// and a folder that cannot be read fails it rather than leaving files out.
+fn shared_files(dir: &Path, prefix: &str, found: &mut Vec<String>) -> Result<(), Error> {
+    let entries = std::fs::read_dir(dir).map_err(|e| Error::io(dir, e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| Error::io(dir, e))?;
+        let name = entry.file_name().disk_text();
+        if name.starts_with('.') {
+            continue;
+        }
+        let kind = entry.file_type().map_err(|e| Error::io(entry.path(), e))?;
+        let rel = format!("{prefix}/{name}");
+        if kind.is_dir() {
+            shared_files(&entry.path(), &rel, found)?;
+        } else if kind.is_file() {
+            found.push(rel);
+        }
+    }
+    Ok(())
+}
+
+/// Every file `shared_files` keeps below `dir` as an archive entry under
+/// `<prefix>/`, in byte order so the archive is reproducible.
+fn entries_below(dir: &Path, prefix: &str) -> Result<Vec<crate::zip::Entry>, Error> {
     let mut files = Vec::new();
-    files_below(dir, &mut files);
+    shared_files(dir, prefix, &mut files)?;
     files.sort();
     files
         .iter()
-        .map(|file| {
-            let rel = file.strip_prefix(dir).unwrap_or(file).disk_text();
-            let meta = std::fs::metadata(file).map_err(|e| Error::io(file, e))?;
-            Ok(crate::zip::Entry {
-                path: format!("{name}/{rel}"),
-                data: std::fs::read(file).map_err(|e| Error::io(file, e))?,
-                executable: is_executable(&meta),
-            })
+        .map(|rel| {
+            let inner = rel
+                .strip_prefix(prefix)
+                .unwrap_or(rel)
+                .trim_start_matches('/');
+            file_entry(&dir.join(inner), rel.clone())
         })
         .collect()
+}
+
+fn file_entry(file: &Path, path: String) -> Result<crate::zip::Entry, Error> {
+    let meta = std::fs::metadata(file).map_err(|e| Error::io(file, e))?;
+    Ok(crate::zip::Entry {
+        path,
+        data: std::fs::read(file).map_err(|e| Error::io(file, e))?,
+        executable: is_executable(&meta),
+    })
+}
+
+/// The files the bundle `items` (paths relative to `root`) carry, relative
+/// to `root` and in byte order; an item that is a symbolic link carries
+/// nothing.
+fn bundle_files(root: &str, items: &[String]) -> Result<Vec<String>, Error> {
+    let mut files = Vec::new();
+    for rel in items {
+        let path = Path::new(root).join(rel);
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| Error::io(&path, e))?;
+        if meta.is_dir() {
+            shared_files(&path, rel, &mut files)?;
+        } else if meta.is_file() {
+            files.push(rel.clone());
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 #[cfg(unix)]
@@ -497,7 +624,14 @@ pub const IMPORT_HELP: Help = Help {
                     "--only <targets>",
                     "Import only specific targets (comma-separated)\nTargets: rules,skills,commands,agents,settings,mcp,hooks,tools",
                 ),
-                ("--force", "Overwrite without confirmation"),
+                (
+                    "--config",
+                    "Replace the project's exuno.yaml with the source's",
+                ),
+                (
+                    "--force",
+                    "Skip confirmations, config that runs commands included",
+                ),
                 ("--dry-run", "Preview changes without writing"),
                 ("-h, --help", "Show this help"),
             ],
@@ -851,9 +985,10 @@ impl Diff {
     }
 }
 
-/// `--only`: the targets the comma list names, in target order; `AGENTS`
-/// names `AGENTS.md`.
-fn filter_targets(targets: &[&'static str], only: &str) -> Vec<&'static str> {
+/// `--only`: the entries the comma list names, in their order; an item names
+/// an entry with or without its extension, so `AGENTS` is `AGENTS.md` and
+/// `mcp` is both `mcp/` and `mcp.json`.
+fn filter_targets(names: Vec<String>, only: &str) -> Vec<String> {
     let selected: Vec<&str> = only
         .split('\n')
         .next()
@@ -863,13 +998,13 @@ fn filter_targets(targets: &[&'static str], only: &str) -> Vec<&'static str> {
             item.trim_matches(|c: char| matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c'))
         })
         .collect();
-    targets
-        .iter()
-        .copied()
-        .filter(|target| {
-            selected.iter().any(|item| {
-                *target == *item || target.strip_suffix(".md").unwrap_or(target) == *item
-            })
+    names
+        .into_iter()
+        .filter(|name| {
+            let stem = name
+                .rsplit_once('.')
+                .map_or(name.as_str(), |(stem, _)| stem);
+            selected.iter().any(|item| name == item || stem == *item)
         })
         .collect()
 }
@@ -878,6 +1013,7 @@ struct ImportArgs {
     source: String,
     dry_run: bool,
     force: bool,
+    config: bool,
     only: String,
     branch: String,
 }
@@ -893,11 +1029,39 @@ fn refuse(message: String, with_help: bool) -> BundleStop {
     BundleStop::Refuse { message, with_help }
 }
 
+/// Ends a command line that bundles nothing: `help` on stdout, or the error
+/// on stderr followed by `help` when asked. The exit status.
+fn stopped(
+    stop: BundleStop,
+    help: &Help,
+    style: &Style,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> Result<u8, Error> {
+    match stop {
+        BundleStop::Help => {
+            put(out, help.render(style).as_bytes())?;
+            Ok(0)
+        }
+        BundleStop::Refuse { message, with_help } => {
+            put(
+                err,
+                format!("{}: {message}\n", style.red("Error")).as_bytes(),
+            )?;
+            if with_help {
+                put(err, help.render(style).as_bytes())?;
+            }
+            Ok(1)
+        }
+    }
+}
+
 fn parse_import(args: &[String]) -> Result<ImportArgs, BundleStop> {
     let mut parsed = ImportArgs {
         source: String::new(),
         dry_run: false,
         force: false,
+        config: false,
         only: String::new(),
         branch: String::new(),
     };
@@ -906,6 +1070,7 @@ fn parse_import(args: &[String]) -> Result<ImportArgs, BundleStop> {
         match arg.as_str() {
             "--dry-run" => parsed.dry_run = true,
             "--force" => parsed.force = true,
+            "--config" => parsed.config = true,
             flag @ ("--only" | "--branch" | "-b") => {
                 let name = if flag == "--only" {
                     "--only"
@@ -947,6 +1112,45 @@ impl Importer<'_, '_> {
     fn say(&mut self, text: &str) -> Result<(), Error> {
         put(self.out, text.as_bytes())?;
         self.out.flush().map_err(|e| Error::io("<stdout>", e))
+    }
+
+    /// Asks before an import without `--force` writes: always when it brings
+    /// config that runs commands, which is refused outright without a
+    /// terminal to ask on, and when it overwrites or removes files. The exit
+    /// status once the import stops here.
+    fn confirm(&mut self, plan: &ImportPlan) -> Result<Option<u8>, Error> {
+        let (question, default_yes) = if !plan.runs.is_empty() {
+            if !self.env.interactive {
+                let text = format!(
+                    "  {}: The import brings config that runs commands (listed above).\n  Review it with {}, then pass {} to import it.\n",
+                    self.style.red("Error"),
+                    self.style.cyan("--dry-run"),
+                    self.style.cyan("--force")
+                );
+                put(self.err, text.as_bytes())?;
+                return Ok(Some(1));
+            }
+            ("  Import config that runs these commands? [y/N] ", false)
+        } else if plan.diff.counts.updated + plan.diff.counts.removed > 0 {
+            if !self.env.interactive {
+                return Ok(None);
+            }
+            ("  Proceed? [Y/n] ", true)
+        } else {
+            return Ok(None);
+        };
+        self.say(question)?;
+        let answer = (self.env.read_line)();
+        let proceed = if default_yes {
+            !answer.starts_with(['N', 'n'])
+        } else {
+            answer.starts_with(['Y', 'y'])
+        };
+        if proceed {
+            return Ok(None);
+        }
+        put(self.out, b"  Cancelled.\n\n")?;
+        Ok(Some(0))
     }
 
     /// Prints the failure on stderr and answers the failed fetch.
@@ -1137,6 +1341,23 @@ impl Importer<'_, '_> {
     }
 }
 
+/// What an import does with the config the source carries.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConfigAction {
+    /// The source has none, or it matches the project's.
+    Skip,
+    New,
+    Update,
+    /// The project keeps its own; `--config` would replace it.
+    Kept,
+}
+
+impl ConfigAction {
+    fn writes(self) -> bool {
+        matches!(self, Self::New | Self::Update)
+    }
+}
+
 /// What importing `src_root` over the project writes.
 struct ImportPlan {
     dest_base: PathBuf,
@@ -1144,7 +1365,9 @@ struct ImportPlan {
     diff: Diff,
     imported_config: Option<String>,
     config_dest: PathBuf,
-    config_action: &'static str,
+    config_action: ConfigAction,
+    /// What the new and changed files would have a tool run.
+    runs: Vec<String>,
 }
 
 /// The imported project's copy of `target`: the path its `source.*` declares
@@ -1202,7 +1425,18 @@ fn imported_config_text(project: &Path, dest_base_rel: &str) -> Option<String> {
     (!text.trim().is_empty()).then_some(text)
 }
 
-fn plan_import(root: &str, src_root: PathBuf, only: &str) -> ImportPlan {
+/// The choices an import plan follows: `--only` and `--config`.
+#[derive(Default)]
+struct PlanOptions<'a> {
+    only: &'a str,
+    replace_config: bool,
+}
+
+fn plan_import(root: &str, src_root: PathBuf, options: &PlanOptions) -> ImportPlan {
+    let PlanOptions {
+        only,
+        replace_config,
+    } = *options;
     let src_project_root = if src_root.ends_with("src") {
         src_root.parent().and_then(Path::parent)
     } else {
@@ -1220,43 +1454,53 @@ fn plan_import(root: &str, src_root: PathBuf, only: &str) -> ImportPlan {
     let imported_config = imported_config_text(&src_project_root, &dest_base_rel);
     let dest_base = Path::new(root).join(&dest_base_rel);
 
-    let mut targets: Vec<&'static str> = vec!["AGENTS.md"];
-    targets.extend(DIR_TARGETS);
-    if !only.is_empty() {
-        targets = filter_targets(&targets, only);
+    let mut names = source_entries(&src_root);
+    for target in std::iter::once("AGENTS.md").chain(DIR_TARGETS) {
+        let declared_elsewhere = imported_source(&src_root, &src_project_root, &declared, target)
+            != src_root.join(target);
+        if declared_elsewhere && !names.iter().any(|name| name == target) {
+            names.push(target.to_string());
+        }
     }
-    let sources: Vec<(&'static str, PathBuf)> = targets
-        .iter()
-        .map(|target| {
-            let path = imported_source(&src_root, &src_project_root, &declared, target);
-            (*target, path)
-        })
-        .collect();
+    if !only.is_empty() {
+        names = filter_targets(names, only);
+    }
     let mut diff = Diff::default();
-    for (target, src_path) in &sources {
-        let dest_path = dest_base.join(target);
+    for name in &names {
+        let src_path = imported_source(&src_root, &src_project_root, &declared, name);
+        let dest_path = dest_base.join(name);
         if src_path.is_file() {
-            diff.file(src_path, &dest_path, target);
+            diff.file(&src_path, &dest_path, name);
         } else if src_path.is_dir() {
-            diff.dir(src_path, &dest_path, target);
-            if *target == "skills" {
-                diff.dropped_skill_files(src_path, &dest_path, target);
+            diff.dir(&src_path, &dest_path, name);
+            if name == "skills" {
+                diff.dropped_skill_files(&src_path, &dest_path, name);
             }
         }
     }
     let config_dest = Path::new(root).join(ai_config(Path::new(root)));
     let config_action = match &imported_config {
-        Some(_) if !config_dest.is_file() => "new",
-        Some(text) if std::fs::read(&config_dest).ok().as_deref() != Some(text.as_bytes()) => {
-            "update"
+        None => ConfigAction::Skip,
+        Some(_) if !config_dest.is_file() => ConfigAction::New,
+        Some(text) if std::fs::read(&config_dest).ok().as_deref() == Some(text.as_bytes()) => {
+            ConfigAction::Skip
         }
-        _ => "",
+        Some(_) if !replace_config => ConfigAction::Kept,
+        Some(_) => ConfigAction::Update,
     };
     match config_action {
-        "new" => diff.counts.new += 1,
-        "update" => diff.counts.updated += 1,
-        _ => {}
+        ConfigAction::New => diff.counts.new += 1,
+        ConfigAction::Update => diff.counts.updated += 1,
+        ConfigAction::Skip | ConfigAction::Kept => {}
     }
+    let runs = diff
+        .writes
+        .iter()
+        .flat_map(|(src, dest)| {
+            let rel = dest.strip_prefix(&dest_base).unwrap_or(dest).disk_text();
+            command_surfaces::of(&rel, src)
+        })
+        .collect();
     ImportPlan {
         dest_base,
         dest_base_rel,
@@ -1264,6 +1508,7 @@ fn plan_import(root: &str, src_root: PathBuf, only: &str) -> ImportPlan {
         imported_config,
         config_dest,
         config_action,
+        runs,
     }
 }
 
@@ -1304,17 +1549,28 @@ fn plan_text(style: &Style, plan: &ImportPlan, dry_run: bool) -> String {
         .map(|name| name.to_string_lossy())
         .unwrap_or_default();
     match plan.config_action {
-        "new" => text.push_str(&format!(
+        ConfigAction::New => text.push_str(&format!(
             "    {} {config_name} {}\n",
             style.green("+"),
             style.dim("(new)")
         )),
-        "update" => text.push_str(&format!(
+        ConfigAction::Update => text.push_str(&format!(
             "    {} {config_name} {}\n",
             style.yellow("~"),
             style.dim("(update)")
         )),
-        _ => {}
+        ConfigAction::Kept => text.push_str(&format!(
+            "    {} {config_name} kept {}\n",
+            style.dim("="),
+            style.dim("(pass --config to replace)")
+        )),
+        ConfigAction::Skip => {}
+    }
+    if !plan.runs.is_empty() {
+        text.push_str(&format!("\n  {}\n", style.yellow("Runs commands:")));
+        for line in &plan.runs {
+            text.push_str(&format!("    {} {line}\n", style.yellow("!")));
+        }
     }
     let counts = &plan.diff.counts;
     text.push_str(&format!(
@@ -1368,7 +1624,7 @@ fn apply_import(
     let Some(imported) = plan
         .imported_config
         .as_ref()
-        .filter(|_| !plan.config_action.is_empty())
+        .filter(|_| plan.config_action.writes())
     else {
         return Ok(None);
     };
@@ -1398,7 +1654,7 @@ fn backup_targets(root: &str, plan: &ImportPlan) -> Vec<String> {
                 }),
         )
         .collect();
-    if !plan.config_action.is_empty() {
+    if plan.config_action.writes() {
         changed.push(&plan.config_dest);
     }
     changed
@@ -1487,20 +1743,7 @@ pub fn import(
 ) -> Result<u8, Error> {
     let parsed = match parse_import(args) {
         Ok(parsed) => parsed,
-        Err(BundleStop::Help) => {
-            put(out, IMPORT_HELP.render(style).as_bytes())?;
-            return Ok(0);
-        }
-        Err(BundleStop::Refuse { message, with_help }) => {
-            put(
-                err,
-                format!("{}: {message}\n", style.red("Error")).as_bytes(),
-            )?;
-            if with_help {
-                put(err, IMPORT_HELP.render(style).as_bytes())?;
-            }
-            return Ok(1);
-        }
+        Err(stop) => return stopped(stop, &IMPORT_HELP, style, out, err),
     };
     put(
         out,
@@ -1546,8 +1789,12 @@ pub fn import(
         )?;
         return Ok(1);
     };
-    let plan = plan_import(root, src_root, &parsed.only);
-    if plan.diff.changes.is_empty() && plan.config_action.is_empty() {
+    let options = PlanOptions {
+        only: &parsed.only,
+        replace_config: parsed.config,
+    };
+    let plan = plan_import(root, src_root, &options);
+    if plan.diff.changes.is_empty() && !plan.config_action.writes() {
         let text = format!(
             "  {} Nothing to import.\n\n",
             style.green("Already up to date!")
@@ -1562,14 +1809,10 @@ pub fn import(
     if parsed.dry_run {
         return Ok(0);
     }
-    let overwrites = plan.diff.counts.updated + plan.diff.counts.removed > 0;
-    if !parsed.force && overwrites && importer.env.interactive {
-        importer.say("  Proceed? [Y/n] ")?;
-        let answer = (importer.env.read_line)();
-        if answer.starts_with(['N', 'n']) {
-            put(importer.out, b"  Cancelled.\n\n")?;
-            return Ok(0);
-        }
+    if !parsed.force
+        && let Some(status) = importer.confirm(&plan)?
+    {
+        return Ok(status);
     }
     let mut interrupt = Interrupt::arm();
     let backup_id = match apply_backed_up(root, &plan, importer.err, &|| interrupt.received())? {
@@ -1582,18 +1825,21 @@ pub fn import(
     drop(interrupt);
     put(
         importer.out,
-        format!(
-            "  {} {} files.\n  {} .ai/backups/{backup_id} — undo with {}\n\n  Next steps:\n    1. Review imported files in {}\n    2. Run {} to distribute to all tools\n\n",
-            style.green("Imported!"),
-            tally(&plan.diff.counts),
-            style.dim("Backup:"),
-            style.cyan("exuno rollback"),
-            style.cyan(&plan.dest_base_rel),
-            style.cyan("exuno sync")
-        )
-        .as_bytes(),
+        imported_text(style, &plan, &backup_id).as_bytes(),
     )
     .map(|()| 0)
+}
+
+fn imported_text(style: &Style, plan: &ImportPlan, backup_id: &str) -> String {
+    format!(
+        "  {} {} files.\n  {} .ai/backups/{backup_id} — undo with {}\n\n  Next steps:\n    1. Review imported files in {}\n    2. Run {} to distribute to all tools\n\n",
+        style.green("Imported!"),
+        tally(&plan.diff.counts),
+        style.dim("Backup:"),
+        style.cyan("exuno rollback"),
+        style.cyan(&plan.dest_base_rel),
+        style.cyan("exuno sync")
+    )
 }
 
 #[cfg(test)]
@@ -1604,7 +1850,7 @@ mod tests {
     fn export_help_has_the_shared_shape() {
         assert_eq!(
             EXPORT_HELP.render(&Style::plain()),
-            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file path (default: ./exuno-bundle.tar.gz)\n    --skill <name>        Package one skill as ./<name>.skill (Claude skill upload)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --skill my-skill\n    exuno export --dry-run\n\n"
+            "\n  exuno export — bundle source files into a shareable archive\n\n  USAGE\n    exuno export [OPTIONS]\n\n  OPTIONS\n    -o, --output <path>   Output file; .zip writes a ZIP (default: ./exuno-bundle.tar.gz)\n    --skill <name>        Package one skill as ./<name>.skill (Claude skill upload)\n    --dry-run             Preview what would be exported\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno export\n    exuno export -o my-config.tar.gz\n    exuno export --skill my-skill\n    exuno export --dry-run\n\n"
         );
     }
 
@@ -1612,7 +1858,7 @@ mod tests {
     fn import_help_has_the_shared_shape() {
         assert_eq!(
             IMPORT_HELP.render(&Style::plain()),
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --force               Overwrite without confirmation\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
+            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n    Archive file      path/to/exuno-bundle.tar.gz (.tar, .tar.xz, .tar.bz2, .zip)\n    Skill package     path/to/my-skill.skill, or a folder or archive of skills\n    Local directory   path/to/project/\n\n  OPTIONS\n    -b, --branch <name>   Git branch to download (default: main)\n    --only <targets>      Import only specific targets (comma-separated)\n                          Targets: rules,skills,commands,agents,settings,mcp,hooks,tools\n    --config              Replace the project's exuno.yaml with the source's\n    --force               Skip confirmations, config that runs commands included\n    --dry-run             Preview changes without writing\n    -h, --help            Show this help\n\n  EXAMPLES\n    exuno import https://github.com/user/repo\n    exuno import https://github.com/user/repo/tree/develop\n    exuno import exuno-bundle.tar.gz\n    exuno import my-skill.skill\n    exuno import ../other-project/\n    exuno import https://github.com/user/repo --only rules,skills\n    exuno import bundle.tar.gz --dry-run\n\n"
         );
     }
 
@@ -1639,24 +1885,22 @@ mod tests {
 
     #[test]
     fn only_filters_the_targets_in_target_order() {
-        let targets: Vec<&'static str> = {
-            let mut all = vec!["AGENTS.md"];
-            all.extend(DIR_TARGETS);
-            all
-        };
+        let targets =
+            || -> Vec<String> { ENTRY_ORDER.iter().map(|name| name.to_string()).collect() };
         assert_eq!(
-            filter_targets(&targets, " AGENTS , bogus "),
+            filter_targets(targets(), " AGENTS , bogus "),
             vec!["AGENTS.md"]
         );
         assert_eq!(
-            filter_targets(&targets, "skills,rules"),
+            filter_targets(targets(), "skills,rules"),
             vec!["rules", "skills"]
         );
         assert_eq!(
-            filter_targets(&targets, "AGENTS.md,tools"),
+            filter_targets(targets(), "AGENTS.md,tools"),
             vec!["AGENTS.md", "tools"]
         );
-        assert!(filter_targets(&targets, "nothing").is_empty());
+        assert_eq!(filter_targets(targets(), "mcp"), vec!["mcp", "mcp.json"]);
+        assert!(filter_targets(targets(), "nothing").is_empty());
     }
 
     #[test]
@@ -1716,7 +1960,11 @@ mod tests {
         write(project.path(), ".ai/src/skills/jury/old.md", "# Dropped\n");
         let source = tempfile::tempdir().unwrap();
         write(source.path(), ".ai/src/skills/jury/SKILL.md", "# New\n");
-        let plan = plan_import(&root, source.path().join(".ai/src"), "");
+        let plan = plan_import(
+            &root,
+            source.path().join(".ai/src"),
+            &PlanOptions::default(),
+        );
         assert_eq!(plan.diff.removals.len(), 1);
         let steps = std::cell::Cell::new(0);
         let after_one_step = || {
