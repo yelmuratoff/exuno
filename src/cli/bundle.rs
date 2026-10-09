@@ -1182,18 +1182,22 @@ impl Importer<'_, '_> {
         parsed: &ImportArgs,
         tmp: &Path,
     ) -> Result<Option<String>, Error> {
-        let (reference, folder) = match &remote.tree {
-            Some(tree) if parsed.reference.is_empty() && parsed.path.is_empty() => {
+        let flagged = (
+            parsed.reference.clone(),
+            parsed.path.trim_matches('/').to_string(),
+        );
+        let (linked_ref, linked_folder) = match &remote.tree {
+            Some(tree) if flagged.0.is_empty() || flagged.1.is_empty() => {
                 match remote::refs(&remote.url) {
                     Ok(refs) => remote::split_tree(tree, &refs),
                     Err(message) => return self.fail(&message),
                 }
             }
-            _ => (
-                parsed.reference.clone(),
-                parsed.path.trim_matches('/').to_string(),
-            ),
+            _ => (String::new(), String::new()),
         };
+        let pick = |flag: String, linked: String| if flag.is_empty() { linked } else { flag };
+        let reference = pick(flagged.0, linked_ref);
+        let folder = pick(flagged.1, linked_folder);
         let place = match (reference.as_str(), folder.as_str()) {
             ("", "") => String::new(),
             (reference, "") => format!(" at {reference}"),

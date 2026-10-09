@@ -45,15 +45,25 @@ pub fn parse(source: &str) -> Option<Remote> {
 }
 
 /// An `https` URL: a GitHub or GitLab page for a ref and folder becomes its
-/// repository and tail; any other URL is a repository as given.
+/// repository and tail, a page for a file names the folder holding it, and
+/// a query or fragment is dropped; any other URL is a repository as given.
 fn web(source: &str, rest: &str) -> Remote {
-    let rest = rest.strip_prefix("www.").unwrap_or(rest);
+    let page = |text: &str| -> String {
+        text.split(['?', '#'])
+            .next()
+            .unwrap_or(text)
+            .trim_end_matches('/')
+            .to_string()
+    };
+    let (source, rest) = (page(source), page(rest));
+    let rest = rest.strip_prefix("www.").unwrap_or(&rest);
     if let Some(path) = rest.strip_prefix("github.com/") {
         let segments: Vec<&str> = path.split('/').collect();
         if segments.len() >= 2 {
             let repo = segments[1].strip_suffix(".git").unwrap_or(segments[1]);
             let tree = match segments.get(2) {
-                Some(&"tree" | &"blob") if segments.len() > 3 => Some(segments[3..].join("/")),
+                Some(&"tree") if segments.len() > 3 => Some(segments[3..].join("/")),
+                Some(&"blob") if segments.len() > 3 => Some(folder_of(&segments[3..].join("/"))),
                 _ => None,
             };
             return Remote {
@@ -62,17 +72,31 @@ fn web(source: &str, rest: &str) -> Remote {
             };
         }
     }
-    for marker in ["/-/tree/", "/-/blob/"] {
+    for (marker, file) in [("/-/tree/", false), ("/-/blob/", true)] {
         if let Some((repo, tail)) = source.split_once(marker) {
+            let tail = if file {
+                folder_of(tail)
+            } else {
+                tail.to_string()
+            };
             return Remote {
                 url: format!("{repo}.git"),
-                tree: Some(tail.to_string()),
+                tree: Some(tail),
             };
         }
     }
     Remote {
-        url: source.to_string(),
+        url: source,
         tree: None,
+    }
+}
+
+/// A file page's `<ref>/<path>` tail without the file, kept whole when only
+/// the ref is left.
+fn folder_of(tail: &str) -> String {
+    match tail.rsplit_once('/') {
+        Some((folder, _)) => folder.to_string(),
+        None => tail.to_string(),
     }
 }
 
@@ -164,17 +188,21 @@ pub fn fetch(request: &Request, into: &Path) -> Result<PathBuf, String> {
             wanted,
         ],
     ];
+    let pattern = format!("/{}/", request.folder);
     if !request.folder.is_empty() {
-        steps.push(vec!["sparse-checkout", "set", request.folder]);
+        steps.push(vec!["sparse-checkout", "set", "--no-cone", &pattern]);
     }
     steps.push(vec!["checkout", "-q", "FETCH_HEAD"]);
-    for step in steps {
+    for (index, step) in steps.iter().enumerate() {
         let output = git(Some(into))
-            .args(&step)
+            .args(step)
             .output()
             .map_err(|e| format!("git is required to fetch a remote ({e})"))?;
         if !output.status.success() {
             return Err(failure(request.url, request.reference, &output.stderr));
+        }
+        if index == 0 {
+            disarm_attributes(into)?;
         }
     }
     let root = into.join(request.folder);
@@ -188,26 +216,43 @@ pub fn fetch(request: &Request, into: &Path) -> Result<PathBuf, String> {
     }
 }
 
-/// `git` that never prompts, runs no hook, and refuses the `ext` transport,
-/// while keeping the user's config so credential helpers and `insteadOf`
-/// rewrites apply.
+/// Unsets the `filter` attribute for every path through the checkout's
+/// `info/attributes`, which outranks the `.gitattributes` the remote ships,
+/// so a remote cannot start a filter driver from the user's config.
+fn disarm_attributes(checkout: &Path) -> Result<(), String> {
+    let info = checkout.join(".git").join("info");
+    std::fs::create_dir_all(&info)
+        .and_then(|()| std::fs::write(info.join("attributes"), "* -filter\n"))
+        .map_err(|e| format!("could not prepare {}: {e}", info.display()))
+}
+
+/// `git` that never prompts, runs no hook, file-system monitor, or `ext`
+/// transport, writes symbolic links as plain files, and gives up on a
+/// stalled transfer, while keeping the user's config so credential helpers
+/// and `insteadOf` rewrites apply.
 fn git(dir: Option<&Path>) -> Command {
     let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
     let mut cmd = Command::new("git");
-    cmd.args([
-        "-c",
-        &format!("core.hooksPath={null}"),
-        "-c",
-        "protocol.ext.allow=never",
-        "-c",
-        "advice.detachedHead=false",
-    ]);
+    for setting in [
+        format!("core.hooksPath={null}"),
+        "core.fsmonitor=false".to_string(),
+        "core.symlinks=false".to_string(),
+        "protocol.ext.allow=never".to_string(),
+        "http.lowSpeedLimit=1000".to_string(),
+        "http.lowSpeedTime=60".to_string(),
+        "advice.detachedHead=false".to_string(),
+    ] {
+        cmd.arg("-c").arg(setting);
+    }
     if let Some(dir) = dir {
         cmd.arg("-C").arg(dir);
     }
     cmd.env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null());
     if std::env::var_os("GIT_SSH_COMMAND").is_none() {
-        cmd.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+        cmd.env(
+            "GIT_SSH_COMMAND",
+            "ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4",
+        );
     }
     cmd
 }
@@ -261,10 +306,15 @@ mod tests {
         );
         assert_eq!(
             parse("github.com/acme/kit/blob/v1/.ai/src/AGENTS.md"),
-            remote(
-                "https://github.com/acme/kit.git",
-                Some("v1/.ai/src/AGENTS.md")
-            )
+            remote("https://github.com/acme/kit.git", Some("v1/.ai/src"))
+        );
+        assert_eq!(
+            parse("https://github.com/acme/kit/tree/main/app?tab=readme#top"),
+            remote("https://github.com/acme/kit.git", Some("main/app"))
+        );
+        assert_eq!(
+            parse("https://gitlab.com/g/kit/-/blob/main/app/AGENTS.md?ref_type=heads"),
+            remote("https://gitlab.com/g/kit.git", Some("main/app"))
         );
     }
 

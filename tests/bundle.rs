@@ -109,6 +109,17 @@ impl Remotes {
         }
     }
 
+    /// Adds a symbolic link `rel` → `target` to the branch last committed in
+    /// repository `name`.
+    #[cfg(unix)]
+    fn commit_link(&self, name: &str, rel: &str, target: &Path) {
+        let work = self.dir.path().join("work").join(name);
+        std::os::unix::fs::symlink(target, work.join(rel)).unwrap();
+        Self::git(&work, &["add", "-A"]);
+        Self::git(&work, &["commit", "-q", "-m", "link"]);
+        Self::git(&work, &["push", "-q", "-f", "origin", "HEAD"]);
+    }
+
     /// A global git config whose `insteadOf` turns GitHub URLs into these
     /// repositories.
     fn github_config(&self) -> std::path::PathBuf {
@@ -793,7 +804,114 @@ fn import_reports_a_ref_the_remote_lacks() {
         .assert()
         .code(1)
         .stderr(predicate::str::contains("could not fetch"))
-        .stderr(predicate::str::contains("at nope"));
+        .stderr(predicate::str::contains("at nope"))
+        .stderr(predicate::str::contains("couldn't find remote ref nope"));
+}
+
+#[test]
+fn a_flag_overrides_only_its_own_part_of_a_tree_link() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit("acme/mono", "main", &[("README.md", "# Mono\n")]);
+    remotes.commit(
+        "acme/mono",
+        "release",
+        &[
+            ("packages/app/.ai/src/rules/app.md", "# App\n"),
+            ("tools/ai/.ai/src/rules/tools.md", "# Tools\n"),
+        ],
+    );
+    remotes.tag("acme/mono", "v1");
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+        .args([
+            "import",
+            "https://github.com/acme/mono/tree/v1/packages/app",
+            "--path",
+            "tools/ai",
+            "--force",
+        ])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/tools.md"), "# Tools\n");
+    assert!(!project.join(".ai/src/rules/app.md").exists());
+}
+
+#[test]
+fn import_follows_a_link_to_a_file_to_its_folder() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/kit",
+        "main",
+        &[
+            ("app/.ai/src/AGENTS.md", "# App\n"),
+            ("app/.ai/src/rules/app.md", "# App rule\n"),
+        ],
+    );
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+        .args([
+            "import",
+            "https://github.com/acme/kit/blob/main/app/.ai/src/AGENTS.md?plain=1",
+            "--force",
+        ])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/app.md"), "# App rule\n");
+}
+
+// A filter driver runs through `sh` with POSIX `touch`.
+#[cfg(unix)]
+#[test]
+fn import_runs_no_filter_driver_of_the_users_git_config() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/kit",
+        "main",
+        &[
+            (".gitattributes", "* filter=probe\n"),
+            (".ai/src/rules/kit.md", "# Kit\n"),
+        ],
+    );
+    let marker = project.join("filter-ran");
+    let config = project.join("gitconfig");
+    std::fs::write(
+        &config,
+        format!(
+            "[filter \"probe\"]\n\tsmudge = touch '{}' && cat\n",
+            marker.display()
+        ),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", &config)
+        .args(["import", &remotes.url("acme/kit"), "--force"])
+        .assert()
+        .success();
+    assert!(!marker.exists(), "the remote's .gitattributes ran a filter");
+    assert_eq!(project.read(".ai/src/rules/kit.md"), "# Kit\n");
+}
+
+// Symbolic links need POSIX `symlink`; Windows grants it only with extra rights.
+#[cfg(unix)]
+#[test]
+fn import_never_follows_a_symlink_the_remote_ships() {
+    let project = Project::seeded(&[]);
+    project.write("private/.ai/src/rules/secret.md", "# Secret\n");
+    let remotes = Remotes::new();
+    remotes.commit("acme/kit", "main", &[("README.md", "# Kit\n")]);
+    remotes.commit_link("acme/kit", ".ai", &project.join("private/.ai"));
+    project
+        .exuno()
+        .args(["import", &remotes.url("acme/kit"), "--force"])
+        .assert()
+        .code(1);
+    assert!(!project.join(".ai/src/rules/secret.md").exists());
 }
 
 const JURY: &str = "---\nname: jury\ndescription: Judge a submission.\n---\n# Jury\n";
