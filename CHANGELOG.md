@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.46.0
+
+### Breaking
+
+- **Import:** a source that brings MCP servers, tool config, or skill scripts lists them under `Runs commands:` and asks before writing them; without a terminal, pass `--force`.
+- **Import:** keeps the project's own `exuno.yaml`; pass `--config` to take the source's.
+
+### Added
+
+- **Import from git:** any git URL, a GitHub or GitLab link to a ref and folder, or `owner/repo`; `--ref` and `--path` pick them, and private repositories use your git credentials.
+- **Skill packages:** `import` reads `.skill` and `.zip` archives and folders of skills, and `export --skill <name>` writes a `.skill` for Claude's skill upload.
+- **Export:** `-o bundle.zip` writes a ZIP.
+- **Import:** an import that changes files is backed up first, so `exuno rollback` undoes it.
+
+### Changed
+
+- **Import:** an imported skill replaces the project's copy whole, so files its new version dropped are removed.
+- **Import:** also reads `.tar`, `.tar.xz`, and `.tar.bz2`, and no longer needs `curl`.
+
+### Fixed
+
+- **Export:** the bundle now carries all of `.ai/src`, `mcp.json` included, and leaves hidden files and symbolic links out.
+- **Import:** a symbolic link in an archive or a remote no longer brings in files from outside it.
+- **Update and import:** their temporary folder is created private, so another user on a shared `/tmp` cannot tamper with it.
+
 ## 0.45.2
 
 ### Fixed
