@@ -119,12 +119,6 @@ fn resolve_sources(root: &str) -> Sources {
     sources
 }
 
-fn count_files(dir: &Path) -> usize {
-    let mut files = Vec::new();
-    files_below(dir, &mut files);
-    files.len()
-}
-
 pub const EXPORT_HELP: Help = Help {
     command: "export",
     tagline: "bundle source files into a shareable archive",
@@ -237,13 +231,19 @@ fn source_entries(base: &Path) -> Vec<String> {
     names
 }
 
-/// `path`'s label in a contents list, `None` for an empty directory.
+/// `path`'s label in a contents list, counting the files the archive will
+/// carry; `None` for a directory that carries none. A directory that cannot
+/// be walked keeps its place, so writing the archive reports why.
 fn entry_label(root: &str, rel: &str, name: &str) -> Option<String> {
     let path = Path::new(root).join(rel);
     if path.is_file() {
         return Some(name.to_string());
     }
-    let count = count_files(&path);
+    let mut files = Vec::new();
+    if shared_files(&path, name, &mut files).is_err() {
+        return Some(format!("{name}/"));
+    }
+    let count = files.len();
     (count > 0).then(|| format!("{name}/ ({count} files)"))
 }
 
@@ -713,12 +713,9 @@ fn ai_owner(path: &Path) -> PathBuf {
 /// `_import_find_ai_src`: `.ai/src` over `.ai`, directly or one level down.
 fn find_ai_src(search_root: &Path) -> Option<PathBuf> {
     let direct = |dir: &Path| -> Option<PathBuf> {
-        let src = dir.join(".ai/src");
-        if src.is_dir() {
-            return Some(src);
-        }
-        let ai = dir.join(".ai");
-        ai.is_dir().then_some(ai)
+        [dir.join(".ai/src"), dir.join(".ai")]
+            .into_iter()
+            .find(|candidate| candidate.is_dir() && resolves_inside(search_root, candidate))
     };
     if let Some(found) = direct(search_root) {
         return Some(found);
@@ -736,6 +733,15 @@ fn find_ai_src(search_root: &Path) -> Option<PathBuf> {
         .find_map(|name| direct(&search_root.join(name)))
 }
 
+/// Whether `path` resolves inside `root`, so a symbolic link an archive
+/// ships cannot lead an import to files outside what it fetched.
+fn resolves_inside(root: &Path, path: &Path) -> bool {
+    match (std::fs::canonicalize(root), std::fs::canonicalize(path)) {
+        (Ok(root), Ok(path)) => path.starts_with(root),
+        _ => false,
+    }
+}
+
 /// The skill directories of a tree without `.ai/`: the tree itself when
 /// `SKILL.md` sits at its root, named `stem`, else every skill folder below
 /// it, named by its folder.
@@ -748,6 +754,7 @@ fn skill_dirs(tree: &Path, stem: &str) -> Vec<(PathBuf, String)> {
         .skills
         .into_iter()
         .map(|skill| (tree.join(&skill.rel), skill.name))
+        .filter(|(dir, _)| resolves_inside(tree, dir))
         .collect()
 }
 
@@ -1377,7 +1384,7 @@ fn imported_source(src_root: &Path, project: &Path, declared: &Sources, target: 
     let inside = !rel.is_empty()
         && !crate::paths::is_absolute(rel)
         && !rel.split('/').any(|segment| segment == "..");
-    if inside && project.join(rel).exists() {
+    if inside && project.join(rel).exists() && resolves_inside(project, &project.join(rel)) {
         return project.join(rel);
     }
     src_root.join(target)

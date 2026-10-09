@@ -808,6 +808,78 @@ fn import_reports_a_ref_the_remote_lacks() {
         .stderr(predicate::str::contains("couldn't find remote ref nope"));
 }
 
+/// What `git <args>` prints in `dir`, trimmed.
+fn git_output(dir: &Path, args: &[&str]) -> String {
+    let output = StdCommand::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+#[test]
+fn a_remote_import_leaves_the_callers_repository_alone_under_git_dir() {
+    let project = Project::seeded(&[]);
+    project.git(&["add", "-A"]);
+    project.git(&["commit", "-q", "-m", "seed"]);
+    let head = git_output(project.path(), &["rev-parse", "HEAD"]);
+    let remotes = Remotes::new();
+    remotes.commit("acme/kit", "main", &[(".ai/src/rules/kit.md", "# Kit\n")]);
+    project
+        .exuno()
+        .env("GIT_DIR", project.join(".git"))
+        .env("GIT_WORK_TREE", project.path())
+        .args(["import", &remotes.url("acme/kit"), "--force"])
+        .assert()
+        .success();
+    assert_eq!(git_output(project.path(), &["rev-parse", "HEAD"]), head);
+    assert_eq!(git_output(project.path(), &["remote"]), "");
+    assert_eq!(project.read(".ai/src/rules/kit.md"), "# Kit\n");
+}
+
+// A symbolic link in the archive needs POSIX `symlink` to build.
+#[cfg(unix)]
+#[test]
+fn import_never_follows_a_symlink_an_archive_ships() {
+    let project = Project::seeded(&[]);
+    project.write("private/.ai/src/rules/secret.md", "# Secret\n");
+    for (rel, target) in [(".ai", "private/.ai"), (".ai/src", "private/.ai/src")] {
+        let staging = tempfile::tempdir().unwrap();
+        let link = staging.path().join(rel);
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(project.join(target), &link).unwrap();
+        let status = StdCommand::new("tar")
+            .arg("-czf")
+            .arg(project.join("linked.tgz"))
+            .arg("-C")
+            .arg(staging.path())
+            .arg(".ai")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        project
+            .exuno()
+            .args(["import", "linked.tgz", "--force"])
+            .output()
+            .unwrap();
+        assert!(!project.join(".ai/src/rules/secret.md").exists(), "{rel}");
+    }
+}
+
+#[test]
+fn export_counts_only_the_files_the_bundle_carries() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/extra/one.md", "# One\n");
+    project.write(".ai/src/extra/.private", "secret\n");
+    project
+        .exuno()
+        .args(["export", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("extra/ (1 files)"));
+}
+
 #[test]
 fn a_flag_overrides_only_its_own_part_of_a_tree_link() {
     let project = Project::seeded(&[]);

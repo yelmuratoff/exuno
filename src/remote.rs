@@ -229,7 +229,8 @@ fn disarm_attributes(checkout: &Path) -> Result<(), String> {
 /// `git` that never prompts, runs no hook, file-system monitor, or `ext`
 /// transport, writes symbolic links as plain files, and gives up on a
 /// stalled transfer, while keeping the user's config so credential helpers
-/// and `insteadOf` rewrites apply.
+/// and `insteadOf` rewrites apply. A `GIT_DIR` or work tree the caller's
+/// environment names, as inside a git hook, never redirects it.
 fn git(dir: Option<&Path>) -> Command {
     let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
     let mut cmd = Command::new("git");
@@ -246,6 +247,18 @@ fn git(dir: Option<&Path>) -> Command {
     }
     if let Some(dir) = dir {
         cmd.arg("-C").arg(dir);
+    }
+    for located in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_PREFIX",
+    ] {
+        cmd.env_remove(located);
     }
     cmd.env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null());
     if std::env::var_os("GIT_SSH_COMMAND").is_none() {
