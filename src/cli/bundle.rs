@@ -329,6 +329,8 @@ pub fn export(
         format!("\n{}\n\n", style.bold("  Exuno Export")).as_bytes(),
     )?;
 
+    let base = Path::new(root).join(&sources.base);
+    std::fs::read_dir(&base).map_err(|e| Error::io(&base, e))?;
     let (items, labels): (Vec<String>, Vec<String>) =
         export_items(root, &sources, style).into_iter().unzip();
     if items.is_empty() {

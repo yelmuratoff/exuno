@@ -289,6 +289,24 @@ fn export_fails_rather_than_leave_out_an_unreadable_folder() {
     common::chmod(&locked, 0o755);
 }
 
+// `chmod` bits are POSIX, and root reads through an unreadable folder.
+#[cfg(unix)]
+#[test]
+fn export_fails_rather_than_call_an_unreadable_source_base_empty() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    let base = project.join(".ai/src");
+    common::chmod(&base, 0o000);
+    let assert = project
+        .exuno()
+        .args(["export", "-o", "bundle.zip"])
+        .assert();
+    common::chmod(&base, 0o755);
+    assert.failure().stderr(predicate::str::contains(".ai/src"));
+}
+
 #[test]
 fn import_lists_legacy_mcp_and_every_tool_config() {
     let project = Project::seeded(&[]);
