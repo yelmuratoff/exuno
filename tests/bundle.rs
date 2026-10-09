@@ -200,6 +200,117 @@ fn export_writes_a_zip_when_the_output_says_so() {
     assert!(fresh.join(".ai/src/mcp.json").is_file());
 }
 
+/// Every file path an archive the project exported holds.
+fn bundle_listing(project: &Project, name: &str) -> Vec<String> {
+    let archive = project.join(name);
+    if name.ends_with(".zip") {
+        let bytes = std::fs::read(archive).unwrap();
+        return exuno::zip::read(&bytes)
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect();
+    }
+    tar_list(&archive).lines().map(str::to_string).collect()
+}
+
+#[test]
+fn export_leaves_hidden_files_out_of_the_bundle() {
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/review/.env", "TOKEN=secret\n");
+    project.write(".ai/src/rules/.drafts/next.md", "# Draft\n");
+    for name in ["bundle.zip", "bundle.tar.gz"] {
+        project
+            .exuno()
+            .args(["export", "-o", name])
+            .assert()
+            .success();
+        let listing = bundle_listing(&project, name);
+        assert!(
+            listing.iter().any(|path| path.ends_with("review/SKILL.md")),
+            "{name}"
+        );
+        assert!(
+            !listing
+                .iter()
+                .any(|path| path.contains(".env") || path.contains(".drafts")),
+            "{name}: {listing:?}"
+        );
+    }
+}
+
+// Symbolic links need POSIX `symlink`; Windows grants it only with extra rights.
+#[cfg(unix)]
+#[test]
+fn export_leaves_symlinks_out_of_the_bundle() {
+    let project = Project::seeded(&[]);
+    project.write("outside/secret.md", "# Secret\n");
+    std::os::unix::fs::symlink(project.join("outside"), project.join(".ai/src/leak")).unwrap();
+    std::os::unix::fs::symlink(
+        project.join("outside/secret.md"),
+        project.join(".ai/src/rules/link.md"),
+    )
+    .unwrap();
+    for name in ["bundle.zip", "bundle.tar.gz"] {
+        project
+            .exuno()
+            .args(["export", "-o", name])
+            .assert()
+            .success();
+        let listing = bundle_listing(&project, name);
+        assert!(
+            !listing
+                .iter()
+                .any(|path| path.contains("leak") || path.contains("link.md")),
+            "{name}: {listing:?}"
+        );
+    }
+}
+
+// `chmod` bits are POSIX, and root reads through an unreadable folder.
+#[cfg(unix)]
+#[test]
+fn export_fails_rather_than_leave_out_an_unreadable_folder() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/rules/private/locked.md", "# Locked\n");
+    let locked = project.join(".ai/src/rules/private");
+    common::chmod(&locked, 0o000);
+    for name in ["bundle.zip", "bundle.tar.gz"] {
+        project
+            .exuno()
+            .args(["export", "-o", name])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("rules/private"));
+    }
+    common::chmod(&locked, 0o755);
+}
+
+#[test]
+fn import_lists_legacy_mcp_and_every_tool_config() {
+    let project = Project::seeded(&[]);
+    project.write(
+        "other/.ai/src/mcp/claude.json",
+        "{\"mcpServers\": {\"legacy\": {\"command\": \"run-me\"}}}\n",
+    );
+    project.write(
+        "other/.ai/src/tools/opencode/hooks.ts",
+        "export default {}\n",
+    );
+    project.write("other/.ai/src/tools/zed/settings.jsonc", "{ // hooks\n}\n");
+    project
+        .exuno()
+        .args(["import", "other"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("MCP server legacy: run-me"))
+        .stdout(predicate::str::contains("tools/opencode/hooks.ts"))
+        .stdout(predicate::str::contains("tools/zed/settings.jsonc"));
+}
+
 #[test]
 fn import_keeps_the_project_config_unless_asked_to_replace_it() {
     let project = Project::seeded(&[]);

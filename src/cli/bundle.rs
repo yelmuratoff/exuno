@@ -224,6 +224,7 @@ fn source_entries(base: &Path) -> Vec<String> {
     let state = ["backups", "exuno.yaml", CONFIG_LEGACY];
     let mut names: Vec<String> = entries
         .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_ok_and(|kind| !kind.is_symlink()))
         .map(|entry| entry.file_name().disk_text())
         .filter(|name| !name.starts_with('.') && !state.contains(&name.as_str()))
         .collect();
@@ -367,26 +368,38 @@ pub fn export(
     put(out, exported_text(style, root, &output).as_bytes()).map(|()| 0)
 }
 
-/// Archives `items` at `output`: a ZIP when its name says so, else a
-/// `tar.gz` through `tar`. `false` when the archive could not be made.
+/// Archives the files of `items` at `output`: a ZIP when its name says so,
+/// else a `tar.gz` through `tar`, both from the same file list.
+/// `false` when the archive could not be made.
 fn write_bundle(root: &str, output: &str, items: &[String]) -> Result<bool, Error> {
+    let files = bundle_files(root, items)?;
     if output.to_ascii_lowercase().ends_with(".zip") {
-        return write_zip_bundle(root, output, items);
+        return write_zip_bundle(root, output, &files);
     }
-    Ok(Command::new("tar")
-        .arg("-czf")
-        .arg(output)
-        .args(items)
+    let Ok(mut tar) = Command::new("tar")
+        .args(["-czf", output, "-T", "-"])
         .current_dir(root)
-        .stdin(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success()))
+        .stdin(Stdio::piped())
+        .spawn()
+    else {
+        return Ok(false);
+    };
+    let listed = tar
+        .stdin
+        .take()
+        .is_some_and(|mut stdin| stdin.write_all(files.join("\n").as_bytes()).is_ok());
+    Ok(tar.wait().is_ok_and(|status| status.success()) && listed)
 }
 
-/// Writes `items` as a ZIP at `output`, relative to `root` unless absolute;
-/// `false` when the archive cannot hold them.
-fn write_zip_bundle(root: &str, output: &str, items: &[String]) -> Result<bool, Error> {
-    let Ok(archive) = crate::zip::write(&bundle_entries(root, items)?) else {
+/// Writes `files` (paths relative to `root`) as a ZIP at `output`, itself
+/// relative to `root` unless absolute; `false` when the archive cannot hold
+/// them.
+fn write_zip_bundle(root: &str, output: &str, files: &[String]) -> Result<bool, Error> {
+    let entries = files
+        .iter()
+        .map(|rel| file_entry(&Path::new(root).join(rel), rel.clone()))
+        .collect::<Result<Vec<_>, Error>>()?;
+    let Ok(archive) = crate::zip::write(&entries) else {
         return Ok(false);
     };
     let dest = if crate::paths::is_absolute(output) {
@@ -479,17 +492,42 @@ fn export_skill(
     put(out, exported_text(style, root, &output).as_bytes()).map(|()| 0)
 }
 
-/// Every regular file below `dir` as an archive entry under `<prefix>/`, in
-/// byte order so the archive is reproducible.
+/// The regular files below `dir`, each as `<prefix>/<path below dir>`: a
+/// hidden entry or a symbolic link at any depth stays out of an archive,
+/// and a folder that cannot be read fails it rather than leaving files out.
+fn shared_files(dir: &Path, prefix: &str, found: &mut Vec<String>) -> Result<(), Error> {
+    let entries = std::fs::read_dir(dir).map_err(|e| Error::io(dir, e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| Error::io(dir, e))?;
+        let name = entry.file_name().disk_text();
+        if name.starts_with('.') {
+            continue;
+        }
+        let kind = entry.file_type().map_err(|e| Error::io(entry.path(), e))?;
+        let rel = format!("{prefix}/{name}");
+        if kind.is_dir() {
+            shared_files(&entry.path(), &rel, found)?;
+        } else if kind.is_file() {
+            found.push(rel);
+        }
+    }
+    Ok(())
+}
+
+/// Every file `shared_files` keeps below `dir` as an archive entry under
+/// `<prefix>/`, in byte order so the archive is reproducible.
 fn entries_below(dir: &Path, prefix: &str) -> Result<Vec<crate::zip::Entry>, Error> {
     let mut files = Vec::new();
-    files_below(dir, &mut files);
+    shared_files(dir, prefix, &mut files)?;
     files.sort();
     files
         .iter()
-        .map(|file| {
-            let rel = file.strip_prefix(dir).unwrap_or(file).disk_text();
-            file_entry(file, format!("{prefix}/{rel}"))
+        .map(|rel| {
+            let inner = rel
+                .strip_prefix(prefix)
+                .unwrap_or(rel)
+                .trim_start_matches('/');
+            file_entry(&dir.join(inner), rel.clone())
         })
         .collect()
 }
@@ -503,18 +541,22 @@ fn file_entry(file: &Path, path: String) -> Result<crate::zip::Entry, Error> {
     })
 }
 
-/// The bundle `items` (paths relative to `root`) as ZIP entries.
-fn bundle_entries(root: &str, items: &[String]) -> Result<Vec<crate::zip::Entry>, Error> {
-    let mut entries = Vec::new();
+/// The files the bundle `items` (paths relative to `root`) carry, relative
+/// to `root` and in byte order; an item that is a symbolic link carries
+/// nothing.
+fn bundle_files(root: &str, items: &[String]) -> Result<Vec<String>, Error> {
+    let mut files = Vec::new();
     for rel in items {
         let path = Path::new(root).join(rel);
-        if path.is_dir() {
-            entries.extend(entries_below(&path, rel)?);
-        } else {
-            entries.push(file_entry(&path, rel.clone())?);
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| Error::io(&path, e))?;
+        if meta.is_dir() {
+            shared_files(&path, rel, &mut files)?;
+        } else if meta.is_file() {
+            files.push(rel.clone());
         }
     }
-    Ok(entries)
+    files.sort();
+    Ok(files)
 }
 
 #[cfg(unix)]
