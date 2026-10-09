@@ -1,12 +1,10 @@
 //! `tests/bundle.bats`: `exuno export` and `exuno import` — a bundle
-//! round trip, a directory source, and a GitHub archive served by a curl
-//! stand-in on `PATH`.
+//! round trip, a directory source, archives, and git remotes served from
+//! local bare repositories.
 
 mod common;
 
 use std::path::Path;
-#[cfg(unix)]
-use std::path::PathBuf;
 use std::process::Command as StdCommand;
 
 use assert_cmd::Command;
@@ -29,72 +27,111 @@ fn tar_list(archive: &Path) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// A `curl` on `PATH` that serves `$FAKE_GITHUB_DIR/<owner>_<repo>-<branch>.tar.gz`
-/// for the archive URL import builds, and fails like `curl -f` otherwise.
-#[cfg(unix)]
-fn github_stub(project: &Project) -> (PathBuf, PathBuf) {
-    use std::os::unix::fs::PermissionsExt;
-
-    let stub_dir = project.join("stub");
-    let github_dir = project.join("github");
-    std::fs::create_dir_all(&stub_dir).unwrap();
-    std::fs::create_dir_all(&github_dir).unwrap();
-    let script = r#"#!/usr/bin/env bash
-out=""; url=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -o) out="$2"; shift 2 ;;
-        --max-time) shift 2 ;;
-        -*) shift ;;
-        *) url="$1"; shift ;;
-    esac
-done
-name="${url##*/archive/refs/heads/}"
-repo="${url#https://github.com/}"; repo="${repo%%/archive/*}"
-file="$FAKE_GITHUB_DIR/${repo//\//_}-$name"
-[ -f "$file" ] || exit 22
-cp "$file" "$out"
-"#;
-    let curl_path = stub_dir.join("curl");
-    std::fs::write(&curl_path, script).unwrap();
-    std::fs::set_permissions(&curl_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    (stub_dir, github_dir)
+/// Bare repositories under `remotes/<owner>/<repo>.git`, each built from a
+/// working clone, and a git config that sends `https://github.com/` to them.
+struct Remotes {
+    dir: tempfile::TempDir,
 }
 
-/// An archive as GitHub serves one: the repository under `<repo>-<branch>/`.
-#[cfg(unix)]
-fn github_archive(github_dir: &Path, owner_repo: &str, branch: &str) {
-    let repo = owner_repo.split('/').nth(1).unwrap();
-    let top = format!("{repo}-{branch}");
-    let scratch = tempfile::tempdir().unwrap();
-    let gh_root = scratch.path().join(&top);
-    std::fs::create_dir_all(gh_root.join(".ai/src/rules")).unwrap();
-    std::fs::write(
-        gh_root.join(".ai/src/AGENTS.md"),
-        format!("# From {branch}\n"),
-    )
-    .unwrap();
-    std::fs::write(gh_root.join(".ai/src/rules/gh.md"), "# GH rule\n").unwrap();
-    let archive_name = format!("{}-{branch}.tar.gz", owner_repo.replace('/', "_"));
-    let status = StdCommand::new("tar")
-        .arg("-czf")
-        .arg(github_dir.join(&archive_name))
-        .arg("-C")
-        .arg(scratch.path())
-        .arg(&top)
-        .status()
+impl Remotes {
+    fn new() -> Self {
+        Self {
+            dir: tempfile::tempdir().unwrap(),
+        }
+    }
+
+    fn slashed(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = StdCommand::new("git")
+            .current_dir(dir)
+            .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"])
+            .args(args)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env(
+                "GIT_CONFIG_GLOBAL",
+                if cfg!(windows) { "NUL" } else { "/dev/null" },
+            )
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+
+    fn bare(&self, name: &str) -> std::path::PathBuf {
+        self.dir.path().join("remotes").join(format!("{name}.git"))
+    }
+
+    /// Commits `files` as the whole tree of `branch` in repository `name`.
+    fn commit(&self, name: &str, branch: &str, files: &[(&str, &str)]) {
+        let work = self.dir.path().join("work").join(name);
+        if !work.exists() {
+            std::fs::create_dir_all(&work).unwrap();
+            Self::git(&work, &["init", "-q", "-b", branch]);
+            let bare = self.bare(name);
+            std::fs::create_dir_all(&bare).unwrap();
+            Self::git(&bare, &["init", "-q", "--bare", "-b", branch]);
+            Self::git(&work, &["remote", "add", "origin", &Self::slashed(&bare)]);
+        }
+        Self::git(&work, &["checkout", "-q", "--orphan", branch]);
+        Self::git(&work, &["rm", "-rqf", "--ignore-unmatch", "."]);
+        for (rel, text) in files {
+            let path = work.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        Self::git(&work, &["add", "-A"]);
+        Self::git(&work, &["commit", "-q", "-m", branch]);
+        Self::git(&work, &["push", "-q", "-f", "origin", branch]);
+    }
+
+    fn tag(&self, name: &str, tag: &str) {
+        let work = self.dir.path().join("work").join(name);
+        Self::git(&work, &["tag", tag]);
+        Self::git(&work, &["push", "-q", "origin", tag]);
+    }
+
+    fn default_branch(&self, name: &str, branch: &str) {
+        let target = format!("refs/heads/{branch}");
+        Self::git(&self.bare(name), &["symbolic-ref", "HEAD", &target]);
+    }
+
+    /// `name`'s bare repository as a `file://` URL, never mistaken for a
+    /// local directory to copy.
+    fn url(&self, name: &str) -> String {
+        let path = Self::slashed(&self.bare(name));
+        if path.starts_with('/') {
+            format!("file://{path}")
+        } else {
+            format!("file:///{path}")
+        }
+    }
+
+    /// Adds a symbolic link `rel` → `target` to the branch last committed in
+    /// repository `name`.
+    #[cfg(unix)]
+    fn commit_link(&self, name: &str, rel: &str, target: &Path) {
+        let work = self.dir.path().join("work").join(name);
+        std::os::unix::fs::symlink(target, work.join(rel)).unwrap();
+        Self::git(&work, &["add", "-A"]);
+        Self::git(&work, &["commit", "-q", "-m", "link"]);
+        Self::git(&work, &["push", "-q", "-f", "origin", "HEAD"]);
+    }
+
+    /// A global git config whose `insteadOf` turns GitHub URLs into these
+    /// repositories.
+    fn github_config(&self) -> std::path::PathBuf {
+        let config = self.dir.path().join("gitconfig");
+        let remotes = Self::slashed(&self.dir.path().join("remotes"));
+        std::fs::write(
+            &config,
+            format!("[url \"{remotes}/\"]\n\tinsteadOf = https://github.com/\n"),
+        )
         .unwrap();
-    assert!(status.success());
-}
-
-#[cfg(unix)]
-fn with_curl_stub(command: &mut Command, stub_dir: &Path, github_dir: &Path) {
-    let path = format!(
-        "{}:{}",
-        stub_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
-    command.env("PATH", path).env("FAKE_GITHUB_DIR", github_dir);
+        config
+    }
 }
 
 #[test]
@@ -118,10 +155,10 @@ fn import_help_prints_usage() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with(
-            "\n  exuno import — import config from GitHub, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    GitHub URL        https://github.com/user/repo\n",
+            "\n  exuno import — import config from a git remote, archive, or directory\n\n  USAGE\n    exuno import <source> [OPTIONS]\n\n  DESCRIPTION\n    An imported skill replaces the project's copy whole: files the new\n    version no longer has are removed. An import that changes files is\n    backed up first, so exuno rollback undoes it.\n\n  SOURCES\n    Git repository    https://github.com/user/repo[/tree/<ref>/<folder>],\n",
         ))
-        .stdout(predicate::str::contains("\n  OPTIONS\n    -b, --branch <name>   "))
-        .stdout(predicate::str::contains("\n    -h, --help            Show this help\n"));
+        .stdout(predicate::str::contains("\n  OPTIONS\n    --ref <name>       "))
+        .stdout(predicate::str::contains("\n    -h, --help         Show this help\n"));
 }
 
 #[test]
@@ -638,56 +675,243 @@ fn import_rejects_an_unrecognized_source() {
         .stderr(predicate::str::contains("Cannot recognize source"));
 }
 
-// The curl stand-in is a shell script the binary cannot spawn on Windows.
-#[cfg(unix)]
 #[test]
-fn import_downloads_a_github_archive_through_curl() {
+fn import_fetches_the_default_branch_of_a_git_remote() {
     let project = Project::seeded(&[]);
-    let (stub_dir, github_dir) = github_stub(&project);
-    github_archive(&github_dir, "user/repo", "main");
-    let mut command = project.exuno();
-    with_curl_stub(&mut command, &stub_dir, &github_dir);
-    command
-        .args(["import", "https://github.com/user/repo", "--force"])
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/kit",
+        "develop",
+        &[(".ai/src/rules/kit.md", "# Kit\n")],
+    );
+    remotes.default_branch("acme/kit", "develop");
+    project
+        .exuno()
+        .args(["import", &remotes.url("acme/kit"), "--force"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "Downloading user/repo (branch: main)",
-        ))
-        .stdout(predicate::str::contains("Downloaded."));
-    assert!(project.join(".ai/src/rules/gh.md").is_file());
+        .stdout(predicate::str::contains("Fetched."));
+    assert_eq!(project.read(".ai/src/rules/kit.md"), "# Kit\n");
 }
 
-#[cfg(unix)]
 #[test]
-fn import_falls_back_to_master_when_main_is_missing() {
+fn import_follows_a_github_link_to_a_tag_and_folder() {
     let project = Project::seeded(&[]);
-    let (stub_dir, github_dir) = github_stub(&project);
-    github_archive(&github_dir, "user/repo2", "master");
-    let mut command = project.exuno();
-    with_curl_stub(&mut command, &stub_dir, &github_dir);
-    command
-        .args(["import", "https://github.com/user/repo2", "--force"])
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/mono",
+        "main",
+        &[(".ai/src/rules/root.md", "# Root\n")],
+    );
+    remotes.commit(
+        "acme/mono",
+        "release",
+        &[("packages/app/.ai/src/rules/app.md", "# App\n")],
+    );
+    remotes.tag("acme/mono", "v1");
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+        .args([
+            "import",
+            "https://github.com/acme/mono/tree/v1/packages/app",
+            "--force",
+        ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("trying 'master'"));
-    assert_eq!(project.read(".ai/src/AGENTS.md"), "# From master\n");
+        .stdout(predicate::str::contains("at v1, packages/app"));
+    assert_eq!(project.read(".ai/src/rules/app.md"), "# App\n");
+    assert!(!project.join(".ai/src/rules/root.md").exists());
 }
 
-#[cfg(unix)]
 #[test]
-fn import_reports_a_branch_that_cannot_be_downloaded() {
+fn import_follows_a_link_to_the_ai_folder_itself() {
     let project = Project::seeded(&[]);
-    let (stub_dir, github_dir) = github_stub(&project);
-    let mut command = project.exuno();
-    with_curl_stub(&mut command, &stub_dir, &github_dir);
-    command
-        .args(["import", "https://github.com/user/repo", "--branch", "nope"])
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/kit",
+        "main",
+        &[
+            ("app/.ai/src/rules/app.md", "# App\n"),
+            ("app/.ai/src/mcp.json", "{}\n"),
+        ],
+    );
+    for link in ["tree/main/app/.ai", "tree/main/app/.ai/src"] {
+        project
+            .exuno()
+            .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+            .args([
+                "import",
+                &format!("https://github.com/acme/kit/{link}"),
+                "--force",
+            ])
+            .assert()
+            .success();
+        assert_eq!(project.read(".ai/src/rules/app.md"), "# App\n", "{link}");
+        assert!(project.join(".ai/src/mcp.json").is_file(), "{link}");
+        std::fs::remove_file(project.join(".ai/src/rules/app.md")).unwrap();
+    }
+}
+
+#[test]
+fn import_takes_owner_slash_repo_from_github() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit("acme/kit", "main", &[(".ai/src/rules/kit.md", "# Kit\n")]);
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+        .args(["import", "acme/kit", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/kit.md"), "# Kit\n");
+}
+
+#[test]
+fn import_takes_a_ref_and_folder_from_flags() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit("acme/kit", "main", &[("README.md", "# Kit\n")]);
+    remotes.commit(
+        "acme/kit",
+        "feature/x",
+        &[("tools/ai/.ai/src/rules/x.md", "# X\n")],
+    );
+    project
+        .exuno()
+        .args([
+            "import",
+            &remotes.url("acme/kit"),
+            "--ref",
+            "feature/x",
+            "--path",
+            "tools/ai",
+            "--force",
+        ])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/x.md"), "# X\n");
+}
+
+#[test]
+fn import_reports_a_ref_the_remote_lacks() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit("acme/kit", "main", &[(".ai/src/rules/kit.md", "# Kit\n")]);
+    project
+        .exuno()
+        .args(["import", &remotes.url("acme/kit"), "--branch", "nope"])
         .assert()
         .code(1)
-        .stderr(predicate::str::contains(
-            "Failed to download branch 'nope'.",
-        ));
+        .stderr(predicate::str::contains("could not fetch"))
+        .stderr(predicate::str::contains("at nope"))
+        .stderr(predicate::str::contains("couldn't find remote ref nope"));
+}
+
+#[test]
+fn a_flag_overrides_only_its_own_part_of_a_tree_link() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit("acme/mono", "main", &[("README.md", "# Mono\n")]);
+    remotes.commit(
+        "acme/mono",
+        "release",
+        &[
+            ("packages/app/.ai/src/rules/app.md", "# App\n"),
+            ("tools/ai/.ai/src/rules/tools.md", "# Tools\n"),
+        ],
+    );
+    remotes.tag("acme/mono", "v1");
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+        .args([
+            "import",
+            "https://github.com/acme/mono/tree/v1/packages/app",
+            "--path",
+            "tools/ai",
+            "--force",
+        ])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/tools.md"), "# Tools\n");
+    assert!(!project.join(".ai/src/rules/app.md").exists());
+}
+
+#[test]
+fn import_follows_a_link_to_a_file_to_its_folder() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/kit",
+        "main",
+        &[
+            ("app/.ai/src/AGENTS.md", "# App\n"),
+            ("app/.ai/src/rules/app.md", "# App rule\n"),
+        ],
+    );
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", remotes.github_config())
+        .args([
+            "import",
+            "https://github.com/acme/kit/blob/main/app/.ai/src/AGENTS.md?plain=1",
+            "--force",
+        ])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/app.md"), "# App rule\n");
+}
+
+// A filter driver runs through `sh` with POSIX `touch`.
+#[cfg(unix)]
+#[test]
+fn import_runs_no_filter_driver_of_the_users_git_config() {
+    let project = Project::seeded(&[]);
+    let remotes = Remotes::new();
+    remotes.commit(
+        "acme/kit",
+        "main",
+        &[
+            (".gitattributes", "* filter=probe\n"),
+            (".ai/src/rules/kit.md", "# Kit\n"),
+        ],
+    );
+    let marker = project.join("filter-ran");
+    let config = project.join("gitconfig");
+    std::fs::write(
+        &config,
+        format!(
+            "[filter \"probe\"]\n\tsmudge = touch '{}' && cat\n",
+            marker.display()
+        ),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .env("GIT_CONFIG_GLOBAL", &config)
+        .args(["import", &remotes.url("acme/kit"), "--force"])
+        .assert()
+        .success();
+    assert!(!marker.exists(), "the remote's .gitattributes ran a filter");
+    assert_eq!(project.read(".ai/src/rules/kit.md"), "# Kit\n");
+}
+
+// Symbolic links need POSIX `symlink`; Windows grants it only with extra rights.
+#[cfg(unix)]
+#[test]
+fn import_never_follows_a_symlink_the_remote_ships() {
+    let project = Project::seeded(&[]);
+    project.write("private/.ai/src/rules/secret.md", "# Secret\n");
+    let remotes = Remotes::new();
+    remotes.commit("acme/kit", "main", &[("README.md", "# Kit\n")]);
+    remotes.commit_link("acme/kit", ".ai", &project.join("private/.ai"));
+    project
+        .exuno()
+        .args(["import", &remotes.url("acme/kit"), "--force"])
+        .assert()
+        .code(1);
+    assert!(!project.join(".ai/src/rules/secret.md").exists());
 }
 
 const JURY: &str = "---\nname: jury\ndescription: Judge a submission.\n---\n# Jury\n";
