@@ -657,7 +657,8 @@ pub const IMPORT_HELP: Help = Help {
 };
 
 /// A scratch directory under the system temp dir, removed on drop as the run
-/// directory was.
+/// directory was. It is created new and private: a directory another user
+/// made in advance at the same name fails the run instead of being reused.
 pub(crate) struct Scratch(pub(crate) PathBuf);
 
 impl Scratch {
@@ -667,8 +668,15 @@ impl Scratch {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let dir = std::env::temp_dir().join(format!("{prefix}.{}.{nanos}", std::process::id()));
-        std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
-        Ok(Self(dir))
+        std::fs::create_dir(&dir).map_err(|e| Error::io(&dir, e))?;
+        let scratch = Self(dir);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&scratch.0, std::fs::Permissions::from_mode(0o700))
+                .map_err(|e| Error::io(&scratch.0, e))?;
+        }
+        Ok(scratch)
     }
 }
 
@@ -746,15 +754,23 @@ fn resolves_inside(root: &Path, path: &Path) -> bool {
 /// `SKILL.md` sits at its root, named `stem`, else every skill folder below
 /// it, named by its folder.
 fn skill_dirs(tree: &Path, stem: &str) -> Vec<(PathBuf, String)> {
-    if tree.join("SKILL.md").is_file() {
-        return vec![(tree.to_path_buf(), stem.to_string())];
+    let contained = |dir: &Path| {
+        let manifest = dir.join("SKILL.md");
+        manifest.is_file() && resolves_inside(tree, dir) && resolves_inside(tree, &manifest)
+    };
+    if tree.join("SKILL.md").exists() {
+        return if contained(tree) {
+            vec![(tree.to_path_buf(), stem.to_string())]
+        } else {
+            Vec::new()
+        };
     }
     let tree_text = tree.disk_text();
     skill_tree::discover(&Workspace::on_disk(&tree_text), &tree_text)
         .skills
         .into_iter()
         .map(|skill| (tree.join(&skill.rel), skill.name))
-        .filter(|(dir, _)| resolves_inside(tree, dir))
+        .filter(|(dir, _)| contained(dir))
         .collect()
 }
 
@@ -1406,6 +1422,9 @@ const SOURCE_KEYS: [(&str, &str); 6] = [
 fn imported_config_text(project: &Path, dest_base_rel: &str) -> Option<String> {
     use crate::config::{yaml_edit::remove_key_text, yaml_subset};
     let path = project.join(present_config(project)?);
+    if !resolves_inside(project, &path) {
+        return None;
+    }
     let mut text = String::from_utf8_lossy(&std::fs::read(&path).ok()?).into_owned();
     for (key, target) in SOURCE_KEYS {
         let key_path = format!("source.{key}");
@@ -1913,6 +1932,16 @@ mod tests {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    // Permission bits are POSIX.
+    #[cfg(unix)]
+    #[test]
+    fn a_scratch_directory_is_private_to_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = Scratch::create("exuno-test").unwrap();
+        let mode = std::fs::metadata(&scratch.0).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
     }
 
     #[test]

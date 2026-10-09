@@ -867,6 +867,80 @@ fn import_never_follows_a_symlink_an_archive_ships() {
     }
 }
 
+/// Packs everything below `staging` into the `.tgz` at `archive`.
+#[cfg(unix)]
+fn tar_of(staging: &Path, archive: &Path) {
+    let status = StdCommand::new("tar")
+        .arg("-czf")
+        .arg(archive)
+        .arg("-C")
+        .arg(staging)
+        .arg(".")
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+// A symbolic link in the archive needs POSIX `symlink` to build.
+#[cfg(unix)]
+#[test]
+fn import_reads_no_config_an_archive_links_to() {
+    let project = Project::empty();
+    project.write("private/secret.yaml", "secret: true\n");
+    let staging = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(staging.path().join(".ai/src/rules")).unwrap();
+    std::fs::write(staging.path().join(".ai/src/rules/a.md"), "# A\n").unwrap();
+    std::os::unix::fs::symlink(
+        project.join("private/secret.yaml"),
+        staging.path().join(".ai/exuno.yaml"),
+    )
+    .unwrap();
+    tar_of(staging.path(), &project.join("linked.tgz"));
+    project
+        .exuno()
+        .args(["import", "linked.tgz", "--force"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".ai/src/rules/a.md"), "# A\n");
+    let config = project.join(".ai/exuno.yaml");
+    assert!(
+        !config.exists() || !project.read(".ai/exuno.yaml").contains("secret"),
+        "the archive's linked config was read"
+    );
+}
+
+// A symbolic link in the archive needs POSIX `symlink` to build.
+#[cfg(unix)]
+#[test]
+fn import_reads_no_skill_manifest_an_archive_links_to() {
+    let project = Project::seeded(&[]);
+    project.write(
+        "private/SKILL.md",
+        "---\nname: stolen\ndescription: Outside.\n---\n",
+    );
+    for nested in [true, false] {
+        let staging = tempfile::tempdir().unwrap();
+        let dir = if nested {
+            staging.path().join("jury")
+        } else {
+            staging.path().to_path_buf()
+        };
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("notes.md"), "# Notes\n").unwrap();
+        std::os::unix::fs::symlink(project.join("private/SKILL.md"), dir.join("SKILL.md")).unwrap();
+        tar_of(staging.path(), &project.join("linked.tgz"));
+        project
+            .exuno()
+            .args(["import", "linked.tgz", "--force"])
+            .output()
+            .unwrap();
+        assert!(
+            !project.join(".ai/src/skills/stolen").exists(),
+            "nested={nested}"
+        );
+    }
+}
+
 #[test]
 fn export_counts_only_the_files_the_bundle_carries() {
     let project = Project::seeded(&[]);
