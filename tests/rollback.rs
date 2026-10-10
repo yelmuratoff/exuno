@@ -174,3 +174,22 @@ fn rollback_leaves_no_temp_artifacts_behind() {
         .success();
     assert_eq!(std::fs::read_dir(&sandbox).unwrap().count(), 0);
 }
+
+#[test]
+fn rollback_removes_the_tool_folder_the_sync_created() {
+    let project = project_with_claude();
+    assert!(!project.exists(".claude"));
+    project
+        .exuno()
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .success();
+    assert!(project.exists(".claude/rules"));
+
+    project
+        .exuno()
+        .args(["rollback", "--yes"])
+        .assert()
+        .success();
+    assert!(!project.exists(".claude"));
+}
