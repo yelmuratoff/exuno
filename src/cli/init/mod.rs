@@ -12,6 +12,7 @@ use crate::output::style::Style;
 use crate::paths;
 use crate::project::Project;
 use crate::transaction::interrupt::{self, Interrupt};
+use crate::transaction::lock::Lock;
 use crate::{Error, config::catalog, transaction::backup, transaction::witness};
 
 mod args;
@@ -407,16 +408,9 @@ fn transact(run: &mut Run, project: &Project, plan: &InitPlan) -> Result<Option<
         style.cyan(target)
     ))?;
     let targets = backup_targets(run, project, target, &plan.choices.tools)?;
-    let backup_path = match backup::create(target, "init", &targets, plan.retention) {
-        Ok(path) => path,
-        Err(e) => {
-            report_backup_error(run, &e)?;
-            run.tell(&format!(
-                "{}: Could not back up init targets; no project files were changed.\n",
-                style.red("Error")
-            ))?;
-            return Ok(Some(1));
-        }
+    let (lock, backup_path) = match back_up(run, plan, &targets)? {
+        Ok(held) => held,
+        Err(status) => return Ok(Some(status)),
     };
     let shown_backup = backup_path
         .strip_prefix(&format!("{target}/"))
@@ -444,14 +438,17 @@ fn transact(run: &mut Run, project: &Project, plan: &InitPlan) -> Result<Option<
     );
     if let Err(failure) = scaffolded {
         let status = restore(run, plan, &backup_path, &failure)?;
+        finish(run, &lock)?;
         if let Failure::Signal(sig) = failure {
             interrupt.resend(sig);
         }
         return Ok(Some(status));
     }
     drop(interrupt);
+    let sealed = witness::seal(target, &backup_path);
+    finish(run, &lock)?;
     prune(run, target, plan.retention)?;
-    if let Err(reason) = witness::seal(target, &backup_path) {
+    if let Err(reason) = sealed {
         run.tell(&format!(
             "{}: Could not record the post-init state ({reason}); rolling back backup {} cannot detect later changes.\n",
             style.yellow("Warning"),
@@ -459,6 +456,49 @@ fn transact(run: &mut Run, project: &Project, plan: &InitPlan) -> Result<Option<
         ))?;
     }
     Ok(None)
+}
+
+/// Takes the project lock, then the init backup under it: `Err(status)` once
+/// a refusal is reported and no project file has changed.
+fn back_up(
+    run: &mut Run,
+    plan: &InitPlan,
+    targets: &[String],
+) -> Result<Result<(Lock, String), u8>, Error> {
+    let style = run.style;
+    let target = plan.target.as_str();
+    let backed_up = match Lock::acquire(target, "init", plan.retention) {
+        Ok((lock, recovered)) => {
+            if let Some(recovered) = recovered {
+                run.tell(&format!(
+                    "{}: {}\n",
+                    style.yellow("Warning"),
+                    recovered.message()
+                ))?;
+            }
+            backup::create(target, "init", targets, plan.retention)
+                .and_then(|path| lock.begin(&path).map(|()| (lock, path)))
+        }
+        Err(e) => Err(e),
+    };
+    match backed_up {
+        Ok(held) => Ok(Ok(held)),
+        Err(e) => {
+            report_backup_error(run, &e)?;
+            run.tell(&format!(
+                "{}: Could not back up init targets; no project files were changed.\n",
+                style.red("Error")
+            ))?;
+            Ok(Err(1))
+        }
+    }
+}
+
+fn finish(run: &mut Run, lock: &Lock) -> Result<(), Error> {
+    match lock.finish() {
+        Ok(()) => Ok(()),
+        Err(e) => report_backup_error(run, &e),
+    }
 }
 
 /// Reports `failure` and restores the pre-init state from `backup_path`:

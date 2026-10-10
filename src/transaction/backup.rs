@@ -231,9 +231,19 @@ fn validate_store(canonical_root: &str) -> Result<String, Error> {
     Ok(store.disk_text())
 }
 
+/// The validated backup store, created with its `.gitignore` of `*`.
+pub(crate) fn open_store(supplied_root: &str) -> Result<String, Error> {
+    let canonical = canonical_root(supplied_root)?;
+    let store = validate_store(&canonical)?;
+    std::fs::create_dir_all(&store).map_err(|e| Error::io(&store, e))?;
+    let store = validate_store(&canonical)?;
+    write_store_file(&store, ".gitignore", b"*\n")?;
+    Ok(store)
+}
+
 /// `mktemp "$store/<prefix>XXXXXX"` then `mv` onto `<store>/<name>`: a
 /// symlink at either path is replaced, never followed.
-fn write_store_file(store: &str, name: &str, bytes: &[u8]) -> Result<(), Error> {
+pub(crate) fn write_store_file(store: &str, name: &str, bytes: &[u8]) -> Result<(), Error> {
     let staging = create_unique(
         store,
         &format!(".{}.tmp.", name.trim_start_matches('.')),
@@ -295,7 +305,8 @@ fn sweep_stale_staging(store: &str, now: SystemTime, retention: Retention) {
         let name = entry.file_name().disk_text();
         if !(name.starts_with(".tmp.")
             || name.starts_with(".latest.tmp.")
-            || name.starts_with(".gitignore.tmp."))
+            || name.starts_with(".gitignore.tmp.")
+            || name.starts_with(".pending.tmp."))
         {
             continue;
         }
@@ -408,10 +419,7 @@ fn create_at(
     }
     let canonical = canonical_root(supplied_root)?;
     let prepared = prepare_targets(supplied_root, targets)?;
-    let store = validate_store(&canonical)?;
-    std::fs::create_dir_all(&store).map_err(|e| Error::io(&store, e))?;
-    let store = validate_store(&canonical)?;
-    write_store_file(&store, ".gitignore", b"*\n")?;
+    let store = open_store(supplied_root)?;
     sweep_stale_staging(&store, now, retention);
 
     let stage = create_unique(

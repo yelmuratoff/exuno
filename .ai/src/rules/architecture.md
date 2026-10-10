@@ -41,6 +41,7 @@ src/engine/                    → the render:
 src/transaction/               → what makes a mutating run restorable:
   backup.rs / witness.rs / manifest.rs             transactions, post-operation witnesses, ownership, and drift.
   interrupt.rs                                     signal traps a transaction arms.
+  lock.rs                                          the project lock, and recovery of a run that died mid-write.
 src/output/                    → log.rs / style.rs / prompts.rs / changelog.rs: engine log voice, command colours, terminal prompts, changelog rendering.
 src/paths.rs / text.rs         → containment, drive-aware `/`-separated paths; byte-level line and whitespace handling.
 src/zip.rs                     → ZIP read and deterministic write for `.skill` packages and `.zip` imports.
@@ -60,7 +61,8 @@ Business logic lives in the library modules. `main.rs` stays a router, and a `sr
 - **YAML parser scope**: scalar keys, dot-notation nesting, and the explicitly supported list forms. New YAML shapes need a concrete engine requirement and parser tests.
 - **Idempotency**: `exuno sync` produces identical output on repeated runs. No timestamps, no ordering changes, no platform-dependent sorting. `exuno check` verifies this.
 - **Stateless runs**: read config fresh each invocation. The version comes from the `VERSION` file through `include_str!`, never embedded by hand.
-- **Transactional mutation**: `init`, `sync`, and `rollback` snapshot their complete managed write set through `backup::create`. Failures restore the previous state; operations prune completed history through `backup::prune` once no restore is pending.
+- **Transactional mutation**: `init`, `sync`, `rollback`, `import`, and `mcp use` snapshot their complete managed write set through `backup::create`. Failures restore the previous state; operations prune completed history through `backup::prune` once no restore is pending.
+- **Project lock**: a transaction takes `lock::Lock::acquire` before its backup, names the snapshot with `begin`, and calls `finish` once it has sealed, restored, or discarded it. A second run is refused while the lock is held; a snapshot left unfinished by a dead process is restored by the next run.
 - **Interrupts**: a transaction arms `interrupt` before its first write. A signal is recorded, the run stops at its next step and restores, then re-raises the signal; a staging file finished with a rename uses `staging` so the rename stays on one filesystem.
 - **Document new inline options** (`inline_into_agents`, `prepend_agents`, etc.) in the `exuno` skill and `_TEMPLATE.yaml` as part of the change that introduces them.
 
