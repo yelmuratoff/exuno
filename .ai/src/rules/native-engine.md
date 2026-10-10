@@ -11,7 +11,7 @@ The Rust crate at the repo root is the whole engine: one binary, `exuno`, built 
 
 ## Toolchain
 
-- Edition 2024, `rust-version = "1.85"`, `unsafe_code = "forbid"`. `cargo fmt --all --check` and `cargo clippy --all-targets -- -D warnings` stay clean.
+- Edition 2024, `rust-version = "1.89"`, `unsafe_code = "forbid"`. `cargo fmt --all --check` and `cargo clippy --all-targets -- -D warnings` stay clean.
 - `VERSION` is the release source of truth. The crate reads it with `include_str!`, `Cargo.toml` and `Cargo.lock` carry the same value, `exuno release` bumps the three together, and a test in `src/lib.rs` fails when the crate version and `VERSION` disagree.
 - Templates embed from `lib/templates/` through `include_dir!`. The binary never looks up an engine directory at runtime.
 - Dependencies: include_dir, miniz_oxide (deflate for `src/zip.rs`), serde, serde_json, sha2, signal-hook, thiserror, toml_edit (Codex `config.toml` key ownership); dev: assert_cmd, predicates, tempfile. Add a crate only for a concrete command need. No argument parser: every command reads its own options as its Bash `cmd_*` did, and `cli::Command` matches only the command word. A YAML parser is never added: `yaml_subset` reads the supported shapes by design.

@@ -12,6 +12,7 @@ use crate::output::log::{Log, Sink};
 use crate::output::style::Style;
 use crate::paths::{self, Paths};
 use crate::transaction::interrupt::{self, Interrupt};
+use crate::transaction::lock::Lock;
 use crate::transaction::manifest::{self, Manifest};
 use crate::{Error, engine::gitignore, text, transaction::backup, transaction::witness};
 
@@ -178,6 +179,7 @@ pub fn run(root: &str, args: &[String], env: &Env, colors: bool, sink: Sink) -> 
             status
         }
     };
+    tx.release(&mut s);
     if let Some(mut interrupt) = s.interrupt.take()
         && let Some(sig) = interrupt.received()
     {
@@ -193,9 +195,19 @@ struct Transaction {
     backup: Option<String>,
     active: bool,
     retention: backup::Retention,
+    lock: Option<Lock>,
 }
 
 impl Transaction {
+    /// Ends the run's hold on the project once it has sealed or restored.
+    fn release(&mut self, s: &mut Session) {
+        if let Some(lock) = self.lock.take()
+            && let Err(e) = lock.finish()
+        {
+            report_backup_error(&mut s.log, &e);
+        }
+    }
+
     /// `_sync_cleanup` after a failed run.
     fn fail(&mut self, s: &mut Session, env: &Env) {
         let Some(backup_path) = self.backup.clone().filter(|_| self.active) else {
@@ -538,19 +550,24 @@ fn start_transaction(
     targets.push(format!("{root}/{}", manifest::REL));
     s.interrupt = Some(Interrupt::arm());
     tx.retention = run.retention;
-    match backup::create(&root, "sync", &targets, run.retention) {
-        Ok(path) => {
-            tx.backup = Some(path);
-            tx.active = true;
-            Ok(())
-        }
-        Err(e) => {
-            report_backup_error(&mut s.log, &e);
-            s.log
-                .error("Could not back up sync targets; no files were changed.");
-            Err(Stop(1))
-        }
+    let refused = |s: &mut Session, e: Error| {
+        report_backup_error(&mut s.log, &e);
+        s.log
+            .error("Could not back up sync targets; no files were changed.");
+        Stop(1)
+    };
+    let (lock, recovered) =
+        Lock::acquire(&root, "sync", run.retention).map_err(|e| refused(s, e))?;
+    if let Some(recovered) = recovered {
+        s.log.warning(&recovered.message());
     }
+    let lock = tx.lock.insert(lock);
+    let path = backup::create(&root, "sync", &targets, run.retention)
+        .and_then(|path| lock.begin(&path).map(|()| path))
+        .map_err(|e| refused(s, e))?;
+    tx.backup = Some(path);
+    tx.active = true;
+    Ok(())
 }
 
 /// `_finalize_run`.

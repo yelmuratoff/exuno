@@ -231,9 +231,19 @@ fn validate_store(canonical_root: &str) -> Result<String, Error> {
     Ok(store.disk_text())
 }
 
+/// The validated backup store, created with its `.gitignore` of `*`.
+pub(crate) fn open_store(supplied_root: &str) -> Result<String, Error> {
+    let canonical = canonical_root(supplied_root)?;
+    let store = validate_store(&canonical)?;
+    std::fs::create_dir_all(&store).map_err(|e| Error::io(&store, e))?;
+    let store = validate_store(&canonical)?;
+    write_store_file(&store, ".gitignore", b"*\n")?;
+    Ok(store)
+}
+
 /// `mktemp "$store/<prefix>XXXXXX"` then `mv` onto `<store>/<name>`: a
 /// symlink at either path is replaced, never followed.
-fn write_store_file(store: &str, name: &str, bytes: &[u8]) -> Result<(), Error> {
+pub(crate) fn write_store_file(store: &str, name: &str, bytes: &[u8]) -> Result<(), Error> {
     let staging = create_unique(
         store,
         &format!(".{}.tmp.", name.trim_start_matches('.')),
@@ -295,7 +305,8 @@ fn sweep_stale_staging(store: &str, now: SystemTime, retention: Retention) {
         let name = entry.file_name().disk_text();
         if !(name.starts_with(".tmp.")
             || name.starts_with(".latest.tmp.")
-            || name.starts_with(".gitignore.tmp."))
+            || name.starts_with(".gitignore.tmp.")
+            || name.starts_with(".pending.tmp."))
         {
             continue;
         }
@@ -408,10 +419,7 @@ fn create_at(
     }
     let canonical = canonical_root(supplied_root)?;
     let prepared = prepare_targets(supplied_root, targets)?;
-    let store = validate_store(&canonical)?;
-    std::fs::create_dir_all(&store).map_err(|e| Error::io(&store, e))?;
-    let store = validate_store(&canonical)?;
-    write_store_file(&store, ".gitignore", b"*\n")?;
+    let store = open_store(supplied_root)?;
     sweep_stale_staging(&store, now, retention);
 
     let stage = create_unique(
@@ -485,9 +493,135 @@ fn stage_snapshot(
     }
     let targets = stage.join("targets.tsv");
     std::fs::write(&targets, records).map_err(io(&targets))?;
+    let rels: Vec<&str> = prepared
+        .iter()
+        .map(|abs| {
+            abs.strip_prefix(&format!("{canonical_root}/"))
+                .unwrap_or(abs)
+        })
+        .collect();
+    let folders = stage.join("dirs.tsv");
+    std::fs::write(&folders, folder_records(canonical_root, &rels)).map_err(io(&folders))?;
     let complete = stage.join(".complete");
     std::fs::write(&complete, "").map_err(io(&complete))?;
     Ok(format!("{created}-{operation}-{}", std::process::id()))
+}
+
+/// A folder above a target: whether it existed, and its mode where the
+/// platform has one.
+#[derive(Debug, PartialEq, Eq)]
+struct Folder {
+    present: bool,
+    mode: Option<u32>,
+    rel: String,
+}
+
+/// Every folder between the root and `rel`, shallowest first.
+fn ancestors(rel: &str) -> impl Iterator<Item = &str> {
+    rel.match_indices('/').map(|(end, _)| &rel[..end])
+}
+
+/// The `dirs.tsv` text: one `present\t<mode>\t<rel>` or `missing\t-\t<rel>`
+/// per folder above a target, a parent before its children. A link or a file
+/// in a folder's place is left out, since restore never recreates it.
+fn folder_records(canonical_root: &str, rels: &[&str]) -> String {
+    let mut seen: Vec<&str> = Vec::new();
+    let mut records = String::new();
+    for folder in rels.iter().flat_map(|rel| ancestors(rel)) {
+        if seen.contains(&folder) {
+            continue;
+        }
+        seen.push(folder);
+        match std::fs::symlink_metadata(format!("{canonical_root}/{folder}")) {
+            Ok(meta) if meta.is_dir() => {
+                records.push_str(&format!("present\t{}\t{folder}\n", mode_text(&meta)));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                records.push_str(&format!("missing\t-\t{folder}\n"));
+            }
+            _ => {}
+        }
+    }
+    records
+}
+
+#[cfg(unix)]
+fn mode_text(meta: &std::fs::Metadata) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    format!("{:04o}", meta.permissions().mode() & 0o7777)
+}
+
+#[cfg(not(unix))]
+fn mode_text(_meta: &std::fs::Metadata) -> String {
+    "-".to_string()
+}
+
+/// The folder records of `<snapshot>/dirs.tsv`, each above a recorded target;
+/// none for a snapshot taken before the file existed.
+fn load_folders(snapshot: &str, targets: &[Target]) -> Result<Vec<Folder>, Error> {
+    let tsv = format!("{snapshot}/dirs.tsv");
+    let path = Path::new(&tsv);
+    if !exists_or_link(path) {
+        return Ok(Vec::new());
+    }
+    if path.is_symlink() || !path.is_file() {
+        return Err(refuse("Snapshot folder list is unsafe"));
+    }
+    let bytes = std::fs::read(path).map_err(|e| Error::io(&tsv, e))?;
+    let mut folders = Vec::new();
+    for line in String::from_utf8_lossy(&bytes).split('\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split('\t').collect();
+        let [state, mode, rel] = fields.as_slice() else {
+            return Err(refuse(format!("Invalid folder record in snapshot: {line}")));
+        };
+        let mode = match (*state, *mode) {
+            ("present" | "missing", "-") => Some(None),
+            ("present", digits) => u32::from_str_radix(digits, 8)
+                .ok()
+                .filter(|mode| *mode <= 0o7777)
+                .map(Some),
+            _ => None,
+        };
+        let above_a_target = targets
+            .iter()
+            .any(|target| target.rel.starts_with(&format!("{rel}/")));
+        let (Some(mode), true) = (mode, above_a_target) else {
+            return Err(refuse(format!("Invalid folder record in snapshot: {rel}")));
+        };
+        validate_rel(rel, true)?;
+        folders.push(Folder {
+            present: *state == "present",
+            mode,
+            rel: rel.to_string(),
+        });
+    }
+    Ok(folders)
+}
+
+/// Puts a recorded folder back in its recorded state once the targets are
+/// restored: its mode when it existed, gone when it did not and is empty.
+fn settle_folder(canonical_root: &str, folder: &Folder) -> Result<(), Error> {
+    let path = safe_target_path(canonical_root, &folder.rel, true)?;
+    let is_folder = std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_dir());
+    if !is_folder {
+        return Ok(());
+    }
+    if !folder.present {
+        return match std::fs::remove_dir(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::DirectoryNotEmpty => Err(Error::io(&path, e)),
+            _ => Ok(()),
+        };
+    }
+    #[cfg(unix)]
+    if let Some(mode) = folder.mode {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
+            .map_err(|e| Error::io(&path, e))?;
+    }
+    Ok(())
 }
 
 /// `_backup_snapshot_path`.
@@ -598,14 +732,19 @@ pub fn load_targets(supplied_root: &str, requested: &str) -> Result<Vec<Target>,
 }
 
 /// `backup_restore`: every recorded target is removed, then the present ones
-/// are copied back.
+/// are copied back, and the folders above them return to their recorded state.
 pub fn restore(supplied_root: &str, requested: &str) -> Result<(), Error> {
     let canonical = canonical_root(supplied_root)?;
     let snapshot = snapshot_path(supplied_root, requested)?;
     let targets = load_targets(supplied_root, &snapshot)?;
+    let folders = load_folders(&snapshot, &targets)?;
     for target in &targets {
         let path = safe_target_path(&canonical, &target.rel, false)?;
         remove_all(Path::new(&path)).map_err(|e| Error::io(&path, e))?;
+    }
+    for folder in folders.iter().filter(|folder| folder.present) {
+        let path = safe_target_path(&canonical, &folder.rel, true)?;
+        std::fs::create_dir_all(&path).map_err(|e| Error::io(&path, e))?;
     }
     for target in targets.iter().filter(|t| t.present) {
         let path = safe_target_path(&canonical, &target.rel, false)?;
@@ -613,6 +752,9 @@ pub fn restore(supplied_root: &str, requested: &str) -> Result<(), Error> {
         std::fs::create_dir_all(&parent).map_err(|e| Error::io(&parent, e))?;
         let source = snapshot_source(&snapshot, &target.rel)?;
         copy_preserving(Path::new(&source), Path::new(&path)).map_err(|e| Error::io(&path, e))?;
+    }
+    for folder in folders.iter().rev() {
+        settle_folder(&canonical, folder)?;
     }
     Ok(())
 }
@@ -1318,6 +1460,104 @@ mod tests {
             snapshot_path(&root, &id).unwrap_err().to_string(),
             format!("Backup snapshot is missing or incomplete: {id}")
         );
+    }
+
+    #[test]
+    fn a_restore_removes_folders_the_operation_created() {
+        let p = Project::new();
+        p.write(".claude/settings.json", "settings\n");
+        let snapshot = create(
+            &p.root,
+            "sync",
+            &[
+                p.abs(".cursor/rules/core.mdc"),
+                p.abs(".claude/settings.json"),
+            ],
+            Retention::Bounded,
+        )
+        .unwrap();
+        p.write(".cursor/rules/core.mdc", "generated\n");
+        restore(&p.root, &snapshot).unwrap();
+        assert!(!p.path(".cursor").exists());
+        assert_eq!(p.read(".claude/settings.json"), "settings\n");
+    }
+
+    #[test]
+    fn a_created_folder_that_holds_other_files_stays() {
+        let p = Project::new();
+        let snapshot = create(
+            &p.root,
+            "sync",
+            &[p.abs(".cursor/rules")],
+            Retention::Bounded,
+        )
+        .unwrap();
+        p.write(".cursor/rules/core.mdc", "generated\n");
+        p.write(".cursor/mcp.json", "{}\n");
+        restore(&p.root, &snapshot).unwrap();
+        assert!(!p.path(".cursor/rules").exists());
+        assert_eq!(p.read(".cursor/mcp.json"), "{}\n");
+    }
+
+    #[test]
+    fn a_removed_folder_comes_back_with_its_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let p = Project::new();
+        p.write(".cursor/rules/core.mdc", "rules\n");
+        let mode =
+            |rel: &str| std::fs::metadata(p.path(rel)).unwrap().permissions().mode() & 0o7777;
+        let chmod = |rel: &str, mode: u32| {
+            std::fs::set_permissions(p.path(rel), std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        chmod(".cursor", 0o700);
+        chmod(".cursor/rules", 0o750);
+        let snapshot = create(
+            &p.root,
+            "sync",
+            &[p.abs(".cursor/rules/core.mdc")],
+            Retention::Bounded,
+        )
+        .unwrap();
+        std::fs::remove_dir_all(p.path(".cursor")).unwrap();
+        restore(&p.root, &snapshot).unwrap();
+        assert_eq!(p.read(".cursor/rules/core.mdc"), "rules\n");
+        assert_eq!(mode(".cursor"), 0o700);
+        assert_eq!(mode(".cursor/rules"), 0o750);
+
+        chmod(".cursor", 0o755);
+        restore(&p.root, &snapshot).unwrap();
+        assert_eq!(mode(".cursor"), 0o700);
+    }
+
+    #[test]
+    fn a_forged_folder_record_outside_the_targets_is_refused() {
+        let p = Project::new();
+        p.write("AGENTS.md", "agents\n");
+        p.write("docs/keep.md", "keep\n");
+        let snapshot = create(&p.root, "sync", &[p.abs("AGENTS.md")], Retention::Bounded).unwrap();
+        std::fs::write(format!("{snapshot}/dirs.tsv"), "missing\t-\tdocs\n").unwrap();
+        assert_eq!(
+            restore(&p.root, &snapshot).unwrap_err().to_string(),
+            "Invalid folder record in snapshot: docs"
+        );
+        assert_eq!(p.read("docs/keep.md"), "keep\n");
+    }
+
+    #[test]
+    fn a_snapshot_without_a_folder_list_still_restores() {
+        let p = Project::new();
+        p.write(".claude/rules/core.md", "before\n");
+        let snapshot = create(
+            &p.root,
+            "sync",
+            &[p.abs(".claude/rules/core.md")],
+            Retention::Bounded,
+        )
+        .unwrap();
+        std::fs::remove_file(format!("{snapshot}/dirs.tsv")).unwrap();
+        std::fs::remove_dir_all(p.path(".claude")).unwrap();
+        restore(&p.root, &snapshot).unwrap();
+        assert_eq!(p.read(".claude/rules/core.md"), "before\n");
     }
 
     #[test]

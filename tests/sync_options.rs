@@ -277,6 +277,85 @@ fn sync_restores_every_target_when_a_post_sync_hook_fails() {
     assert!(!project.exists(".ai/.sync-manifest"));
 }
 
+// A `bash -lc` hook is a POSIX shell dependency; not exercised on Windows.
+#[cfg(unix)]
+#[test]
+fn sync_refuses_a_second_run_while_the_first_holds_the_project() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        &format!(
+            "post_sync: \"[ -e nested.log ] || '{}' sync --only claude 2> nested.log; true\"\n",
+            env!("CARGO_BIN_EXE_exuno")
+        ),
+    );
+
+    project
+        .exuno()
+        .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .success();
+
+    let nested = project.read("nested.log");
+    assert!(
+        nested.contains("Another exuno sync (pid ")
+            && nested.contains(") is changing this project; wait for it to finish"),
+        "{nested}"
+    );
+    assert!(!project.exists(".ai/backups/.pending"));
+}
+
+// A `bash -lc` hook is a POSIX shell dependency, and SIGKILL is POSIX.
+#[cfg(unix)]
+#[test]
+fn sync_restores_a_run_killed_mid_write_before_it_starts() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write("CLAUDE.md", "before-sync\n");
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "post_sync: \"kill -9 $PPID\"\n",
+    );
+    project
+        .exuno()
+        .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .interrupted();
+    let killed = project.read(".ai/backups/.latest").trim().to_string();
+    assert!(
+        project
+            .read(".ai/backups/.pending")
+            .contains(&format!("backup={killed}\n"))
+    );
+    let half_written = project.read("CLAUDE.md");
+    assert_ne!(half_written, "before-sync\n");
+
+    project.write(".ai/src/tools/claude.yaml", "{}\n");
+    let assert = project
+        .exuno()
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(format!(
+            "Restored the state from before an interrupted exuno sync (backup {killed}); undo with exuno rollback "
+        )));
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    let undo = stderr
+        .split("undo with exuno rollback ")
+        .nth(1)
+        .and_then(|rest| rest.split_whitespace().next())
+        .unwrap();
+    assert_eq!(
+        project.read(&format!(".ai/backups/{undo}/files/CLAUDE.md")),
+        half_written
+    );
+    assert!(project.exists(&format!(".ai/backups/{killed}/after.tsv")));
+    assert!(!project.exists(".ai/backups/.pending"));
+}
+
 #[test]
 fn sync_preflight_failures_do_not_create_a_backup() {
     let project = seeded();

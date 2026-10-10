@@ -11,6 +11,7 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::paths;
 use crate::project::Project;
+use crate::transaction::lock::Lock;
 use crate::transaction::{backup, witness};
 
 pub const HELP: Help = Help {
@@ -406,10 +407,23 @@ impl McpUse<'_> {
             limit.as_deref(),
             age.as_deref(),
         )?;
+        let (lock, recovered) = Lock::acquire(root, "mcp use", retention)?;
+        if let Some(recovered) = recovered {
+            put(
+                self.err,
+                format!("Warning: {}\n", recovered.message()).as_bytes(),
+            )?;
+        }
         let previous_latest =
             backup::latest(root)?.map_or_else(String::new, |path| paths::leaf(&path));
         let snapshot = backup::create(root, "mcp-use", &[backup_target], retention)?;
+        lock.begin(&snapshot)?;
+        let finish = |err: &mut dyn Write| match lock.finish() {
+            Ok(()) => Ok(()),
+            Err(error) => put(err, format!("Warning: {error}\n").as_bytes()),
+        };
         if let Err(error) = write() {
+            finish(self.err)?;
             let store = format!("{root}/.ai/backups");
             let message = match backup::discard_safety(&store, &snapshot, &previous_latest) {
                 Err(cleanup) => format!(
@@ -419,7 +433,9 @@ impl McpUse<'_> {
             };
             return self.refuse(&message).map(Some);
         }
-        if let Err(reason) = witness::seal(root, &snapshot) {
+        let sealed = witness::seal(root, &snapshot);
+        finish(self.err)?;
+        if let Err(reason) = sealed {
             let text = format!("Warning: Could not record MCP source backup state: {reason}\n");
             put(self.err, text.as_bytes())?;
         }

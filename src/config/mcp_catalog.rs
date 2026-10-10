@@ -382,10 +382,10 @@ fn variant(value: &Value) -> Result<(), String> {
         &["connection", "requirements"],
         &["description"],
     )?;
-    if let Some(description) = map.get("description") {
-        if !description.is_string() {
-            return Err("variant.description must be a string".to_string());
-        }
+    if let Some(description) = map.get("description")
+        && !description.is_string()
+    {
+        return Err("variant.description must be a string".to_string());
     }
     connection(&map["connection"])?;
     requirements(&map["requirements"])
@@ -528,10 +528,10 @@ fn validate<'a>(value: &'a Value, expected_id: &str) -> Result<&'a str, String> 
         ));
     }
     let title = text(map, "title", "manifest")?;
-    if let Some(description) = map.get("description") {
-        if !description.is_string() {
-            return Err("manifest.description must be a string".to_string());
-        }
+    if let Some(description) = map.get("description")
+        && !description.is_string()
+    {
+        return Err("manifest.description must be a string".to_string());
     }
     connection(&map["connection"])?;
     requirements(&map["requirements"])?;
@@ -568,7 +568,7 @@ fn valid_date(date: &str) -> bool {
     if year == 0 || !(1..=12).contains(&month) {
         return false;
     }
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
     let days = [
         31,
         if leap { 29 } else { 28 },

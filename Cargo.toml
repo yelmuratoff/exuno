@@ -3,7 +3,7 @@ name = "exuno"
 # Equal to VERSION: `exuno release` bumps both, and src/lib.rs tests the pair.
 version = "0.46.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 description = "Sync AI agent instructions from .ai/src/ to every tool."
 license = "GPL-3.0-only"
 repository = "https://github.com/yelmuratoff/exuno"

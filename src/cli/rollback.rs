@@ -7,6 +7,7 @@ use std::io::Write;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::transaction::interrupt::{self, Interrupt};
+use crate::transaction::lock::Lock;
 use crate::transaction::witness::{self, Preflight};
 use crate::{Error, config::project_config, paths, transaction::backup};
 
@@ -93,6 +94,7 @@ pub fn run(
         snapshot,
         id,
         is_latest,
+        lock: None,
         out,
         err,
     };
@@ -230,6 +232,7 @@ struct Rollback<'a> {
     snapshot: String,
     id: String,
     is_latest: bool,
+    lock: Option<Lock>,
     out: &'a mut dyn Write,
     err: &'a mut dyn Write,
 }
@@ -267,6 +270,7 @@ impl Rollback<'_> {
         };
         if sealed && let Preflight::Conflict(path) = witness::preflight(&self.root, &self.snapshot)
         {
+            self.release();
             let store = format!("{}/.ai/backups", self.root);
             if backup::discard_safety(&store, &safety, &previous_latest).is_err() {
                 let _ = writeln!(
@@ -317,8 +321,32 @@ impl Rollback<'_> {
         u8::from(conflict.is_some() && !force)
     }
 
-    /// The pre-rollback safety snapshot, and the `.latest` pointer it replaced.
+    /// Clears the project lock's record once the rollback has an outcome.
+    fn release(&mut self) {
+        if let Some(lock) = self.lock.take()
+            && let Err(e) = lock.finish()
+        {
+            report(self.err, e);
+        }
+    }
+
+    /// The pre-rollback safety snapshot, taken under the project lock, and the
+    /// `.latest` pointer it replaced.
     fn safety_backup(&mut self, targets: &[backup::Target]) -> Result<(String, String), u8> {
+        let refused = |err: &mut dyn Write, e: Error| {
+            report(err, e);
+            let _ = writeln!(
+                err,
+                "Error: Could not create a pre-rollback safety backup; no files were changed"
+            );
+            1
+        };
+        let (lock, recovered) = Lock::acquire(&self.root, "rollback", self.retention)
+            .map_err(|e| refused(self.err, e))?;
+        if let Some(recovered) = recovered {
+            let _ = writeln!(self.err, "Warning: {}", recovered.message());
+        }
+        let lock = self.lock.insert(lock);
         let root = &self.root;
         let current: Vec<String> = targets
             .iter()
@@ -338,17 +366,10 @@ impl Rollback<'_> {
         } else {
             String::new()
         };
-        match backup::create(root, "rollback", &current, self.retention) {
-            Ok(safety) => Ok((safety, previous_latest)),
-            Err(e) => {
-                report(self.err, e);
-                let _ = writeln!(
-                    self.err,
-                    "Error: Could not create a pre-rollback safety backup; no files were changed"
-                );
-                Err(1)
-            }
-        }
+        let safety = backup::create(root, "rollback", &current, self.retention)
+            .and_then(|safety| lock.begin(&safety).map(|()| safety))
+            .map_err(|e| refused(self.err, e))?;
+        Ok((safety, previous_latest))
     }
 
     /// Restores the snapshot; a failure or a signal puts `safety` back.
@@ -363,6 +384,7 @@ impl Rollback<'_> {
                 (Ok(()), None) => 0,
             };
             self.recover(safety);
+            self.release();
             if let Some(sig) = signal {
                 interrupt.resend(sig);
             }
@@ -377,6 +399,8 @@ impl Rollback<'_> {
                 paths::leaf(safety)
             );
         }
+        self.release();
+        let root = &self.root;
         if let Err(e) = backup::prune(
             root,
             self.env.backup_limit.as_deref(),

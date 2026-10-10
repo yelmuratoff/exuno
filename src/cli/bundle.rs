@@ -19,6 +19,7 @@ use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::remote;
 use crate::transaction::interrupt::{self, Interrupt};
+use crate::transaction::lock::Lock;
 use crate::transaction::{backup, witness};
 
 /// `_BUNDLE_DIR_TARGETS`, in the order `init` creates them.
@@ -1711,7 +1712,19 @@ fn apply_backed_up(
         limit.as_deref(),
         age.as_deref(),
     )?;
+    let (lock, recovered) = Lock::acquire(root, "import", retention)?;
+    if let Some(recovered) = recovered {
+        put(
+            err,
+            format!("  Warning: {}\n", recovered.message()).as_bytes(),
+        )?;
+    }
     let snapshot = backup::create(root, "import", &backup_targets(root, plan), retention)?;
+    lock.begin(&snapshot)?;
+    let finish = |err: &mut dyn Write| match lock.finish() {
+        Ok(()) => Ok(()),
+        Err(error) => put(err, format!("  Warning: {error}\n").as_bytes()),
+    };
     let id = crate::paths::leaf(&snapshot);
     let stopped = match apply_import(plan, interrupted) {
         Ok(None) => None,
@@ -1733,10 +1746,13 @@ fn apply_backed_up(
                 "  Import {cause}; automatic restore failed ({restore}). Backup retained at .ai/backups/{id}\n"
             ),
         };
+        finish(err)?;
         put(err, note.as_bytes())?;
         return stopped.map(Applied::Interrupted);
     }
-    if let Err(reason) = witness::seal(root, &snapshot) {
+    let sealed = witness::seal(root, &snapshot);
+    finish(err)?;
+    if let Err(reason) = sealed {
         let text = format!("  Warning: Could not record the import backup state: {reason}\n");
         put(err, text.as_bytes())?;
     }
