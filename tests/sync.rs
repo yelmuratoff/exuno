@@ -939,3 +939,148 @@ fn sync_reads_the_tools_a_legacy_ai_agent_sync_yaml_enables() {
     project.exuno().arg("sync").assert().success();
     assert!(project.exists(".rules"));
 }
+
+fn hiding_project(hide: &str) -> Project {
+    let project = Project::seeded(&["--outputs", "local"]);
+    project.enable_tools(&["claude", "opencode"]);
+    project.append(".ai/exuno.yaml", &format!("skills:\n  hide:\n{hide}"));
+    project.write(
+        ".ai/src/skills/acme-bloc/SKILL.md",
+        "---\nname: acme-bloc\ndescription: Project BLoC conventions\n---\n",
+    );
+    project
+}
+
+fn json(project: &Project, rel: &str) -> serde_json::Value {
+    serde_json::from_str(&project.read(rel)).unwrap()
+}
+
+#[test]
+fn sync_hides_listed_skills_in_the_settings_of_tools_that_can() {
+    let project = hiding_project("    - bloc\n    - deploy\n");
+    project.exuno().arg("sync").assert().success();
+
+    let claude = json(&project, ".claude/settings.json");
+    assert_eq!(claude["skillOverrides"]["bloc"], "off");
+    assert_eq!(claude["skillOverrides"]["deploy"], "off");
+    assert_eq!(claude["includeCoAuthoredBy"], false);
+    let opencode = json(&project, "opencode.json");
+    assert_eq!(opencode["permission"]["skill"]["bloc"], "deny");
+    assert!(project.exists(".claude/skills/acme-bloc/SKILL.md"));
+    project.exuno().arg("check").assert().success();
+
+    let config = project.read(".ai/exuno.yaml").replace("    - deploy\n", "");
+    project.write(".ai/exuno.yaml", &config);
+    project.exuno().arg("sync").assert().success();
+    let claude = json(&project, ".claude/settings.json");
+    assert_eq!(claude["skillOverrides"]["bloc"], "off");
+    assert!(claude["skillOverrides"].get("deploy").is_none());
+}
+
+#[test]
+fn sync_owns_only_the_hidden_entries_of_a_keyed_settings_file() {
+    let project = hiding_project("    - bloc\n");
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  settings:\n    ownership: keys\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    let live = project.read(".claude/settings.json").replacen(
+        "\"skillOverrides\": {",
+        "\"skillOverrides\": {\n    \"mine\": \"name-only\",",
+        1,
+    );
+    project.write(".claude/settings.json", &live);
+
+    let config = project.read(".ai/exuno.yaml").replace("    - bloc\n", "");
+    project.write(".ai/exuno.yaml", &config);
+    project.exuno().arg("sync").assert().success();
+    let claude = json(&project, ".claude/settings.json");
+    assert_eq!(claude["skillOverrides"]["mine"], "name-only");
+    assert!(claude["skillOverrides"].get("bloc").is_none());
+}
+
+#[test]
+fn sync_refuses_to_hide_a_skill_the_project_syncs() {
+    let project = hiding_project("    - acme-bloc\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "skills.hide names a skill this project syncs: skills/acme-bloc",
+        ))
+        .stderr(predicate::str::contains("rename the project skill"));
+    assert!(!project.exists(".claude/settings.json"));
+}
+
+#[test]
+fn sync_refuses_an_invalid_name_in_skills_hide() {
+    let project = hiding_project("    - Bad.Name\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "skills.hide lists invalid skill name(s): Bad.Name",
+        ));
+}
+
+#[test]
+fn sync_reads_a_scalar_skills_hide_as_one_name() {
+    let project = Project::seeded(&["--outputs", "local"]);
+    project.enable_tools(&["claude"]);
+    project.append(".ai/exuno.yaml", "skills:\n  hide: bloc\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        json(&project, ".claude/settings.json")["skillOverrides"]["bloc"],
+        "off"
+    );
+}
+
+#[test]
+fn sync_dry_run_with_skills_hide_names_the_settings_and_writes_nothing() {
+    let project = hiding_project("    - bloc\n");
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "+ skills.hide → .claude/settings.json (dry-run)",
+        ));
+    assert!(!project.exists(".claude/settings.json"));
+}
+
+#[test]
+fn sync_hides_skills_in_an_opencode_config_composed_with_mcp() {
+    let project = hiding_project("    - bloc\n");
+    project.write(
+        ".ai/src/mcp.json",
+        "{\"mcpServers\":{\"x\":{\"command\":\"x\"}}}\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    let opencode = json(&project, "opencode.json");
+    assert_eq!(opencode["permission"]["skill"]["bloc"], "deny");
+    assert!(opencode["mcp"].get("x").is_some());
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn sync_warns_when_skills_hide_has_no_settings_file_to_land_in() {
+    let project = hiding_project("    - bloc\n");
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  settings:\n    enabled: false\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "skills.hide has no settings file to land in for Claude Code",
+        ));
+}

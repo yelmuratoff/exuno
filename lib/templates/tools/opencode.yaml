@@ -10,6 +10,10 @@ targets:
 
   skills:
     dest: ".opencode/skills"
+    user_dirs:
+      - ".config/opencode/skills"
+      - ".claude/skills"
+      - ".agents/skills"
 
   commands:
     dest: ".opencode/commands"
@@ -21,6 +25,8 @@ targets:
   settings:
     source: ".ai/src/settings/opencode.json"
     dest: "opencode.json"
+    hide_skills_key: "permission.skill"
+    hide_skills_value: "deny"
 
   mcp:
     dest: "opencode.json"

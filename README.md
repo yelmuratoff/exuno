@@ -617,6 +617,19 @@ To diverge completely, keep your own `SKILL.md` in that directory — a project 
 
 Projects scaffolded before this carry their own copy, which shadows the engine's. `exuno migrate` reports it and `exuno migrate --apply` removes the copy when it is unedited, leaving an edited one in place as the deliberate override it is.
 
+### Personal skills a project replaces
+
+A tool reads personal skills (`~/.claude/skills/`, `~/.agents/skills/`, `~/.config/opencode/skills/`) beside the project's, and none of them lets the project copy of a name win: Claude Code runs the personal one, Codex lists both, and OpenCode documents no precedence. To replace a personal skill in one project, give the project skill its own name and hide the personal one:
+
+```yaml
+# .ai/exuno.yaml
+skills:
+  hide:
+    - bloc        # personal skill this project replaces with .ai/src/skills/acme-bloc/
+```
+
+`exuno sync` sets `skillOverrides.bloc: "off"` in `.claude/settings.json` and `permission.skill.bloc: "deny"` in `opencode.json`. Codex turns a skill off only by its path, so Exuno writes nothing for it and Codex still lists both. The entries hold names only, so a committed config behaves the same for every teammate and does nothing for one who has no such skill. Sync refuses a hidden name that a project skill also carries, since hiding works by name, and `exuno adopt` refuses to copy those entries back into the settings source. `exuno doctor` advises when a project skill shares a name with a personal skill on your machine.
+
 ### Project format revision
 
 `format:` in `.ai/exuno.yaml` records which migrations a project has been walked through. It is a small counter bumped only when a project actually needs a step — unlike `exuno_version`, which moves on every patch — so the reminder appears exactly when something applies and never otherwise. `init` writes the current revision, `migrate --apply` records it, and nothing else touches it. A project behind the engine is flagged on the next interactive command and by `exuno doctor`.

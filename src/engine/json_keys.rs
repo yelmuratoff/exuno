@@ -68,6 +68,32 @@ pub fn adopt(live: &str, source: &str, keys: &[KeyPath]) -> Result<String, Strin
     Ok(render(&doc))
 }
 
+/// `source` with `value` set under the dotted `parent` object for every name,
+/// creating the objects along the way; a non-object on that path is an error.
+pub fn with_values(
+    source: &str,
+    parent: &str,
+    names: &[String],
+    value: &str,
+) -> Result<String, String> {
+    if has_comments(source) {
+        return Err(format!("{SOURCE} has comments, which JSON does not allow"));
+    }
+    let mut doc = parse(source, SOURCE)?;
+    let mut map = &mut doc;
+    for key in parent.split('.') {
+        map = map
+            .entry(key)
+            .or_insert_with(|| Value::Object(Map::new()))
+            .as_object_mut()
+            .ok_or_else(|| format!("in {SOURCE}, {parent} is not a JSON object"))?;
+    }
+    for name in names {
+        map.insert(name.clone(), Value::String(value.to_string()));
+    }
+    Ok(render(&doc))
+}
+
 /// Every leaf of `desired` is one owned key; an array and each entry of a
 /// server map count as one value.
 fn declared(desired: &str) -> Result<Vec<(KeyPath, Value)>, String> {
@@ -79,6 +105,13 @@ fn declared(desired: &str) -> Result<Vec<(KeyPath, Value)>, String> {
 
 const LIVE: &str = "the live file";
 const SOURCE: &str = "the source";
+
+fn has_comments(text: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with("//") || line.starts_with("/*")
+    })
+}
 
 fn parse(text: &str, which: &str) -> Result<Map<String, Value>, String> {
     if text.trim().is_empty() {
@@ -95,11 +128,7 @@ fn parse(text: &str, which: &str) -> Result<Map<String, Value>, String> {
                 e.line(),
                 e.column()
             );
-            let commented = text.lines().any(|line| {
-                let line = line.trim_start();
-                line.starts_with("//") || line.starts_with("/*")
-            });
-            if commented {
+            if has_comments(text) {
                 reason.push_str(
                     "; comments are not JSON, so set ownership: file on this target to own it whole",
                 );
@@ -238,6 +267,33 @@ mod tests {
 
     fn key(path: &str) -> KeyPath {
         path.split('.').map(str::to_string).collect()
+    }
+
+    #[test]
+    fn with_values_sets_each_name_under_a_nested_parent_and_keeps_siblings() {
+        let source = r#"{"permission": {"edit": "ask", "skill": {"bloc": "allow"}}}"#;
+        let names = ["bloc".to_string(), "deploy".to_string()];
+        assert_eq!(
+            with_values(source, "permission.skill", &names, "deny").unwrap(),
+            "{\n  \"permission\": {\n    \"edit\": \"ask\",\n    \"skill\": {\n      \"bloc\": \"deny\",\n      \"deploy\": \"deny\"\n    }\n  }\n}\n"
+        );
+        assert_eq!(
+            with_values("", "skillOverrides", &names[..1], "off").unwrap(),
+            "{\n  \"skillOverrides\": {\n    \"bloc\": \"off\"\n  }\n}\n"
+        );
+    }
+
+    #[test]
+    fn with_values_refuses_a_parent_that_is_not_an_object() {
+        let source = r#"{"permission": {"skill": "ask"}}"#;
+        assert_eq!(
+            with_values(source, "permission.skill", &["bloc".to_string()], "deny").unwrap_err(),
+            "in the source, permission.skill is not a JSON object"
+        );
+        assert_eq!(
+            with_values("{\n  // note\n}\n", "skillOverrides", &[], "off").unwrap_err(),
+            "the source has comments, which JSON does not allow"
+        );
     }
 
     #[test]

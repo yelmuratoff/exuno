@@ -1,5 +1,6 @@
 //! Project-wide checks: drift, secret scan, skills, rules, orphan outputs, and parent duplicates.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use super::Doctor;
@@ -222,6 +223,53 @@ impl Doctor<'_> {
         } else {
             Ok(())
         }
+    }
+
+    /// Project skills that share a name with a personal skill in the user
+    /// skill directories of the enabled tools, which a tool may load instead.
+    pub(super) fn check_user_skill_shadows(
+        &mut self,
+        enabled: &BTreeSet<String>,
+    ) -> Result<(), Error> {
+        let style = self.style;
+        let Some(home) = self.paths.home().map(str::to_string) else {
+            return Ok(());
+        };
+        let skills = Path::new(&self.root).join(".ai/src/skills");
+        if self.paths.root_is_home() || !skills.is_dir() {
+            return Ok(());
+        }
+        let mut dirs = BTreeSet::new();
+        for slug in enabled {
+            let tool = self.tool(slug)?;
+            let listed = tool.filter("targets.skills.user_dirs");
+            dirs.extend(listed.split_whitespace().map(str::to_string));
+        }
+        let tree = skill_tree::discover(
+            &Workspace::on_disk(&self.root),
+            &format!("{}/.ai/src/skills", self.root),
+        );
+        for skill in &tree.skills {
+            let personal: Vec<String> = dirs
+                .iter()
+                .map(|dir| format!("{home}/{dir}/{}", skill.name))
+                .filter(|path| Path::new(path).join("SKILL.md").is_file())
+                .map(|path| self.paths.display(&path))
+                .collect();
+            if personal.is_empty() {
+                continue;
+            }
+            self.advise(&format!(
+                "skills/{}/ — {} shares its name and may load instead {}",
+                skill.rel,
+                personal.join(", "),
+                style.dim(&format!(
+                    "(rename this skill, then list {} under skills.hide in exuno.yaml)",
+                    skill.name
+                ))
+            ))?;
+        }
+        Ok(())
     }
 
     /// `_doctor_check_always_on_rules`.

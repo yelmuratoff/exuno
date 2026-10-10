@@ -39,6 +39,8 @@ After editing, run `exuno sync` to distribute to all tools.
 
 Group many skills into category directories — a directory without `SKILL.md` is a category, up to four levels deep. No tool reads categories the same way (Claude Code, VS Code Copilot, and Gemini CLI skip nested skills), so sync lands every skill flat at `<dest>/<name>/`. Leaf names stay unique across categories: two skills sharing a name stop sync. Filter a whole category with a path glob — `exclude: cloudflare/*` in a tool's `targets.skills` — and inspect the layout with `exuno skills check`. A shipped skill moved into a category still receives `exuno refresh` updates there.
 
+A personal skill (`~/.claude/skills/`, `~/.agents/skills/`) and a project skill of the same name do not merge: Claude Code runs the personal one, Codex lists both, and OpenCode documents no precedence. To replace a personal skill in one project, give the project skill its own name (`acme-bloc`, not `bloc`) and list the personal name under `skills.hide` in `exuno.yaml`; sync then turns it off in `.claude/settings.json` (`skillOverrides`) and `opencode.json` (`permission.skill`). Codex turns a skill off only by its path, so it gets no entry. The entry is committed and harmless for a teammate who lacks that skill; `exuno doctor` flags a project skill that shares a name with one of yours.
+
 Settings, hooks, and per-tool MCP are overrides: they only exist once you opt in (`exuno enable`, `exuno customize`, `exuno add mcp`). When absent, Exuno falls back to its shipped base templates. The flat `settings/`, `mcp/`, and `hooks/` directories from older layouts still work but are deprecated — preview their move with `exuno migrate --legacy` and apply it with `exuno migrate --apply`.
 
 ## Scaffolding new content

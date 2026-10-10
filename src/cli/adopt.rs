@@ -114,6 +114,8 @@ pub struct Adoption {
     pub keyed: bool,
     /// Server entries in the file come from an MCP source in another format.
     pub units_from_mcp: bool,
+    /// Settings keys that `skills.hide` in the project config writes.
+    pub hidden_keys: Vec<KeyPath>,
 }
 
 /// What `_adopt_resolve_dest` needs besides the destination.
@@ -227,7 +229,22 @@ impl<'a> Resolver<'a> {
             source_rel: String::new(),
             keyed: false,
             units_from_mcp: false,
+            hidden_keys: Vec::new(),
         }
+    }
+
+    /// The settings key paths `skills.hide` writes for `tool`.
+    fn hidden_keys(&self, tool: &Tool) -> Result<Vec<KeyPath>, Error> {
+        let key = tool.value("targets.settings.hide_skills_key");
+        if key.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .project
+            .hidden_skills()?
+            .into_iter()
+            .map(|name| key.split('.').map(str::to_string).chain([name]).collect())
+            .collect())
     }
 
     /// `_adopt_try_tool`: `None` when the tool produces no such output.
@@ -255,12 +272,23 @@ impl<'a> Resolver<'a> {
                 let units_from_mcp = tool.composed()
                     && tool.flag("targets.mcp.enabled") != Some(false)
                     && self.payload_source(tool, "mcp", err)?.is_some();
+                let hidden_keys = self.hidden_keys(tool)?;
                 let found = self.payload_target(tool, self.adoption(tool, "settings", dest))?;
                 return Ok(Some(found.map(|found| Adoption {
                     keyed: true,
                     units_from_mcp,
+                    hidden_keys,
                     ..found
                 })));
+            }
+            if !self.hidden_keys(tool)?.is_empty() {
+                let settings = self
+                    .payload_source(tool, "settings", err)?
+                    .map(|source| self.strip_root(&source.shown()))
+                    .unwrap_or_default();
+                return Ok(Some(Err(format!(
+                    "{dest_rel} also carries skills.hide from the project config. Edit {settings} instead."
+                ))));
             }
             if tool.value("targets.mcp.format") == "codex_toml"
                 && let Some(mcp) = self.payload_source(tool, "mcp", err)?
@@ -725,6 +753,12 @@ fn keyed_adoption(
     {
         return Ok(Err(format!(
             "{} comes from the MCP source; edit that source instead",
+            keyed::display(key)
+        )));
+    }
+    if let Some(key) = keys.iter().find(|key| found.hidden_keys.contains(key)) {
+        return Ok(Err(format!(
+            "{} comes from skills.hide in the project config; edit that list instead",
             keyed::display(key)
         )));
     }

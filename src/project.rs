@@ -147,12 +147,30 @@ impl Project {
         Ok(enabled)
     }
 
+    /// `skills.hide` from the project config.
+    pub fn hidden_skills(&self) -> Result<Vec<String>, Error> {
+        Ok(self
+            .config_text()?
+            .map(|text| hidden_skills(&text))
+            .unwrap_or_default())
+    }
+
     /// Union of the configured and legacy enabled sets.
     pub fn enabled_tools(&self) -> Result<BTreeSet<String>, Error> {
         let mut set: BTreeSet<String> = self.configured_enabled_tools()?.into_iter().collect();
         set.extend(self.legacy_enabled_tools()?);
         Ok(set)
     }
+}
+
+/// `skills.hide` from the project config: names of personal skills the
+/// project keeps tools from loading, as a list or one space-separated scalar.
+pub fn hidden_skills(config: &str) -> Vec<String> {
+    let scalar = yaml_subset::value(config, "skills.hide");
+    if scalar.is_empty() || scalar.starts_with('[') {
+        return yaml_subset::list(config, "skills.hide");
+    }
+    scalar.split_whitespace().map(str::to_string).collect()
 }
 
 #[cfg(test)]
@@ -163,6 +181,21 @@ mod tests {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn hidden_skills_read_a_block_list_an_inline_list_or_a_scalar() {
+        assert_eq!(
+            hidden_skills("skills:\n  hide:\n    - bloc\n    - deploy\n"),
+            ["bloc", "deploy"]
+        );
+        assert_eq!(
+            hidden_skills("skills:\n  hide: [bloc, deploy]\n"),
+            ["bloc", "deploy"]
+        );
+        assert_eq!(hidden_skills("skills:\n  hide: bloc\n"), ["bloc"]);
+        assert!(hidden_skills("skills:\n  hide: []\n").is_empty());
+        assert!(hidden_skills("tools:\n  enabled: [claude]\n").is_empty());
     }
 
     #[test]
