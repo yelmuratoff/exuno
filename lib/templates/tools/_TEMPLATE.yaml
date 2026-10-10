@@ -101,6 +101,10 @@ targets:
     # instead of syncing skills as directories (for tools without native skills support)
     # inline_into_agents: false
 
+    # Optional: Directories, relative to $HOME, the tool reads personal skills
+    # from. `exuno doctor` advises when a project skill shares a name with one.
+    # user_dirs: ".tool/skills"
+
   # Custom slash commands (optional)
   # commands:
   #   dest: ".tool/commands"

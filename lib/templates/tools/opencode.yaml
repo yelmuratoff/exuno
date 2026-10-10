@@ -10,6 +10,10 @@ targets:
 
   skills:
     dest: ".opencode/skills"
+    user_dirs:
+      - ".config/opencode/skills"
+      - ".claude/skills"
+      - ".agents/skills"
 
   commands:
     dest: ".opencode/commands"

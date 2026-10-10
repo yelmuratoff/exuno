@@ -10,6 +10,7 @@ targets:
 
   skills:
     dest: ".agents/skills"
+    user_dirs: ".agents/skills"
 
   commands:
     as_skills: true

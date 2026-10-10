@@ -10,6 +10,7 @@ targets:
 
   skills:
     dest: ".claude/skills"
+    user_dirs: ".claude/skills"
 
   commands:
     dest: ".claude/commands"

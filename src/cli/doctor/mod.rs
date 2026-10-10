@@ -263,7 +263,10 @@ pub fn doctor(
     d.check_sources()?;
     d.section("Drift", Doctor::check_drift)?;
     d.section("Security", Doctor::scan_overrides)?;
-    d.section("Skills", Doctor::check_empty_skills)?;
+    d.section("Skills", |d| {
+        d.check_empty_skills()?;
+        d.check_user_skill_shadows(&enabled)
+    })?;
     d.section("Rules", Doctor::check_always_on_rules)?;
     d.section("Tool outputs", Doctor::check_orphan_outputs)?;
     d.section("Cross-project", Doctor::check_cross_project)?;

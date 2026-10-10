@@ -527,6 +527,10 @@ impl Paths {
             .map(str::to_string)
     }
 
+    pub fn home(&self) -> Option<&str> {
+        self.home.as_deref()
+    }
+
     /// Whether the project root is the home directory, where tool dests are
     /// the tools' own config homes.
     pub fn root_is_home(&self) -> bool {

@@ -11,15 +11,24 @@ use assert_cmd::Command;
 use common::Project;
 use predicates::prelude::*;
 
+// Doctor reads personal skills under $HOME; keep the developer's out of the report.
+fn absent_home() -> std::path::PathBuf {
+    std::env::temp_dir().join("exuno-tests-absent-home")
+}
+
 fn doctor(project: &Project) -> assert_cmd::assert::Assert {
-    project.exuno().arg("doctor").assert()
+    project
+        .exuno()
+        .env("HOME", absent_home())
+        .arg("doctor")
+        .assert()
 }
 
 fn doctor_at(dir: &Path) -> assert_cmd::assert::Assert {
     let mut command = Command::new(env!("CARGO_BIN_EXE_exuno"));
     command.current_dir(dir);
     common::scrub(&mut command);
-    command.arg("doctor").assert()
+    command.env("HOME", absent_home()).arg("doctor").assert()
 }
 
 fn init_at(dir: &Path, args: &[&str]) {
@@ -679,6 +688,51 @@ fn doctor_does_not_count_paths_scoped_rules_toward_always_on_bloat() {
     doctor(&project)
         .success()
         .stdout(predicate::str::contains("always-on rule(s) load on every task").not());
+}
+
+#[test]
+fn doctor_advises_when_a_personal_skill_of_an_enabled_tool_shares_a_project_skill_name() {
+    let project = Project::seeded(&["--no-detect"]);
+    project.enable_tools(&["claude"]);
+    let home = tempfile::tempdir().unwrap();
+    let personal = home.path().join(".claude/skills/bloc");
+    std::fs::create_dir_all(&personal).unwrap();
+    std::fs::write(
+        personal.join("SKILL.md"),
+        "---\nname: bloc\ndescription: Mine\n---\n",
+    )
+    .unwrap();
+    project.write(
+        ".ai/src/skills/bloc/SKILL.md",
+        "---\nname: bloc\ndescription: Project\n---\n",
+    );
+    project.write(
+        ".ai/src/skills/acme-bloc/SKILL.md",
+        "---\nname: acme-bloc\ndescription: Project\n---\n",
+    );
+    let shadowed = "skills/bloc/ — ~/.claude/skills/bloc shares its name and may load instead";
+    project
+        .exuno()
+        .env("HOME", home.path())
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(shadowed))
+        .stdout(predicate::str::contains("list bloc under skills.hide"))
+        .stdout(predicate::str::contains("skills/acme-bloc/ —").not());
+
+    project
+        .exuno()
+        .args(["disable", "claude"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .env("HOME", home.path())
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(shadowed).not());
 }
 
 #[test]

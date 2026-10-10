@@ -628,7 +628,7 @@ skills:
     - bloc        # personal skill this project replaces with .ai/src/skills/acme-bloc/
 ```
 
-`exuno sync` sets `skillOverrides.bloc: "off"` in `.claude/settings.json` and `permission.skill.bloc: "deny"` in `opencode.json`. Codex has no per-project switch, so it still lists both. The entries hold names only, so a committed config behaves the same for every teammate and does nothing for one who has no such skill. Sync refuses a hidden name that a project skill also carries, since hiding works by name, and `exuno adopt` refuses to copy those entries back into the settings source.
+`exuno sync` sets `skillOverrides.bloc: "off"` in `.claude/settings.json` and `permission.skill.bloc: "deny"` in `opencode.json`. Codex has no per-project switch, so it still lists both. The entries hold names only, so a committed config behaves the same for every teammate and does nothing for one who has no such skill. Sync refuses a hidden name that a project skill also carries, since hiding works by name, and `exuno adopt` refuses to copy those entries back into the settings source. `exuno doctor` advises when a project skill shares a name with a personal skill on your machine.
 
 ### Project format revision
 
