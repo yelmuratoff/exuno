@@ -287,10 +287,10 @@ impl Customize<'_> {
             return Ok(0);
         }
         let base_bytes = base.bytes()?;
-        if resource == "hooks" {
-            if let Err(status) = self.confirm_hooks(&tool, &base, &base_bytes, out, err)? {
-                return Ok(status);
-            }
+        if resource == "hooks"
+            && let Err(status) = self.confirm_hooks(&tool, &base, &base_bytes, out, err)?
+        {
+            return Ok(status);
         }
         if let Some(dir) = user_file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
