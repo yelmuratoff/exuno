@@ -21,6 +21,8 @@ targets:
   settings:
     source: ".ai/src/settings/opencode.json"
     dest: "opencode.json"
+    hide_skills_key: "permission.skill"
+    hide_skills_value: "deny"
 
   mcp:
     dest: "opencode.json"

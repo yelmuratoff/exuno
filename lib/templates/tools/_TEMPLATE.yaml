@@ -139,6 +139,11 @@ targets:
   #   # tool is a profile variant, else `file`. A file composed from settings
   #   # and MCP (codex_toml, opencode_json) follows this option.
   #   # ownership: auto
+  #   # For a JSON dest: each name in exuno.yaml's `skills.hide` is set to
+  #   # hide_skills_value under the dotted hide_skills_key, so the tool skips
+  #   # a personal skill of that name in this project.
+  #   # hide_skills_key: "skillOverrides"
+  #   # hide_skills_value: "off"
 
   # MCP server configs (optional, file copy)
   # mcp:

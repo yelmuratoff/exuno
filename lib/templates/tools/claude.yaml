@@ -20,6 +20,8 @@ targets:
   settings:
     source: ".ai/src/settings/claude.json"
     dest: ".claude/settings.json"
+    hide_skills_key: "skillOverrides"
+    hide_skills_value: "off"
 
   mcp:
     source: ".ai/src/mcp/claude.json"

@@ -189,6 +189,55 @@ fn adopt_refuses_composed_opencode_settings() {
 }
 
 #[test]
+fn adopt_refuses_settings_that_carry_skills_hide() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.append(".ai/exuno.yaml", "skills:\n  hide: [bloc]\n");
+    project.exuno().arg("sync").assert().success();
+    project.append(".claude/settings.json", "\n");
+
+    project
+        .exuno()
+        .args(["adopt", "--yes", ".claude/settings.json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            ".claude/settings.json also carries skills.hide from the project config",
+        ));
+    assert!(!project.exists(".ai/src/tools/claude/settings.json"));
+}
+
+#[test]
+fn adopt_refuses_a_keyed_settings_key_skills_hide_writes() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.append(".ai/exuno.yaml", "skills:\n  hide: [bloc]\n");
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  settings:\n    ownership: keys\n",
+    );
+    project
+        .exuno()
+        .args(["customize", "claude", "settings"])
+        .assert()
+        .success();
+    project.exuno().arg("sync").assert().success();
+    let live = project
+        .read(".claude/settings.json")
+        .replace("\"bloc\": \"off\"", "\"bloc\": \"on\"");
+    project.write(".claude/settings.json", &live);
+
+    project
+        .exuno()
+        .args(["adopt", "--yes", ".claude/settings.json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "skillOverrides.bloc comes from skills.hide in the project config",
+        ));
+}
+
+#[test]
 fn adopt_opencode_hooks_remain_one_to_one() {
     let project = synced_project(&["opencode"]);
     project.append(".opencode/plugins/agentsync.ts", "\n// user hook\n");

@@ -9,7 +9,10 @@ use crate::engine::keyed;
 use crate::engine::rules::{self, Conversion, RuleOptions};
 use crate::engine::session::Session;
 use crate::engine::skill_tree;
-use crate::{config::payload, engine::codex_toml, engine::file_ops, engine::opencode_json, paths};
+use crate::{
+    config::payload, engine::codex_toml, engine::file_ops, engine::json_keys,
+    engine::opencode_json, paths, project,
+};
 
 pub(super) fn sync_rules_step(
     s: &mut Session,
@@ -203,6 +206,59 @@ fn refuse_skill_collisions(s: &mut Session, src: &str, filter: &Filter) -> Step 
     Err(Stop(1))
 }
 
+fn hidden_skills(run: &Run) -> Vec<String> {
+    run.config
+        .as_deref()
+        .map(project::hidden_skills)
+        .unwrap_or_default()
+}
+
+/// Stops when `skills.hide` lists an invalid name, or one a synced skill
+/// carries: hiding by name would hide that skill too.
+fn refuse_hidden_skill_names(
+    s: &mut Session,
+    src: &str,
+    filter: &Filter,
+    hidden: &[String],
+) -> Step {
+    if hidden.is_empty() {
+        return Ok(());
+    }
+    let invalid: Vec<&str> = hidden
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !skill_metadata::valid_name(name))
+        .collect();
+    if !invalid.is_empty() {
+        s.log.error(&format!(
+            "skills.hide lists invalid skill name(s): {}",
+            invalid.join(", ")
+        ));
+        s.log
+            .err("  • Use lowercase letters, digits, and hyphens".to_string());
+        return Err(Stop(1));
+    }
+    let shown = s.display(src);
+    let claimed: Vec<String> = skill_tree::discover(&s.ws, src)
+        .skills
+        .into_iter()
+        .filter(|skill| filter.accepts_skill(skill) && hidden.contains(&skill.name))
+        .map(|skill| format!("{shown}/{}", skill.rel))
+        .collect();
+    if claimed.is_empty() {
+        return Ok(());
+    }
+    s.log.error(&format!(
+        "skills.hide names a skill this project syncs: {}",
+        claimed.join(", ")
+    ));
+    s.log.err(
+        "  • Tools hide skills by name, so rename the project skill or drop the name from skills.hide"
+            .to_string(),
+    );
+    Err(Stop(1))
+}
+
 pub(super) fn sync_skills_step(
     s: &mut Session,
     run: &Run,
@@ -214,12 +270,14 @@ pub(super) fn sync_skills_step(
     let filter = tool.target_filter("skills");
 
     if !dests.skills.is_empty() {
+        refuse_hidden_skill_names(s, &src_skills, &filter, &hidden_skills(run))?;
         refuse_skill_collisions(s, &src_skills, &filter)?;
         let effective = filter.excluding("command-*");
         return file_ops::sync_skills_dir(s, &src_skills, &dests.skills, &effective)
             .map_err(|e| io(s, e));
     }
     if tool.value("targets.skills.inline_into_agents") == "true" && s.ws.is_dir(&src_skills) {
+        refuse_hidden_skill_names(s, &src_skills, &filter, &hidden_skills(run))?;
         refuse_skill_collisions(s, &src_skills, &filter)?;
         let target = if !dests.agents.is_empty() {
             dests.agents.clone()
@@ -336,16 +394,48 @@ pub(super) fn sync_subagents_step(
     result.map_err(|e| io(s, e))
 }
 
-/// The settings and MCP sources a tool's payload pass reads, and whether each
-/// target's file is owned by key.
+/// The settings and MCP sources a tool's payload pass reads, whether each
+/// target's file is owned by key, and the skills its settings hide.
 struct Payload {
     settings: Option<String>,
     mcp: Option<String>,
     keyed_settings: bool,
     keyed_mcp: bool,
+    hidden: Option<HiddenSkills>,
 }
 
-pub(super) fn sync_payloads_step(s: &mut Session, tool: &Tool, dests: &Dests) -> Step {
+/// The settings entries that keep a tool from loading the `skills.hide`
+/// skills: every name set to `value` under the dotted `key`.
+struct HiddenSkills {
+    key: String,
+    value: String,
+    names: Vec<String>,
+}
+
+impl HiddenSkills {
+    fn apply(&self, s: &mut Session, dest: &str, text: &str) -> Result<String, Stop> {
+        let shown = s.display(dest);
+        if keyed::Format::of(dest) != Some(keyed::Format::Json) {
+            s.log.error(&format!(
+                "Cannot hide skills in {shown}: only a JSON settings file can list them"
+            ));
+            s.log.err(
+                "  • Drop targets.settings.hide_skills_key from this tool, or empty skills.hide"
+                    .to_string(),
+            );
+            return Err(Stop(1));
+        }
+        json_keys::with_values(text, &self.key, &self.names, &self.value).map_err(|reason| {
+            s.log
+                .error(&format!("Cannot hide skills in {shown}: {reason}"));
+            s.log
+                .err("  • Fix the settings source, then re-run sync".to_string());
+            Stop(1)
+        })
+    }
+}
+
+pub(super) fn sync_payloads_step(s: &mut Session, run: &Run, tool: &Tool, dests: &Dests) -> Step {
     check_ownership_values(s, tool)?;
     let source = |s: &mut Session, resource: &str, dest: &str| {
         if dest.is_empty() {
@@ -353,12 +443,25 @@ pub(super) fn sync_payloads_step(s: &mut Session, tool: &Tool, dests: &Dests) ->
         }
         payload::resolve_source(s, tool, resource).filter(|path| s.ws.is_file(path))
     };
+    let key = tool.value("targets.settings.hide_skills_key");
+    let names = hidden_skills(run);
     let sources = Payload {
         settings: source(s, "settings", &dests.settings),
         mcp: source(s, "mcp", &dests.mcp),
         keyed_settings: !dests.settings.is_empty() && tools::keyed(s, tool, "settings"),
         keyed_mcp: !dests.mcp.is_empty() && tools::keyed(s, tool, "mcp"),
+        hidden: (!key.is_empty() && !names.is_empty()).then(|| HiddenSkills {
+            key,
+            value: tool.value("targets.settings.hide_skills_value"),
+            names,
+        }),
     };
+    if sources.hidden.is_some() && sources.settings.is_none() {
+        s.log.warning(&format!(
+            "skills.hide has no settings file to land in for {}",
+            tool.display_name()
+        ));
+    }
     match tool.value("targets.mcp.format").as_str() {
         "codex_toml" => sync_codex_payload(s, tool, dests, &sources)?,
         "opencode_json" => sync_opencode_payload(s, tool, dests, &sources)?,
@@ -423,12 +526,19 @@ fn sync_opencode_payload(s: &mut Session, tool: &Tool, dests: &Dests, p: &Payloa
     let Some(settings) = &p.settings else {
         return Ok(());
     };
-    if p.keyed_settings {
-        let desired = match &p.mcp {
+    if p.keyed_settings || p.hidden.is_some() {
+        let mut desired = match &p.mcp {
             Some(mcp) => opencode_text(s, settings, mcp)?,
             None => read_text(s, Some(settings), "settings")?,
         };
-        return merge_keyed(s, &dests.settings, &desired, "OpenCode settings and MCP");
+        if let Some(hidden) = &p.hidden {
+            desired = hidden.apply(s, &dests.settings, &desired)?;
+        }
+        if p.keyed_settings {
+            return merge_keyed(s, &dests.settings, &desired, "OpenCode settings and MCP");
+        }
+        guard_whole_file(s, tool, "settings", &dests.settings)?;
+        return write_settings(s, settings, &dests.settings, desired);
     }
     guard_whole_file(s, tool, "settings", &dests.settings)?;
     match &p.mcp {
@@ -442,10 +552,18 @@ fn sync_opencode_payload(s: &mut Session, tool: &Tool, dests: &Dests, p: &Payloa
 
 fn sync_copied_payloads(s: &mut Session, tool: &Tool, dests: &Dests, p: &Payload) -> Step {
     if let Some(settings) = &p.settings {
-        if p.keyed_settings {
-            let desired = read_text(s, Some(settings), "settings")?;
-            let what = s.display(settings);
-            merge_keyed(s, &dests.settings, &desired, &what)?;
+        if p.keyed_settings || p.hidden.is_some() {
+            let mut desired = read_text(s, Some(settings), "settings")?;
+            if let Some(hidden) = &p.hidden {
+                desired = hidden.apply(s, &dests.settings, &desired)?;
+            }
+            if p.keyed_settings {
+                let what = s.display(settings);
+                merge_keyed(s, &dests.settings, &desired, &what)?;
+            } else {
+                guard_whole_file(s, tool, "settings", &dests.settings)?;
+                write_settings(s, settings, &dests.settings, desired)?;
+            }
         } else {
             guard_whole_file(s, tool, "settings", &dests.settings)?;
             file_ops::copy_file(s, settings, &dests.settings).map_err(|e| io(s, e))?;
@@ -462,6 +580,23 @@ fn sync_copied_payloads(s: &mut Session, tool: &Tool, dests: &Dests, p: &Payload
             file_ops::copy_file_noted(s, mcp, &dests.mcp, label).map_err(|e| io(s, e))?;
         }
     }
+    Ok(())
+}
+
+/// The whole settings file written from `text`, which `src` became once the
+/// `skills.hide` entries joined it.
+fn write_settings(s: &mut Session, src: &str, dest: &str, text: String) -> Step {
+    let line = format!("{} + skills.hide → {}", s.display(src), s.display(dest));
+    if s.dry_run {
+        s.log.step(&format!("{line} (dry-run)"));
+        return Ok(());
+    }
+    s.ws.create_dir_all(&paths::parent(dest))
+        .map_err(|e| io(s, e))?;
+    s.ws.remove(dest).map_err(|e| io(s, e))?;
+    s.ws.write(dest, text.into_bytes()).map_err(|e| io(s, e))?;
+    s.record_write(dest);
+    s.log.step(&line);
     Ok(())
 }
 

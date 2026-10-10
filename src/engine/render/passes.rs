@@ -265,7 +265,7 @@ fn sync_tool(s: &mut Session, run: &mut Run, slug: &str) -> Step {
     checkpoint(s)?;
     sync_subagents_step(s, run, &tool, &dests, &display)?;
     checkpoint(s)?;
-    sync_payloads_step(s, &tool, &dests)?;
+    sync_payloads_step(s, run, &tool, &dests)?;
     checkpoint(s)?;
     if !run.profile_tools.contains(slug) {
         remove_legacy_outputs(s, &tool)?;
