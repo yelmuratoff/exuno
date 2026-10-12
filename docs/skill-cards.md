@@ -10,6 +10,8 @@ exuno skills catalog list --catalog FILE [--source ALIAS=LOCAL_REPO]... [--inclu
 exuno skills catalog show ID --catalog FILE [--source ALIAS=LOCAL_REPO]...
 ```
 
+## Catalog format
+
 The catalog is an explicitly selected UTF-8 TSV regular file, limited to 128
 KiB and 256 cards. Every row is checked before either command writes stdout.
 The internal experimental format has exactly these ten fields:
@@ -61,8 +63,10 @@ only that the object was read; it does not mean the frontmatter was supported
 or that a name or description was available. The command never invents a
 canonical name.
 
-The frontmatter reader is intentionally a conservative subset, not a full YAML
-validator. It reads ordinary scalar `name` and `description` fields and a
+### What the frontmatter reader accepts
+
+The frontmatter reader handles a small subset of YAML on purpose; it isn't a
+full YAML validator. It reads ordinary scalar `name` and `description` fields and a
 small block-string form (`>` or `|`, with an optional `+` or `-`). That form
 also works for optional top-level fields, including arbitrary extension
 fields, and for values in the one-level `metadata` mapping. Top-level block

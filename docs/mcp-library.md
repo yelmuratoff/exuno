@@ -1,9 +1,11 @@
 # Offline MCP catalog inspection
 
-An MCP catalog is a local directory of JSON manifests. Exuno reads it only
-when you pass `--library` or configure its path. Catalog inspection does not
-start a server, contact an endpoint, install a package, look up credentials, or
-change project or client configuration.
+An MCP catalog is a local directory of JSON manifests, one per MCP server.
+`exuno mcp` reads it only when you pass `--library` or configure its path, and
+helps you turn an entry into an Exuno MCP source without copying server JSON by
+hand. None of these commands start a server, contact an endpoint, install a
+package, or look up credentials. Only `use --apply` writes anything, and it
+writes only the per-tool MCP source.
 
 ```text
 exuno mcp list --library catalog/mcp
@@ -15,6 +17,8 @@ exuno mcp use example --tool claude --library catalog/mcp
 exuno mcp use example --tool claude --library catalog/mcp --apply
 exuno mcp use another --tool claude --library catalog/mcp --merge --apply
 ```
+
+## Choosing a catalog
 
 An explicit path may be absolute or relative to the selected project root. Or
 set `library.mcp.path` in `.ai/exuno.yaml` (or the selected config file):
@@ -37,12 +41,16 @@ The repository includes an opt-in [pilot catalog](../catalog/mcp/README.md).
 Pass its absolute path when using it from another project; Exuno does not
 load it by default or embed it in the binary.
 
+## Inspecting entries
+
 `list` prints `id<TAB>title` in ID order and escapes controls, non-space
 whitespace, and Unicode 17.0 default-ignorable characters in titles. `show`
 validates the selected manifest and prints its exact source bytes.
 `validate [id]` checks one entry or the whole catalog. A whole-catalog
 operation validates every entry before writing to stdout. Errors go to stderr
 and leave stdout empty.
+
+## Rendering a connection
 
 `render <id>[@variant]` validates the selected manifest and prints one
 Exuno MCP source JSON object. An omitted variant or `@default` selects the
@@ -58,21 +66,26 @@ HTTP connections render with `type: "http"` and `url`. Only the selected
 connection is included; manifest metadata and requirements are not copied.
 Rendering does not execute the command, contact the URL, or write a source.
 
+## Writing a per-tool source
+
 `use <id>[@variant] --tool <slug>` previews the selected connection JSON and
-the path of the per-tool MCP source it would create.
-The tool must be enabled and have an MCP destination. `--apply` writes the
-source under the configured `source.tools` directory (by default
-`.ai/src/tools/<slug>/mcp.json`) and records a backup that `exuno rollback`
-can restore. Without `--merge`, it refuses an existing per-tool, declared,
-legacy, or shared MCP source. `--merge` is limited to an existing regular
-per-tool `mcp.json`. It adds the selected ID under `mcpServers` while preserving
-other JSON members and server entries. Duplicate JSON keys and unsupported
-structures are refused. If that ID has different content, pass
-`--replace <id>` with the exact selected ID to replace it. Repeating an
-unchanged selection does not write or create another backup. Merging can
-normalize JSON formatting, so review the preview and source diff. The preview
-and errors never print existing source values. `exuno sync` is a separate
-step to update generated client files.
+the path of the per-tool MCP source it would create. The tool must be enabled
+and have an MCP destination.
+
+- `--apply` writes the source under the configured `source.tools` directory
+  (by default `.ai/src/tools/<slug>/mcp.json`) and records a backup that
+  `exuno rollback` can restore. Without `--merge`, it refuses when a per-tool,
+  declared, legacy, or shared MCP source already exists.
+- `--merge` works only on an existing regular per-tool `mcp.json`. It adds the
+  selected ID under `mcpServers` and keeps the other JSON members and server
+  entries. Duplicate JSON keys and unsupported structures are refused.
+- `--replace <id>`, with the exact selected ID, is needed when that ID already
+  exists with different content.
+
+Repeating an unchanged selection writes nothing and makes no new backup.
+Merging can change JSON formatting, so review the preview and the source diff.
+The preview and error messages never print values already in the source. Run
+`exuno sync` afterwards to update the generated client files.
 
 An apply operation holds a per-tool lock, snapshots the source, checks it has
 not changed while preparing the write, and replaces it atomically. A stopped
@@ -80,6 +93,8 @@ process may leave `.agentsync-mcp-use.lock`; inspect the source and remove that
 lock before retrying. Writes by other programs in the narrow interval after
 the final check cannot be detected, so do not edit the same source concurrently
 outside Exuno.
+
+## Tool-specific forms
 
 For Kimi, `use` writes its native `mcp.json` form: HTTP connections have a
 `url` without the canonical `type: "http"` field. Claude keeps the canonical
@@ -103,6 +118,8 @@ separate MCP source and leave the generated config unchanged. Either move the
 servers into the MCP source, or set `targets.mcp.enabled: false` in
 `.ai/src/tools/codex.yaml` to keep them in the settings file, which `sync` then
 copies unchanged.
+
+### Files a tool also writes
 
 In a config home (the project rooted at `$HOME`, or a profile variant), the
 Codex app writes into the same `config.toml`: project trust, hook state,
