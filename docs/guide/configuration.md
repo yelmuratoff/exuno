@@ -4,7 +4,7 @@ Exuno reads two kinds of config. The project config, `.ai/exuno.yaml`, says whic
 
 ## The project config: `.ai/exuno.yaml`
 
-`init` writes this file. Exuno also accepts `exuno.yaml` in the project root. To use a file somewhere else, set `EXUNO_CONFIG_PATH`; every command that reads the config then fails if that file is missing, without falling back to `.ai/exuno.yaml`.
+`init` writes this file. Projects from the AgentSync days may still have `.ai/agent_sync.yaml` or `agent_sync.yaml` in the root, which keep working until 1.0. To use a file somewhere else, set `EXUNO_CONFIG_PATH`; every command that reads the config then fails if that file is missing, without falling back to `.ai/exuno.yaml`.
 
 Every key is optional. The ones you are most likely to touch:
 

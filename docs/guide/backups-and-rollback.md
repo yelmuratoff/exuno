@@ -50,7 +50,7 @@ After each operation, successful or restored after a failure, Exuno prunes old b
 - `EXUNO_BACKUP_LIMIT` changes the count and `EXUNO_BACKUP_MAX_AGE_DAYS` changes the age. Each takes a non-negative integer; `0` turns that limit off.
 - Temporary folders left by an interrupted run are removed on the next backup once they're more than 24 hours old.
 
-To keep everything, set this in `.ai/exuno.yaml` (or the root `exuno.yaml`, or the file `EXUNO_CONFIG_PATH` names):
+To keep everything, set this in `.ai/exuno.yaml` (or the file `EXUNO_CONFIG_PATH` names):
 
 ```yaml
 backup:
