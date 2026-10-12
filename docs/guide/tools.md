@@ -31,7 +31,7 @@ MiniMax Code reads only files in the main project workspace, so it has no config
 | `AGENTS.md` | Role, approach, principles. Copied as is under each tool's name. | All |
 | `rules/` | One file per topic. Always on by default; `paths:` frontmatter makes a rule load only for matching files, using each tool's own trigger. Keep the always-on set short so each rule gets attention. | All |
 | `skills/` | Recipes in the [Agent Skills](https://agentskills.io) format. See [Skills](skills.md). | All except MiniMax Code |
-| `commands/` | Slash commands. `review.md` becomes `/project:review`. `$ARGUMENTS` and `` !`shell` `` work. | Native: Claude, Cursor, Copilot (`.prompt.md`), Gemini (TOML), Junie, Cline, Windsurf, Antigravity, OpenCode. As skills: Codex, Kimi Code, Kiro. As an index: Amazon Q, Zed |
+| `commands/` | Slash commands. `review.md` becomes `/review`. `$ARGUMENTS` and `` !`shell` `` work. | Native: Claude, Cursor, Copilot (`.prompt.md`), Gemini (TOML), Junie, Cline, Windsurf, Antigravity, OpenCode. As skills: Codex, Kimi Code, Kiro. As an index: Amazon Q, Zed |
 | `agents/` | Subagents with their own context and tool limits. Frontmatter: `model`, `tools`, `readonly`. | Claude, Cursor, Copilot (`.agent.md`), Gemini, Junie, Codex (TOML), Amazon Q (JSON), OpenCode (safe Markdown), Kiro (Kiro Markdown) |
 | `mcp.json` | One shared `mcpServers` map | Claude, Cursor, Windsurf, Junie, Amazon Q, Kimi Code, MiniMax Code, Kiro, OpenCode (converted), Codex (converted) |
 | `tools/<tool>/settings.*` | Permissions and other settings. Claude's hooks go here too. | Claude, Gemini, Codex, OpenCode, Zed |

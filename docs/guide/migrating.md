@@ -4,7 +4,7 @@ This page covers four situations: a project that already has tool config, a proj
 
 ## Existing tool configs
 
-If the project already has `.claude/rules/`, `.cursor/rules/`, its own `settings.json`, and so on, run `exuno init`. It adopts that config into `.ai/src/` before the first sync, so nothing is lost. `exuno adopt <file>` does the same for one file at any time.
+If the project already has `.claude/rules/`, `.cursor/rules/`, its own `settings.json`, and so on, run `exuno init`. It adopts that config into `.ai/src/` before the first sync, so nothing is lost.
 
 Don't run a plain `exuno sync` over tool folders you haven't moved in. Sync treats generated folders as its own and replaces or removes anything that isn't in `.ai/src/` (see [What a sync replaces](how-sync-works.md#what-a-sync-replaces)).
 
@@ -53,7 +53,7 @@ exuno migrate --apply --yes   # renames them, re-pins a pin older than 0.45.0, r
 exuno setup-hooks             # rewrites git hooks that still run the agentsync block
 ```
 
-Migrate only after everyone on the team is on 0.45.0 or newer, because older releases can't read `.ai/exuno.yaml`.
+"Format r3" is the project's [format revision](#the-format-revision). Migrate only after everyone on the team is on 0.45.0 or newer, because older releases can't read `.ai/exuno.yaml`.
 
 `agentsync update` installs the new release but not the `exuno` command. Rerun the [installer](../../README.md#install) to get it, or run the steps above as `agentsync migrate`.
 

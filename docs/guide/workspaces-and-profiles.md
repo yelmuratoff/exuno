@@ -44,7 +44,7 @@ Looking for a parent stops at the git repository boundary, so a child with its o
 
 ## Profiles: separate config homes
 
-If you sync from `$HOME` and use two accounts with the same tool, such as a work Claude and a personal Claude, a profile generates a second, self-contained config home (`~/.claude-hub/` next to your personal `~/.claude/`). Its content is the base `.ai/src/` plus profile-only additions. Shared rules stay shared; work-only rules and MCP servers live in the profile.
+A config home is the folder a tool reads its user-wide config from, such as `~/.claude/` for Claude Code. If you run Exuno in your home folder to manage those, and use two accounts with the same tool, such as a work Claude and a personal Claude, a profile generates a second, self-contained config home (`~/.claude-hub/` next to your personal `~/.claude/`). Its content is the base `.ai/src/` plus profile-only additions. Shared rules stay shared; work-only rules and MCP servers live in the profile.
 
 ```bash
 exuno profile add hub                       # a "hub" profile for every enabled tool
@@ -60,6 +60,6 @@ exuno profile remove hub                    # delete the profile and its config-
 - an overlay folder, `.ai/profiles/hub/src/`, for profile-only rules, skills, commands, agents, and `AGENTS.md` (the profile wins when names collide)
 - a `profiles:` block in `exuno.yaml`
 
-`exuno sync` builds every active profile along with your personal tools; `exuno sync --profile hub` builds just that one. The profile's overlay goes on top of the base and on top of a `shared:` overlay if you have one, so the two combine. Run the tool against the result with its config-home variable, for example `CLAUDE_CONFIG_DIR=~/.claude-hub claude`.
+`exuno sync` builds every active profile along with your personal tools; `exuno sync --profile hub` builds your personal tools plus just that profile. The profile's overlay goes on top of the base and on top of a `shared:` overlay if you have one, so the two combine. Run the tool against the result with its config-home variable, for example `CLAUDE_CONFIG_DIR=~/.claude-hub claude`.
 
 Profile outputs are kept out of git and protected against hand edits like any other generated file. Some tools can't have profiles: MiniMax Code reads only project files, and a tool YAML can say `profile_supported: false`.

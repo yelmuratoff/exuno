@@ -54,9 +54,9 @@ exuno init --dry-run                    # preview
 | Option | What it does |
 | --- | --- |
 | `--tools <csv>` | Turn on these tools. Combined with auto-detection unless you pass `--no-detect`. |
-| `--content <csv>` | Which source folders to create: `agents`, `rules`, `skills`, `commands`, `subagents` (default: all) |
+| `--content <csv>` | What to create: `agents` (the `AGENTS.md` file), `rules`, `skills`, `commands`, `subagents` (the `agents/` folder). Default: all |
 | `--no-detect` | Don't detect tools from existing folders (`.claude/`, `.cursor/`, `CLAUDE.md`, ...) |
-| `--outputs <mode>` | `committed` (default) or `local`; see [Team setup](team-and-automation.md#committed-or-local-outputs) |
+| `--outputs <mode>` | `committed` (what `init` writes by default) or `local`; see [Team setup](team-and-automation.md#committed-or-local-outputs) |
 | `--existing <action>` | `adopt` (default) copies existing tool config into `.ai/src/`; `replace` regenerates from the shipped templates |
 | `--ci github` | Write a GitHub workflow that runs `exuno check`. An existing workflow is kept. |
 | `--no-sync` | Skip the first sync |

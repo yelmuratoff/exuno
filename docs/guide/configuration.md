@@ -51,7 +51,7 @@ source:
   tools: ".ai/src/tools"
 ```
 
-`source.tools` covers both the tool YAML files and their payload folders (`<source.tools>/<tool>/settings.json`, `hooks.json`, `mcp.json`), so they always stay together.
+`source.tools` covers both the tool YAML files and each tool's settings, hooks, and MCP folder (`<source.tools>/<tool>/settings.json`, `hooks.json`, `mcp.json`), so they always stay together.
 
 ### Sources outside the project
 
@@ -86,7 +86,7 @@ Three commands cover most changes:
 
 - `exuno enable <tool>` turns the tool on, copies its settings and hooks into `.ai/src/tools/<tool>/` so you can edit them, and prints the path to edit. `--no-scaffold` skips the copies; `--yes` answers the confirmation without a terminal.
 - `exuno add mcp <server> [--command … | --url …]` adds a server to the shared `.ai/src/mcp.json`, which every enabled tool with an MCP target receives.
-- `exuno customize <tool> <resource>` makes an editable copy of one resource, for example `exuno customize cursor hooks`. Use it when one tool needs something different from the shared source, or to get a file that `enable --no-scaffold` skipped. `exuno customize <tool> mcp` works when that tool ships an MCP base.
+- `exuno customize <tool>` creates an empty tool YAML override, `.ai/src/tools/<tool>.yaml`, where you write only the fields you want to change; `--full` copies the whole base instead. `exuno customize <tool> <resource>` makes an editable copy of the `hooks`, `mcp`, or `settings` file, for example `exuno customize cursor hooks`. Use it when one tool needs something different from the shared source, or to get a file that `enable --no-scaffold` skipped. `exuno customize <tool> mcp` works when that tool ships an MCP base.
 
 All three write to `.ai/src/tools/<tool>/` or `.ai/src/mcp.json`. The older folders `.ai/src/hooks/`, `.ai/src/mcp/`, and `.ai/src/settings/` are still read; see [Migrating](migrating.md#from-the-010-flat-layout).
 
@@ -96,11 +96,10 @@ To see the result, `exuno show <tool>` prints a tool's final config and `exuno d
 
 Each tool is one YAML file. The shipped ones are built into the binary; a file in `.ai/src/tools/` with the same name overrides it field by field. The file name is the tool's ID for `--only` and `--skip`. Files whose names start with `_` are ignored.
 
-Claude Code's, for example:
+The shipped one for Claude Code, slightly shortened:
 
 ```yaml
 name: "Claude Code"
-enabled: true
 
 targets:
   agents:
@@ -121,11 +120,12 @@ targets:
     dest: ".mcp.json"
 ```
 
+The `source:` paths under `settings` and `mcp` are the old layout. They are kept so older projects still work, and the files in `.ai/src/tools/claude/` win over them automatically, so you don't need to set them. Which tools sync is decided by `tools.enabled` in `exuno.yaml`, not by the tool YAML.
+
 The full shape, with every optional field commented out:
 
 ```yaml
 name: "Tool Name"
-enabled: true
 
 targets:
   agents:
@@ -261,7 +261,7 @@ Delete the old file as well. A `CLAUDE.md` left from an earlier sync is still re
 A tool Exuno doesn't ship is a YAML file in your project. Start from the closest shipped tool instead of an empty file:
 
 ```bash
-exuno customize cursor --full        # writes .ai/src/tools/cursor.yaml with the full base
+exuno customize cursor --full        # copies the whole base into .ai/src/tools/cursor.yaml
 cp .ai/src/tools/cursor.yaml .ai/src/tools/newtool.yaml
 # edit newtool.yaml: at least name: and one target's dest:
 exuno enable newtool

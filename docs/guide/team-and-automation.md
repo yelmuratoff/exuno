@@ -17,7 +17,7 @@ With `local`, everyone installs Exuno and runs `exuno setup-hooks` once, so a sy
 
 In both modes `exuno sync` manages a block in `.gitignore` between `AI SYNC GENERATED START` and `END`. In `local` mode it lists every generated path and the manifest. In `committed` mode it lists only profile config homes, which are personal either way. The manifest always has the same git status as the files it describes; otherwise a teammate's `git pull` would look like a hand edit on the next sync.
 
-A project without an `outputs:` key behaves as `local`, or as `committed` if it already set `gitignore.update: false`.
+New projects get `outputs: committed` from `init`. An older project with no `outputs:` key behaves as `local`, or as `committed` if it already set `gitignore.update: false`.
 
 ## Pin the Exuno version
 
@@ -50,7 +50,7 @@ An unknown mode is rejected before a sync can write anything.
 An agent that edits a generated file loses the change on the next sync. Three things keep agents on `.ai/src/`:
 
 - The shipped `AGENTS.md` and `rules/core.md` say where instructions live.
-- Claude Code gets a `PreToolUse` hook, `.claude/hooks/agentsync-guard.sh`, that blocks a write to any file listed in `.ai/.sync-manifest` and names its source instead. Replace it per project at `.ai/src/tools/claude/guard.sh`, or remove the `hooks` block from your settings override to drop it.
+- Claude Code gets a `PreToolUse` hook, `.claude/hooks/agentsync-guard.sh`, that blocks a write to any file listed in `.ai/.sync-manifest` and names its source instead. Replace it per project at `.ai/src/tools/claude/guard.sh`. To drop it, run `exuno customize claude settings` (if `.ai/src/tools/claude/settings.json` doesn't exist yet) and remove the `hooks` block from that file.
 - `sync` refuses to overwrite a generated file that was edited since the last run.
 
 ## Editing a generated file

@@ -39,7 +39,7 @@ Here is what one rule turns into:
 ├── .github/instructions/testing.instructions.md  # plus applyTo frontmatter
 ├── .devin/rules/testing.md                       # plus trigger: always_on frontmatter
 ├── .amazonq/rules/testing.md
-├── AGENTS.md                                     # a short reference (Codex, Gemini, Junie, Kimi, MiniMax, OpenCode)
+├── AGENTS.md                                     # a one-line reference (Codex, MiniMax, OpenCode; Gemini, Junie, Kimi in their own agents file)
 └── .rules                                        # merged into one file (Zed)
 ```
 
@@ -86,16 +86,15 @@ Exuno was called AgentSync up to 0.44, and the old names keep working until 1.0.
 ```bash
 cd your-project
 exuno init                  # set up .ai/, keep the config you already have, run the first sync
-exuno enable claude cursor  # turn on the tools you use
 # edit files in .ai/src/
 exuno sync                  # write every enabled tool's files
 ```
 
-`exuno init` asks a few questions in a terminal: which tools, which kinds of content, whether to commit the generated files, and whether to add a CI check. In a script it picks defaults and detects tools from folders that already exist (`.claude/`, `.cursor/`, `CLAUDE.md`, ...). It keeps the tool config the project already has, so running it in an existing project is safe. Running it twice is safe too; the second run does nothing.
+`exuno init` asks a few questions in a terminal: which tools, which kinds of content, whether to commit the generated files, and whether to add a CI check. In a script it picks defaults and detects tools from folders that already exist (`.claude/`, `.cursor/`, `CLAUDE.md`, ...). It keeps the tool config the project already has, so running it in an existing project is safe. Running it twice is safe too; the second run does nothing. To add a tool later, run `exuno enable <tool>`.
 
 After the first sync, the tool folders appear (`.claude/`, `.cursor/`, `.github/`, `.devin/`, and so on), each with files in that tool's format.
 
-From then on, edit only `.ai/src/`. A sync rewrites the generated folders from the source. If you change a generated file by hand, the next sync stops and asks what to do; `exuno adopt <file>` copies your edit back into `.ai/src/`.
+From then on, edit only `.ai/src/`. A sync rewrites the generated folders from the source. If you change a generated file by hand, the next sync stops and lists your options; `exuno adopt <file>` copies your edit back into `.ai/src/`.
 
 A few more things you can do:
 
@@ -123,7 +122,7 @@ By default the generated files are committed. That means:
 - Whoever changes the rules edits `.ai/src/`, runs `exuno sync`, and commits the source and the generated files together. `exuno setup-hooks` adds a pre-commit hook that enforces this, and `exuno check` in CI catches anyone who skips the hook. When the project has a `.github/` folder, `init` offers to add that CI job.
 - Agents are told to edit `.ai/src/` too. The shipped rules say so, and Claude Code gets a hook that blocks writes to generated files and names the source file to edit instead.
 
-`init` also pins the Exuno version in `.ai/exuno.yaml`. Every machine and CI then produce the same bytes, and `sync` and `check` stop if the installed version doesn't match.
+`init` also pins the Exuno version in `.ai/exuno.yaml`. Every machine and CI then produce the same bytes. With committed outputs, `sync` and `check` stop if the installed version doesn't match; in `local` mode they only warn.
 
 If you'd rather not commit generated files, use `exuno init --outputs local`. Then everyone needs Exuno installed and should run `exuno setup-hooks`, which syncs after each pull. Both modes are compared in [Team setup and automation](docs/guide/team-and-automation.md).
 
@@ -228,7 +227,7 @@ exuno check                      # in CI: fail when generated files don't match 
 
 | Guide | Read it when you want to know |
 | --- | --- |
-| [How sync works](docs/guide/how-sync-works.md) | What happens during a sync, where each setting comes from, how hand edits are caught |
+| [How sync works](docs/guide/how-sync-works.md) | What happens during a sync, where each setting comes from, how hand edits are caught, and [what the terms mean](docs/guide/how-sync-works.md#words-used-in-these-docs) |
 | [Configuration](docs/guide/configuration.md) | Every `exuno.yaml` option, tool YAML fields, overrides, sources outside the project, adding a tool |
 | [Supported tools](docs/guide/tools.md) | What each tool receives, format conversions, models and providers |
 | [Skills](docs/guide/skills.md) | Skill categories, inspecting skills, the built-in `exuno` skill, hiding personal skills |

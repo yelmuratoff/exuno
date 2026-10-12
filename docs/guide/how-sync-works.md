@@ -33,7 +33,7 @@ Exuno doesn't copy every tool's config into your project. Each resource has a sh
    <resource>.<ext>                                              (lib/templates/<resource>/<tool>.<ext>)
 ```
 
-The first one that exists wins.
+For hooks, MCP, and settings, the first file that exists wins and is used whole. A tool YAML override works differently: see the note below the table.
 
 | Resource | Shipped base | Per-tool override | Shared override |
 | --- | --- | --- | --- |
@@ -53,7 +53,7 @@ What this means in practice:
 - **One MCP file serves every tool.** `.ai/src/mcp.json` reaches every enabled tool with an MCP target and is converted where the format differs. OpenCode gets it validated and merged into `opencode.json`; Codex gets it in `.codex/config.toml`.
 - **MiniMax Code and Claude Code share `.mcp.json`.** If their MCP sources differ, sync stops before writing either. MiniMax may start a configured server while discovering tools, so review an MCP source before you sync it.
 - **Two tools can't fight over one agents file.** If enabled tools would write different content to the same `AGENTS.md`, sync stops before writing either.
-- **Settings files a tool also writes are shared.** When you sync into `$HOME` or a profile, Exuno owns only the keys `.ai/src` declares in each TOML or JSON settings or MCP file (one entry per MCP server). It keeps what the tool wrote there itself, such as Codex's project trust and plugins, Claude Code's model, theme, and plugin choices, or a server added in Cursor. If the tool changed a key you declare, sync stops and names it; `exuno adopt <file>` pulls the change into the source. `targets.settings.ownership` and `targets.mcp.ownership` (`auto`, `keys`, `file`) override this. Inside a repository `auto` owns the whole file, and Zed's commented settings are always owned whole.
+- **Settings files a tool also writes are shared.** When you sync into a config home (the folder a tool reads its user-wide config from, such as `~/.claude/`, either by running Exuno in `$HOME` or through a [profile](workspaces-and-profiles.md#profiles-separate-config-homes)), Exuno owns only the keys `.ai/src` declares in each TOML or JSON settings or MCP file (one entry per MCP server). It keeps what the tool wrote there itself, such as Codex's project trust and plugins, Claude Code's model, theme, and plugin choices, or a server added in Cursor. If the tool changed a key you declare, sync stops and names it; `exuno adopt <file>` pulls the change into the source. `targets.settings.ownership` and `targets.mcp.ownership` (`auto`, `keys`, `file`) override this. Inside a repository `auto` owns the whole file, and Zed's commented settings are always owned whole.
 - **Overrides are per tool.** `exuno customize cursor hooks` copies the current base into `.ai/src/tools/cursor/hooks.json`. Delete that file later to go back to the base.
 - **Hooks need someone to look first.** `customize <tool> hooks` prints the base content and asks for confirmation, or needs `--yes` without a terminal.
 - **Stale copies can be cleaned up.** `exuno simplify` lists overrides that are still identical to the base, and `--apply` removes them so they stop pinning old defaults.
@@ -93,3 +93,18 @@ Generated folders belong to Exuno. Anything there that isn't in `.ai/src/` gets 
 | `.gitignore` | Only the block between `AI SYNC GENERATED START` and `END` is managed. |
 
 If you already have tool config, `exuno init` adopts it into `.ai/src/` first. To move files by hand, see [Migrating existing tool configs](migrating.md#existing-tool-configs).
+
+## Words used in these docs
+
+| Word | Meaning |
+| --- | --- |
+| source | What you edit: `.ai/src/` and `.ai/exuno.yaml` |
+| generated files, outputs | What sync writes for each tool: `CLAUDE.md`, `.cursor/rules/`, and so on |
+| tool YAML | The file that says where one tool's files go and in what format |
+| base | The shipped default for a tool YAML, settings, hooks, or MCP file, built into the binary |
+| override | Your file in `.ai/src/tools/` that replaces or changes a base |
+| manifest | `.ai/.sync-manifest`, the list of generated files and their hashes |
+| drift | A generated file that changed since the last sync, usually by hand |
+| adopt | Copy existing content into `.ai/src/`: `init` does it for config a project already has, `exuno adopt <file>` for one edited generated file, `profile add --adopt` for an existing config home |
+| config home | The folder a tool reads its user-wide config from, such as `~/.claude/` |
+| profile | A second config home for the same tool, such as `~/.claude-hub/` for a work account |
