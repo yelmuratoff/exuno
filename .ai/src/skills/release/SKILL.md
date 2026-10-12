@@ -19,7 +19,7 @@ Run these **before** touching VERSION or CHANGELOG. If any check surfaces a prob
    - For each commit, decide: user-visible (CLI flag, output format, new tool, bug a user could hit) → must appear in the new CHANGELOG section. Internal refactor / test-only / CI / dev tooling → stays out.
    - If a user-visible commit is missing from your draft, add it before bumping.
 5. **Docs reflect current behaviour** — spot-check that the release does not ship with stale docs:
-   - `README.md` — command list, flag list, supported tools table. If a command/flag was renamed, removed, or added since the last tag, README must match.
+   - `README.md` — command list and supported tools table; `docs/guide/commands.md` — the full command and flag reference; the other `docs/guide/*.md` pages for the behaviour they describe. If a command/flag was renamed, removed, or added since the last tag, these must match.
    - `.ai/src/commands/*.md` and `.ai/src/skills/**/SKILL.md` — descriptions, argument hints, examples line up with what the binary actually accepts (`src/cli/usage.rs`, `src/cli/mod.rs`).
    - `.ai/src/rules/*.md` — invariants and module map (`architecture.md`) match the current file layout in `src/`.
    - `lib/templates/tools/_TEMPLATE.yaml` — every YAML option read by `src/engine/render/` and `src/config/tool.rs` is documented; no documented option is dead.
