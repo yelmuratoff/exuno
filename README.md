@@ -23,13 +23,13 @@
 
 Every AI coding tool wants instructions in its own format and directory: `.claude/CLAUDE.md`, `.cursor/rules/*.mdc`, `.github/instructions/*.instructions.md`, `AGENTS.md`, `.devin/rules/`...
 
-Use more than one tool — or work on a team where different people use different tools? You end up maintaining the same rules in 5+ formats. They drift. They go stale. You copy-paste forever.
+If you use more than one tool, or your teammates use different ones, you end up keeping the same rules in five or more formats. Someone edits one copy, forgets the others, and they drift apart.
 
 ## The solution
 
 Exuno syncs from a single source (`.ai/src/`) into **15 AI tools**: Claude Code, GitHub Copilot, Cursor, Gemini CLI, OpenAI Codex, Kimi Code, MiniMax Code, OpenCode, Devin Desktop (Windsurf), JetBrains Junie, Cline, Kiro, Amazon Q, Zed, Google Antigravity.
 
-Write once → `exuno sync` → every tool gets instructions in its native format.
+You edit `.ai/src/`, run `exuno sync`, and each tool gets the files in its own format.
 
 ```
 .ai/src/rules/testing.md
@@ -43,7 +43,7 @@ Write once → `exuno sync` → every tool gets instructions in its native forma
 └── .rules                                # merged into single file (Zed)
 ```
 
-The frontmatter above is the always-on default. Give a rule `paths:` frontmatter (a list of globs) and Exuno emits each tool's **scoped** trigger instead (`alwaysApply: false`, `applyTo: <globs>`, `trigger: glob`; Claude keeps `paths:`), so domain rules load only when matching files are touched — keeping the always-on context lean.
+The frontmatter above is the always-on default. Give a rule `paths:` frontmatter (a list of globs) and Exuno emits each tool's **scoped** trigger instead (`alwaysApply: false`, `applyTo: <globs>`, `trigger: glob`; Claude keeps `paths:`), so a domain rule loads only when the agent touches a matching file and stays out of the always-on context.
 
 ## Speed
 
@@ -71,10 +71,11 @@ recorded before the migration started.
 
 ## Why not just...?
 
-- **...symlink the files?** Tools demand different extensions (`.mdc`, `.instructions.md`), different frontmatter, different nesting. Symlinks can't transform content — Exuno does.
-- **...a shell script per tool?** You'd be writing the same copy / rename / header-injection logic 14 times. Exuno is that script, declarative (YAML), already tested on macOS, Linux, and Windows.
-- **...stick to the one tool I use today?** Teammates pick different ones. Your future self might too. A single source file future-proofs you.
-- **Zero runtime dependencies.** A single static binary. No Node, Python, `yq`, or `jq`. Install with one `curl | bash`.
+- **...symlink the files?** Tools want different extensions (`.mdc`, `.instructions.md`), different frontmatter, and different nesting. A symlink can't change the content; Exuno rewrites it for each tool.
+- **...a shell script per tool?** You'd write the same copy, rename, and header logic once per tool. Exuno is that script, driven by one YAML file per tool and tested on macOS, Linux, and Windows.
+- **...stick to the one tool I use today?** Teammates pick different ones, and you may switch later. With one source, adding a tool is `exuno enable <tool>`.
+
+Exuno itself is one static binary with no Node, Python, `yq`, or `jq` behind it, and one `curl | bash` installs it.
 
 <details>
 <summary><strong>Table of contents</strong></summary>
@@ -138,7 +139,7 @@ irm https://github.com/yelmuratoff/exuno/releases/latest/download/exuno-installe
 
 This installer adds `exuno` only, without the `agentsync` link `install.sh` creates. In a project whose git hooks predate the rename, run `exuno setup-hooks` once; `exuno doctor` lists any hook still calling `agentsync`.
 
-To install the exact release a project pins in `exuno_version` — what CI should do when outputs are committed — set `EXUNO_VERSION`; the same variable moves an existing install, and `exuno update <version>` does it from the CLI:
+To install the exact release a project pins in `exuno_version`, set `EXUNO_VERSION`. CI should do this when outputs are committed. The same variable moves an existing install to that release, and `exuno update <version>` does the same from the CLI:
 
 ```bash
 EXUNO_VERSION=0.45.0 curl -fsSL https://raw.githubusercontent.com/yelmuratoff/exuno/main/install.sh | bash
@@ -148,7 +149,7 @@ What the installer does:
 
 1. Downloads the release archive for your platform from GitHub Releases and verifies its sha256
 2. Places the binary at `~/.exuno/bin/exuno`
-3. Creates the symlinks `exuno` and `agentsync` in `/usr/local/bin/` (falls back to `~/.local/bin/`) — the second keeps hooks and CI written before the rename working until 1.0
+3. Creates the symlinks `exuno` and `agentsync` in `/usr/local/bin/` (falls back to `~/.local/bin/`); the `agentsync` link keeps hooks and CI written before the rename working until 1.0
 
 `exuno update` replaces the binary with the latest release, and `exuno update <version>` pins one. A release before 0.45.0 ships as `agentsync-<target>`, which both the installer and `update` still fetch. Releases before the first binary release have no archive: pinning to one installs from source (a git clone in `~/.exuno/` with `AGENTSYNC_HOME` in your shell config, as the installer always did), and such an install moves to the binary by itself the next time `exuno update` reaches a release that ships one.
 
@@ -176,7 +177,7 @@ exuno init --tools claude,cursor   # wizard in a TTY; adopts existing config, th
 git add -A && git commit -m "chore: add exuno"
 ```
 
-`init` keeps the tool config the project already has, generates the outputs for every enabled tool, and — with a `.github/` directory — offers a CI job that runs `exuno check`. After the commit:
+`init` keeps the tool config the project already has, generates the outputs for every enabled tool, and, when the project has a `.github/` directory, offers a CI job that runs `exuno check`. After the commit:
 
 - **Everyone else** runs nothing. `git pull` brings `CLAUDE.md`, `.claude/rules/`, `.cursor/rules/` and the rest, already current.
 - **Anyone editing the rules** edits `.ai/src/`, runs `exuno sync`, and commits source and outputs together. `exuno setup-hooks` installs a pre-commit hook that enforces that, and `exuno check` in CI catches it when they skip the hook.
@@ -199,13 +200,13 @@ exuno sync                        # 5. Re-distribute after any change to .ai/src
 
 **What each step does:**
 
-1. **`exuno init`** — Scaffolds the `.ai/` directory, adopts the tool config the project already has, and runs the first sync. In a terminal it opens a short wizard to pick tools, content sections, whether to commit generated files, and whether to add the CI gate; in scripts/CI it runs silently using auto-detection (`.claude/`, `.cursor/`, `CLAUDE.md`, ...) and those defaults. Only the payloads you opt into get scaffolded — other tools use shipped base templates at sync time. Useful flags: `--tools claude,cursor` (explicit list), `--content agents,rules` (narrow content), `--outputs local` (gitignore the outputs instead), `--existing replace` (regenerate over the project's own config instead of adopting it), `--ci github` (write the check workflow), `--no-sync` (skip the first sync), `--no-templates` (empty `.ai/src/` layout without shipped starters), `--no-detect` (skip tool auto-detection), `--yes` (accept defaults), `--dry-run` (preview). Safe to run twice — if `.ai/src/` already exists, it skips.
+1. **`exuno init`** — Scaffolds the `.ai/` directory, adopts the tool config the project already has, and runs the first sync. In a terminal it opens a short wizard to pick tools, content sections, whether to commit generated files, and whether to add the CI gate; in scripts/CI it runs silently using auto-detection (`.claude/`, `.cursor/`, `CLAUDE.md`, ...) and those defaults. Only the payloads you opt into get scaffolded — other tools use shipped base templates at sync time. Useful flags: `--tools claude,cursor` (explicit list), `--content agents,rules` (narrow content), `--outputs local` (gitignore the outputs instead), `--existing replace` (regenerate over the project's own config instead of adopting it), `--ci github` (write the check workflow), `--no-sync` (skip the first sync), `--no-templates` (empty `.ai/src/` layout without shipped starters), `--no-detect` (skip tool auto-detection), `--yes` (accept defaults), `--dry-run` (preview). Running it twice is safe: when `.ai/src/` already exists, it skips.
 
 2. **`exuno enable <tool>`** — Adds the tool to `tools.enabled` _and_ scaffolds editable copies of its settings / hooks at `.ai/src/tools/<tool>/`, then prints the exact file path to edit plus the shared MCP path. Pass `--no-scaffold` to skip materializing files; pass `--yes` to accept the TTY confirm non-interactively.
 
 3. **`exuno add mcp <server>`** — Writes an MCP server entry into the shared `.ai/src/mcp.json`. On the next `sync`, every enabled MCP target gets the server map in its native format. Put a divergent map at `.ai/src/tools/<tool>/mcp.json`; `exuno customize <tool> mcp` scaffolds it when that target ships a copyable base.
 
-4. **`exuno generate`** — Prints a detailed prompt that you paste into any AI (Claude, ChatGPT, Gemini). The AI analyzes your project description and generates a complete `.ai/src/` config tailored to your stack: project-specific AGENTS.md, rules, skills, commands, agents, and settings. Pass optional context: `exuno generate "React + Next.js + Prisma"`. Use `| pbcopy` (macOS) or `| xclip` (Linux) to copy to clipboard.
+4. **`exuno generate`** — Prints a prompt to paste into a chat AI such as Claude, ChatGPT, or Gemini. From your project description, the AI writes an `.ai/src/` config for your stack: AGENTS.md, rules, skills, commands, agents, and settings. You can pass context: `exuno generate "React + Next.js + Prisma"`. Pipe it to `pbcopy` (macOS) or `xclip` (Linux) to copy it to the clipboard.
 
 5. **`exuno sync`** — Reads each enabled tool's config (user override + shipped base — see [How Resources Resolve](#how-resources-resolve)), then copies and transforms your source files into tool-specific formats. Rules get renamed (`.mdc` for Cursor, `.instructions.md` for Copilot), frontmatter headers are added, commands are converted to TOML for Gemini, agents get the right extensions, and settings/MCP/hooks are placed where each tool expects them. Also manages the `.gitignore` block that matches your `outputs:` mode — see [Where generated files live](#where-generated-files-live).
 
@@ -351,11 +352,11 @@ exuno generate "React + Next.js"  # With project context
 exuno migrate                     # Print and auto-copy a safe upgrade prompt
 ```
 
-Works like `claude /init` — generates a prompt that you paste into any AI (Claude, ChatGPT, Gemini). The AI analyzes your codebase description and creates a complete `.ai/src/` config: AGENTS.md, rules, skills, commands, and agents tailored to your project's stack and conventions.
+This is close to `claude /init`, except that Exuno only prints the prompt. You paste it into any chat AI, and the AI writes the `.ai/src/` files (AGENTS.md, rules, skills, commands, and agents) for your stack and conventions.
 
 ## Tool Configuration
 
-Each tool = one YAML file in `.ai/src/tools/`. Filename = tool identifier for `--only`/`--skip`. Files starting with `_` are ignored.
+Each tool is one YAML file in `.ai/src/tools/`, and the filename is the tool's identifier for `--only` and `--skip`. Files starting with `_` are ignored.
 
 Example — `.ai/src/tools/claude.yaml`:
 
@@ -524,8 +525,6 @@ Exuno auto-converts between formats during sync:
 | Agents `.md`   | Safe OpenCode Markdown (`mode` + permissions)    | OpenCode                    |
 | MCP `mcpServers` | OpenCode top-level `mcp` (`local` / `remote`)  | OpenCode                    |
 
-You write everything in Markdown. Exuno handles the rest.
-
 ## Models and Providers Are Not Tools
 
 Exuno targets coding tools and their filesystem formats, not model vendors. Kimi and GLM models used through Claude Code, Cline, or OpenCode continue to use that tool's target; there is deliberately no `glm.yaml` or `zai.yaml`. MiniMax Code has a standalone CLI with its own project files; a MiniMax model used through another client still uses that client's target.
@@ -564,7 +563,7 @@ a copy you keep for reference costs nothing.
 
 ## Automation
 
-Generated outputs regenerate from `.ai/src/`, so they go stale whenever you edit the source (or pull a teammate's change) and forget to re-sync. Three mechanisms keep them current without you remembering — pick whichever fits your workflow (they compose).
+Generated outputs regenerate from `.ai/src/`, so they go stale whenever you edit the source (or pull a teammate's change) and forget to re-sync. Three mechanisms re-sync for you, and you can combine them.
 
 ### Shell hook (most hands-off)
 
@@ -574,9 +573,9 @@ Add this to your `~/.zshrc` (or `~/.bashrc` with `bash`):
 eval "$(exuno shell-init zsh)"
 ```
 
-This regenerates the hook from `exuno` each session — the recommended form, since upgrades and fixes apply automatically without re-editing your rc (the same pattern as `direnv`, `starship`, and `zoxide`). The hook runs `exuno sync --if-stale` when the current directory itself is an `.ai/` project root (including when a shell opens there). It does not walk up to a parent project while you navigate its descendants. The command is a no-op — and silent — when nothing changed. Set `EXUNO_NO_AUTO_SYNC=1` to disable without removing the line.
+This is the recommended form: each new shell regenerates the hook from `exuno`, so an upgrade reaches it without editing your rc file. `direnv`, `starship`, and `zoxide` work the same way. The hook runs `exuno sync --if-stale` when the current directory itself is an `.ai/` project root, including when a shell opens there. It does not walk up to a parent project while you move through its subdirectories. When nothing changed, the command does nothing and prints nothing. Set `EXUNO_NO_AUTO_SYNC=1` to turn it off without removing the line.
 
-Prefer to avoid the per-session `exuno` call? Freeze a copy instead with `exuno shell-init zsh >> ~/.zshrc`, but re-run it after each upgrade to pick up changes.
+To skip the `exuno` call in every new shell, freeze a copy with `exuno shell-init zsh >> ~/.zshrc`, and re-run that after each upgrade.
 
 ### Git hooks
 
@@ -585,7 +584,7 @@ exuno setup-hooks                 # the hooks this project's outputs: mode needs
 exuno setup-hooks --pre-commit    # local mode: also add a pre-commit sync
 ```
 
-`setup-hooks` installs what the project's `outputs:` mode calls for. With `committed` (the default) that is a single pre-commit gate: it runs `sync --if-stale` and **fails the commit** when a generated file would be left out of it, so outputs never lag source. With `local` it installs `post-merge` and `post-checkout` hooks that run `exuno sync` after `git pull` / `git checkout`, and `--pre-commit` adds a hook that runs `sync --if-stale` before each commit; those three are non-fatal — a failed sync warns but never blocks the git operation. `EXUNO_SKIP_HOOKS=1` turns any installed hook into a no-op. Safe to run multiple times: a current Exuno block is left alone, one an older release installed is rewritten in place, and the rest of the hook is kept.
+`setup-hooks` installs what the project's `outputs:` mode calls for. With `committed` (the default) that is a single pre-commit gate: it runs `sync --if-stale` and **fails the commit** when a generated file would be left out of it, so outputs never lag source. With `local` it installs `post-merge` and `post-checkout` hooks that run `exuno sync` after `git pull` / `git checkout`, and `--pre-commit` adds a hook that runs `sync --if-stale` before each commit. None of those three is fatal: a failed sync warns and the git operation goes ahead. `EXUNO_SKIP_HOOKS=1` turns any installed hook into a no-op. You can run `setup-hooks` again at any time: a current Exuno block is left alone, one an older release installed is rewritten in place, and the rest of the hook is kept.
 
 ### Manual / CI
 
@@ -632,7 +631,7 @@ skills:
 
 ### Project format revision
 
-`format:` in `.ai/exuno.yaml` records which migrations a project has been walked through. It is a small counter bumped only when a project actually needs a step — unlike `exuno_version`, which moves on every patch — so the reminder appears exactly when something applies and never otherwise. `init` writes the current revision, `migrate --apply` records it, and nothing else touches it. A project behind the engine is flagged on the next interactive command and by `exuno doctor`.
+`format:` in `.ai/exuno.yaml` records which migrations a project has been walked through. It is a small counter bumped only when a project actually needs a step, while `exuno_version` moves on every patch, so the reminder appears only when a step applies. `init` writes the current revision, `migrate --apply` records it, and nothing else touches it. A project behind the engine is flagged on the next interactive command and by `exuno doctor`.
 
 ### Keeping agents on the source
 
@@ -667,7 +666,7 @@ version_pin: strict # or warn
 
 ## Customization workflow
 
-Three commands cover every customization, each with a single responsibility.
+Three commands cover customization.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -687,13 +686,9 @@ Three commands cover every customization, each with a single responsibility.
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Mental model:**
+Start with `enable`: it turns a tool on and gives you the file to edit. MCP servers go in the shared map by default. `add mcp` writes canonical `mcpServers` to `.ai/src/mcp.json`, and OpenCode converts that map and composes it with its settings atomically. Reach for `customize` only when a tool needs an override that differs from the shared source, or when `enable --no-scaffold` skipped a file you now want.
 
-- `enable` is the entry point. One command turns a tool on _and_ gives you the file to edit.
-- Shared MCP is the default. `add mcp` writes canonical `mcpServers` to `.ai/src/mcp.json`; OpenCode converts that map and composes it with its settings atomically.
-- `customize` is the escape hatch. Use it only when you need a per-tool override that diverges from the shared source, or when `enable --no-scaffold` skipped materializing a file you later want.
-
-All three write to **`.ai/src/tools/<tool>/`** (per-tool) or **`.ai/src/mcp.json`** (shared). Nothing is scattered across `.ai/src/hooks/`, `.ai/src/mcp/`, `.ai/src/settings/` — the old flat layout is kept around for backward compatibility (see [migrate](#migrating-from-the-010-flat-layout)).
+All three write to **`.ai/src/tools/<tool>/`** (per-tool) or **`.ai/src/mcp.json`** (shared). The old flat directories `.ai/src/hooks/`, `.ai/src/mcp/`, and `.ai/src/settings/` are still read for backward compatibility (see [migrate](#migrating-from-the-010-flat-layout)).
 
 ## How Resources Resolve
 
@@ -717,22 +712,22 @@ Every payload resource — tool YAML, hooks, MCP config, settings — follows th
 
 The legacy flat-layout overrides (`.ai/src/hooks/<tool>.<ext>`, `.ai/src/mcp/<tool>.<ext>`, `.ai/src/settings/<tool>.<ext>`) from 0.10 and earlier are still read and still win over base, but print a one-shot deprecation warning. Run `exuno migrate --legacy` to preview moving them into the canonical per-tool layout, then `exuno migrate --apply` to apply it; the legacy paths may be dropped in a future release.
 
-**Why it matters:**
+What follows from the layering:
 
-- **Lean by default.** `exuno init` creates `.ai/exuno.yaml`, `AGENTS.md`, and your chosen content sections — no pre-written hooks / MCP / settings for 15 tools you don't use.
-- **Updates flow through.** Because the base ships with the engine, `exuno update` improves every project that hasn't locked the file in as an override.
+- **Small by default.** `exuno init` creates `.ai/exuno.yaml`, `AGENTS.md`, and the content sections you chose. It writes no hooks, MCP, or settings for the tools you don't use.
+- **Engine updates reach the base.** The base ships with the engine, so after `exuno update` every project without its own override of a file gets the new version on the next sync.
 - **Shared MCP is converted where schemas differ.** One `.ai/src/mcp.json` reaches every enabled MCP target. OpenCode's adapter validates local and remote transports, then atomically composes the result into `opencode.json`.
 - **MiniMax Code MCP uses the project `.mcp.json`.** Claude Code shares that destination. When their effective MCP sources differ, sync stops before writing either version. MiniMax may start a configured server during tool discovery or use, so review an MCP source before syncing it.
 - **Global settings files are shared with the tools that read them.** Synced from `$HOME` or into a profile, Exuno owns only the keys `.ai/src` declares in each TOML or JSON settings and MCP file, one entry per MCP server, and keeps what the tool writes there itself: Codex's project trust and plugins, Claude Code's model, theme, and plugin choices, a server added in Cursor. A declared key the tool changed stops the sync by name; `exuno adopt <file>` pulls it into the source. `targets.settings.ownership` and `targets.mcp.ownership` (`auto`, `keys`, `file`) override the choice; in a repository `auto` owns files whole, and Zed's shipped tool owns its commented settings whole.
 - **Shared `AGENTS.md` needs one source of truth.** If enabled tools read different agents content for the same destination, sync stops before either output is written.
 - **MiniMax Code has no config-home profile.** It reads files from the primary project workspace, so `profile add` and `sync` refuse MiniMax profile variants instead of creating files the client would not load.
-- **Opt in per tool.** Need to edit Cursor's hooks? `exuno customize cursor hooks` copies the current base into `.ai/src/tools/cursor/hooks.json`. Delete the file later to resume inheriting.
-- **Safe hooks.** `customize <tool> hooks` prints the base content first and requires `--yes` in non-interactive mode — you never scaffold executable intent silently.
-- **`simplify` prunes noise.** Scaffolded payloads that are still byte-identical to base are flagged by `exuno simplify` and removed with `--apply`, so you don't accidentally pin yesterday's defaults forever.
+- **Overrides are per tool.** To edit Cursor's hooks, `exuno customize cursor hooks` copies the current base into `.ai/src/tools/cursor/hooks.json`. Delete the file later to inherit the base again.
+- **Hooks need a confirmation.** `customize <tool> hooks` prints the base content first and requires `--yes` in non-interactive mode, so hook commands are never scaffolded unless someone has seen them or passed `--yes`.
+- **`simplify` removes copies of the base.** `exuno simplify` flags scaffolded payloads that are still byte-identical to the base, and `--apply` removes them so they stop pinning old defaults.
 
 ## Migrating from the 0.10 flat layout
 
-Projects upgraded from 0.10 keep working without intervention — the resolver still reads `.ai/src/{hooks,mcp,settings}/<tool>.<ext>`. When you are ready to move them into the canonical per-tool layout:
+Projects upgraded from 0.10 keep working as they are, because the resolver still reads `.ai/src/{hooks,mcp,settings}/<tool>.<ext>`. When you are ready to move them into the canonical per-tool layout:
 
 ```bash
 exuno migrate --legacy    # dry-run; prints the planned legacy-layout moves
@@ -902,7 +897,7 @@ If you already have tool-specific configs (`.claude/rules/`, `.cursor/rules/`, c
 
 Before a real `init` or `sync` writes anything, Exuno copies every path the operation may change into `.ai/backups/<backup-id>/`. The backup store ignores itself in Git. Dry runs, fresh `sync --if-stale` calls, and syncs rejected by drift preflight do not create snapshots.
 
-If an operation exits with an error, Exuno automatically restores its pre-operation snapshot, including paths that did not exist before the run. Successful snapshots remain available for an accidental-sync rollback:
+If an operation exits with an error, Exuno automatically restores its pre-operation snapshot, including paths that did not exist before the run. Snapshots of successful runs stay available, so you can roll back a sync you didn't mean to run:
 
 ```bash
 exuno rollback --list                 # show complete snapshots
@@ -983,7 +978,7 @@ does not authenticate data against an actor who can rewrite the backup store.
 
 ### Drift detection
 
-After every successful sync, Exuno writes `.ai/.sync-manifest` — one line per generated file with its SHA-256 hash. It records what *this clone* generated, so sync adds it to the managed `.gitignore` block next to the outputs it describes: a committed manifest beside ignored outputs would make every teammate's next sync read a `git pull` as manual edits. On the next sync, every destination is compared against the manifest:
+After every successful sync, Exuno writes `.ai/.sync-manifest` — one line per generated file with its SHA-256 hash. It always has the same git status as the outputs it describes: committed with them in `committed` mode, and listed in the managed `.gitignore` block with them in `local` mode. If the two disagreed, a teammate's next sync would read a `git pull` as manual edits. On the next sync, every destination is compared against the manifest:
 
 - File untouched → sync rewrites silently (idempotent).
 - File deleted manually → sync rewrites silently.
@@ -1003,7 +998,7 @@ After every successful sync, Exuno writes `.ai/.sync-manifest` — one line per 
 
 ### `exuno adopt` — promote an IDE edit back into source
 
-Quickly iterating in Claude Code or Cursor and edited a generated file directly? Skip the manual `cp + sync --force` dance:
+If you edited a generated file directly while working in Claude Code or Cursor, `adopt` moves the edit into source, so you don't have to copy it by hand and run `sync --force`:
 
 ```bash
 exuno adopt .claude/rules/core.md            # interactive, with diff preview
@@ -1012,7 +1007,7 @@ exuno adopt --yes .claude/rules/core.md      # non-interactive (CI / scripts)
 exuno adopt --all                            # adopt every drifted file at once
 ```
 
-Resolves the destination back to its source file (`.ai/src/rules/core.md`), copies the edited content, and refreshes the manifest entry — the next `sync` is drift-free.
+`adopt` finds the source file behind the destination (`.ai/src/rules/core.md`), copies the edited content into it, and updates the manifest entry, so the next `sync` finds no drift.
 
 `--all` scans the manifest for every drifted (manually-edited) output and adopts them in one pass. Refused targets (below) are skipped and listed. If two edited outputs resolve to the same source with different content (e.g. `CLAUDE.md` and `GEMINI.md` both map back to `.ai/src/AGENTS.md`), both are skipped so neither silently clobbers the other — adopt one explicitly.
 
@@ -1020,7 +1015,7 @@ Resolves the destination back to its source file (`.ai/src/rules/core.md`), copi
 
 - Rules that get a frontmatter header (`cursor`, `copilot`, `windsurf`, `antigravity`) — adopting would push that tool's header into every other tool's rules.
 - Rules merged into a single file (`zed`) — many sources collapsed into one dest can't be split back apart.
-- Rules or skills inlined into AGENTS.md (rules: `codex`, `gemini`, `junie`, `kimi`, `minimax`, `opencode`; skills: `amazonq`, `cline`, `zed`).
+- Rules or skills inlined into AGENTS.md (rules: `codex`, `gemini`, `junie`, `kimi`, `minimax`, `opencode`; skills: `amazonq`, `zed`).
 - Format-converted output (`codex` subagents → TOML, `amazonq` subagents → JSON, `opencode` subagents → OpenCode Markdown).
 
 For these, edit `.ai/src/` directly. Exuno names the offending file when it refuses.
@@ -1085,9 +1080,9 @@ the manifest.
 
 ## Workspaces — nested Exuno projects
 
-A parent project at `workspace/.ai/src/` with sub-projects below (`workspace/foo/.ai/src/`, `workspace/bar/.ai/src/`) is supported as a first-class workflow. Two patterns to manage shared content between the layers:
+A parent project at `workspace/.ai/src/` with sub-projects below (`workspace/foo/.ai/src/`, `workspace/bar/.ai/src/`) is supported. There are two ways to manage the content the layers share.
 
-**Pattern A — declarative inheritance via `shared:`.** Each child project declares which categories it inherits from the parent. At sync time, Exuno builds a transient shadow `.ai/src/` (child + parent fillers, child wins on collisions) and materialises the result into every enabled tool's output — works for tools without parent-loading (Codex, Cursor, JetBrains Junie) and tools with it (Claude Code) equally. Inherited files are never written into the child's `.ai/src/`; they live only in the shadow tree during a single sync run.
+**Pattern A — declarative inheritance via `shared:`.** Each child project declares which categories it inherits from the parent. At sync time, Exuno builds a transient shadow `.ai/src/` (child files plus parent files to fill the gaps, child wins on collisions) and writes the result into every enabled tool's output. This works the same for tools that don't load parent directories (Codex, Cursor, JetBrains Junie) and for those that do (Claude Code). Inherited files are never written into the child's `.ai/src/`; they live only in the shadow tree during a single sync run.
 
 ```yaml
 # child/.ai/exuno.yaml
@@ -1107,15 +1102,15 @@ exuno dedupe --yes            # non-interactive: delete identical-hash dupes, le
 
 Identical-hash files become a `[d]elete / [k]eep / [v]iew` prompt; for shipped templates the deletion also writes a `template_overrides.declined` entry so `refresh` won't re-offer the file. Divergent files (same path, different content) show a diff and leave the decision to the human — dedupe never auto-resolves a divergence.
 
-**Detection — `exuno doctor`.** Doctor walks up to the nearest parent `.ai/src/` (same boundary as dedupe) and flags identical-hash duplicates as advisories and divergent files as info. Rules and skills marked with `category: governance` in their frontmatter are upgraded to advisories when divergent, with explicit "likely a mistake, not an override" framing. All cross-project findings are exit-code-0 advisories — visible during interactive runs, invisible to CI gates, so pre-commit hooks running `doctor` don't break on workspace techdebt.
+**Detection — `exuno doctor`.** Doctor walks up to the nearest parent `.ai/src/` (same boundary as dedupe) and flags identical-hash duplicates as advisories and divergent files as info. Rules and skills marked with `category: governance` in their frontmatter are raised to advisories when divergent, and the message says the divergence is likely a mistake rather than an override. Cross-project findings never change the exit code: you see them in an interactive run, and a CI gate or pre-commit hook that runs `doctor` does not fail on them.
 
-**Workspace-wide sync.** `exuno sync --workspace` runs `sync` in every Exuno-managed `.ai/` below cwd, bottom-up alphabetical (deeper paths first; siblings sorted by `LC_ALL=C` for reproducibility). Continues past per-project failures; reports max exit code at the end. All other sync options (`--only`, `--skip`, `--profile`, `--dry-run`, `--force`, `--quiet`, `--json`) forward to each per-project invocation, so `--json` prints one object per project.
+**Workspace-wide sync.** `exuno sync --workspace` runs `sync` in every Exuno-managed `.ai/` below cwd, bottom-up alphabetical (deeper paths first; siblings sorted by `LC_ALL=C` for reproducibility). It continues past a failing project and exits with the highest exit code it saw. All other sync options (`--only`, `--skip`, `--profile`, `--dry-run`, `--force`, `--quiet`, `--json`) forward to each per-project invocation, so `--json` prints one object per project.
 
 The walk-up logic stops at the start's git repository boundary, so a child project with its own `.git` never picks up an unrelated parent `.ai/src/` from above the boundary.
 
 ## Profiles — multiple config homes per tool
 
-Sync from `$HOME` and juggle more than one account for the same tool — a work Claude and a personal Claude? A **profile** generates a second, self-contained config home (`~/.claude-hub/` next to your personal `~/.claude/`) whose content is the base `.ai/src/` plus profile-only extras. Shared rules stay shared; work-only rules and MCP servers live in the profile.
+If you sync from `$HOME` and use more than one account with the same tool, such as a work Claude and a personal Claude, a **profile** generates a second, self-contained config home (`~/.claude-hub/` next to your personal `~/.claude/`) whose content is the base `.ai/src/` plus profile-only extras. Shared rules stay shared; work-only rules and MCP servers live in the profile.
 
 ```bash
 exuno profile add hub                       # scaffold a "hub" profile for every enabled tool
