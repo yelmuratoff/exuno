@@ -1,13 +1,13 @@
 # Experimental skill cards
 
-`agentsync skills catalog` displays skill metadata from an explicitly selected,
+`exuno skills catalog` displays skill metadata from an explicitly selected,
 manually maintained catalog. Use it to inspect purpose, limitations, taxonomy
 mappings, and declared requirements before deciding which skills to use.
 The commands are read-only: they do not discover, select, install, or run skills.
 
 ```text
-agentsync skills catalog list --catalog FILE [--source ALIAS=LOCAL_REPO]... [--include GLOBS] [--exclude GLOBS]
-agentsync skills catalog show ID --catalog FILE [--source ALIAS=LOCAL_REPO]...
+exuno skills catalog list --catalog FILE [--source ALIAS=LOCAL_REPO]... [--include GLOBS] [--exclude GLOBS]
+exuno skills catalog show ID --catalog FILE [--source ALIAS=LOCAL_REPO]...
 ```
 
 The catalog is an explicitly selected UTF-8 TSV regular file, limited to 128
@@ -33,14 +33,14 @@ The catalog format can record a pinned OASF taxonomy version and curator
 mappings. The example leaves them unknown rather than claiming an unverified
 mapping. These annotations do not extend the Agent Skills specification.
 
-`--include` and `--exclude` filter card IDs with the existing AgentSync glob
+`--include` and `--exclude` filter card IDs with the existing Exuno glob
 rules; exclusions win. They can be repeated. There is deliberately no `--set`
 option and no set-based selection behavior.
 
 ## Source declarations versus verification
 
 A catalog's `source`, `commit`, and `path` are declarations made by the
-catalog author. Supplying `--source alias=LOCAL_REPO` lets AgentSync inspect
+catalog author. Supplying `--source alias=LOCAL_REPO` lets Exuno inspect
 only the matching pinned local Git object. It never checks out, fetches,
 discovers, or contacts a source. A missing alias, unavailable repository,
 missing object, unsupported metadata, or missing `SKILL.md` is shown as an
@@ -96,11 +96,11 @@ The example demonstrates inspection, not endorsement or permission to use
 that skill; its bundled license and dependencies require separate review.
 
 ```bash
-agentsync skills catalog list \
+exuno skills catalog list \
   --catalog docs/examples/skill-cards/pilot/catalog.tsv \
   --source anthropic-skills=/work/anthropic-skills
 
-agentsync skills catalog show pdf \
+exuno skills catalog show pdf \
   --catalog docs/examples/skill-cards/pilot/catalog.tsv \
   --source anthropic-skills=/work/anthropic-skills
 ```

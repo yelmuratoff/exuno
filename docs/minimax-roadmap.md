@@ -17,7 +17,7 @@ plugin files.
 
 Future expansion needs first-party evidence or an installed-client check for
 project-level skills, commands, subagents, settings, and hooks. Keep credentials
-and user-global state out of AgentSync. The `.mcp.json` destination is shared
+and user-global state out of Exuno. The `.mcp.json` destination is shared
 with Claude Code; differing effective MCP sources must fail before either
 client's configuration can overwrite the other. Release versioning follows
 the normal release workflow.
