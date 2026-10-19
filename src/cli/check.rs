@@ -27,7 +27,7 @@ pub const HELP: Help = Help {
     tagline: "verify outputs are in sync with source",
     synopsis: &["check"],
     description: &[
-        "Renders what exuno sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, and outputs no longer\ngenerated. Nothing on disk is written.",
+        "Renders what exuno sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, outputs no longer generated,\nand outputs edited since the last sync, which exuno sync refuses to\noverwrite. Nothing on disk is written.",
         "The report goes to stdout so a hook or CI step can read it; the exit\nstatus carries the verdict, following grep's shape.",
         "Honours EXUNO_CONFIG_PATH for the project config and\nEXUNO_REPO_ROOT for the project root, as exuno sync does.",
     ],
@@ -124,15 +124,17 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
         }
     };
 
+    let previous = Manifest::load(root)?;
     let mut session = Session::new(ws, Paths::for_disk_root(root));
     session.force = true;
     session.set_owned_before(
-        Manifest::load(root)?
-            .map(|m| m.owned_records())
+        previous
+            .as_ref()
+            .map(Manifest::owned_records)
             .unwrap_or_default(),
     );
     merge_shared_parent(&mut session.ws, root, config.as_deref())?;
-    if render::render(&mut session, env).is_err() {
+    let Ok(run) = render::render(&mut session, env) else {
         report.out("✗ Sync script failed during check");
         report.out("Sync output (last 40 lines):");
         for line in session.log.tail(40) {
@@ -140,7 +142,13 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
         }
         report.status = 1;
         return Ok(report);
-    }
+    };
+    let manual_edits: BTreeSet<String> = previous
+        .map(|m| m.manual_edits(root, &run.keyed_dests))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|edit| edit.rel)
+        .collect();
 
     let project = Project::select(root, env.config_path.as_deref())?;
     for stale in stale_targets::left_by_disabled_targets(&project, &manifest)? {
@@ -157,6 +165,7 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     }
 
     let mut differences = Vec::new();
+    let mut edited_to_source = false;
     for rel in compare {
         let expected = format!("{root}/{rel}");
         let actual = Path::new(root).join(&rel);
@@ -166,6 +175,9 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
                 let on_disk = std::fs::read(&actual).map_err(|e| Error::io(&actual, e))?;
                 if rendered != on_disk {
                     differences.push(format!("Files {rel} differ"));
+                } else if manual_edits.contains(&rel) {
+                    differences.push(format!("Edited since last sync: {rel} (matches source)"));
+                    edited_to_source = true;
                 }
             }
             (true, false) => differences.push(format!("Missing: {rel}")),
@@ -186,6 +198,11 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     }
     report.out("");
     report.out("Please run: exuno sync");
+    if edited_to_source {
+        report.out(
+            "Edited files that match the source stop exuno sync; exuno sync --force records them without changing their content",
+        );
+    }
     report.status = 1;
     Ok(report)
 }
@@ -437,8 +454,9 @@ mod tests {
         let mut manifest = String::new();
         for rel in session.touched() {
             let bytes = session.ws.read(&format!("{root}/{rel}")).unwrap();
+            let hash = crate::transaction::manifest::sha256_hex(&bytes);
             write(Path::new(&root), rel, &String::from_utf8(bytes).unwrap());
-            manifest.push_str(&format!("{rel}\thash\n"));
+            manifest.push_str(&format!("{rel}\t{hash}\n"));
         }
         write(Path::new(&root), MANIFEST_REL, &manifest);
         let clean = check(&root, &Env::default()).unwrap();

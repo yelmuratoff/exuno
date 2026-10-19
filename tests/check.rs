@@ -86,6 +86,33 @@ fn check_fails_when_generated_file_is_modified() {
 }
 
 #[test]
+fn check_fails_like_sync_when_outputs_match_the_source_but_not_the_manifest() {
+    let project = synced_project();
+    let manifest = project.read(".ai/.sync-manifest");
+    project.append(".ai/src/rules/core.md", "# New rule\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/.sync-manifest", &manifest);
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("Manual edits detected"));
+    check(&project)
+        .code(1)
+        .stdout(predicate::str::contains(
+            "Edited since last sync: .claude/rules/core.md (matches source)\n",
+        ))
+        .stdout(predicate::str::contains(
+            "exuno sync --force records them without changing their content",
+        ));
+
+    project.exuno().args(["sync", "--force"]).assert().success();
+    check(&project).success();
+}
+
+#[test]
 fn check_fails_when_generated_file_is_missing() {
     let project = synced_project();
     std::fs::remove_file(project.join("CLAUDE.md")).unwrap();

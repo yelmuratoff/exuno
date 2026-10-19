@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn a_project_without_agents_md_stops_with_status_one() {
         let mut s = test_session();
-        assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Err(Stop(1)));
         assert_eq!(
             s.log.tail(2),
             [
@@ -413,7 +413,7 @@ mod tests {
     fn an_unknown_outputs_mode_stops_before_the_banner() {
         let mut s = project();
         file(&mut s, "/proj/.ai/exuno.yaml", "outputs: shared\n");
-        assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Err(Stop(1)));
         assert_eq!(
             s.log.tail(1),
             [
@@ -434,7 +434,7 @@ mod tests {
             backup: Some(BackupBounds::default()),
             ..Env::default()
         };
-        assert_eq!(render(&mut s, &env), Err(Stop(1)));
+        assert_eq!(render(&mut s, &env).map(drop), Err(Stop(1)));
         assert_eq!(
             s.log.tail(5),
             [
@@ -448,7 +448,7 @@ mod tests {
             "/proj/.ai/exuno.yaml",
             "tools:\n  enabled: [claude]\nbackup:\n  retention: typo\n",
         );
-        assert_eq!(render(&mut s, &Env::default()), Ok(()));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Ok(()));
     }
 
     #[test]
@@ -460,7 +460,7 @@ mod tests {
             "source:\n  tools: \"catalog\"\n",
         );
         file(&mut s, "/proj/catalog/claude.yaml", "enabled: true\n");
-        assert_eq!(render(&mut s, &Env::default()), Ok(()));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Ok(()));
         assert_eq!(s.tools_dir, "/proj/catalog");
         assert!(s.ws.is_file("/proj/CLAUDE.md"));
     }
@@ -474,7 +474,7 @@ mod tests {
             "/proj/.ai/exuno.yaml",
             "tools:\n  enabled: [claude]\nsource:\n  rules: \"/\"\n",
         );
-        assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Err(Stop(1)));
         assert_eq!(
             s.log.tail(5),
             [
@@ -498,7 +498,10 @@ mod tests {
             "/proj/.ai/exuno.yaml",
             "tools:\n  enabled: [claude]\n",
         );
-        assert_eq!(render(&mut s, &with_config("missing.yaml")), Err(Stop(1)));
+        assert_eq!(
+            render(&mut s, &with_config("missing.yaml")).map(drop),
+            Err(Stop(1))
+        );
         assert_eq!(
             s.log.tail(5),
             ["[ERROR] EXUNO_CONFIG_PATH is set but file not found: /proj/missing.yaml"]
@@ -508,7 +511,7 @@ mod tests {
     #[test]
     fn without_a_config_a_run_with_no_enabled_tool_is_refused() {
         let mut s = project();
-        assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Err(Stop(1)));
         assert_eq!(
             s.log.tail(5),
             [
@@ -521,7 +524,7 @@ mod tests {
     fn without_a_config_a_tool_enabled_in_its_own_yaml_still_renders() {
         let mut s = project();
         file(&mut s, "/proj/.ai/src/tools/claude.yaml", "enabled: true\n");
-        assert_eq!(render(&mut s, &Env::default()), Ok(()));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Ok(()));
         assert_eq!(text_of(&s, "/proj/CLAUDE.md"), "# Agents\n");
     }
 
@@ -533,7 +536,7 @@ mod tests {
             "/proj/.ai/exuno.yaml",
             "outputs: local\nexuno_version: \"0.0.1\"\nversion_pin:\n  mode: strict\n",
         );
-        assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Err(Stop(1)));
         let engine = engine_version();
         assert_eq!(
             s.log.tail(3),
@@ -550,7 +553,7 @@ mod tests {
             "/proj/.ai/exuno.yaml",
             "version_pin:\n  mode: refuse\noutputs: shared\n",
         );
-        assert_eq!(render(&mut s, &Env::default()), Err(Stop(1)));
+        assert_eq!(render(&mut s, &Env::default()).map(drop), Err(Stop(1)));
         assert_eq!(
             s.log.tail(5),
             [

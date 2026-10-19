@@ -116,7 +116,7 @@ fn io(s: &mut Session, error: Error) -> Stop {
 
 /// What `check` needs: `sync.sh --force` without its transaction and without
 /// `shared:`, which `lib/check.sh` merged into the workspace beforehand.
-pub fn render(s: &mut Session, env: &Env) -> Step {
+pub fn render(s: &mut Session, env: &Env) -> Result<Run, Stop> {
     let mut run = prepare(s, env, Selection::default())?;
     refuse_configless_cleanup(s, &run)?;
     refuse_escaping_source_links(s, &run)?;
@@ -124,7 +124,8 @@ pub fn render(s: &mut Session, env: &Env) -> Step {
     banner(s);
     setup_overlays(s, &mut run, false)?;
     build_catalog(s, &mut run);
-    run_passes(s, &mut run)
+    run_passes(s, &mut run)?;
+    Ok(run)
 }
 
 /// Where a trapped signal ends the run: Bash's trap fires once the command in

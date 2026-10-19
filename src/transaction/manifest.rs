@@ -145,6 +145,33 @@ impl Manifest {
             .map(|entry| entry.rel.clone())
             .collect()
     }
+
+    /// The drifted outputs `sync` refuses to overwrite without `--force`. A
+    /// key-owned dest without an owned-key record yet is left to its merge
+    /// step, which compares the declared keys instead; a record no enabled
+    /// tool owns by key any more is left to the tool, or to the step that
+    /// refuses to own it whole.
+    pub fn manual_edits(&self, root: &str, keyed_dests: &BTreeSet<String>) -> Vec<ManualEdit> {
+        self.drift(root)
+            .into_iter()
+            .filter_map(|rel| {
+                let entry = self.entry(&rel)?;
+                if entry.owned.is_some() != keyed_dests.contains(&rel) {
+                    return None;
+                }
+                let keys = entry.changed_keys(root);
+                Some(ManualEdit { rel, keys })
+            })
+            .collect()
+    }
+}
+
+/// An output edited since the last sync, with the owned keys that changed
+/// when sync owns only some of its keys.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ManualEdit {
+    pub rel: String,
+    pub keys: Vec<KeyPath>,
 }
 
 /// `manifest_update_entry`: the manifest rewritten with `<rel>\t<hash>` in place
