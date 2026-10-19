@@ -254,7 +254,7 @@ exuno sync
 
 Claude Code keeps everything else: `.claude/rules/`, skills, commands, subagents, settings, hooks, and MCP are separate targets.
 
-Delete the old file as well. A `CLAUDE.md` left from an earlier sync is still read by Claude Code, and since nothing updates it, it slowly goes out of date. Sync leaves it in place in case you kept it on purpose; `exuno check` and `exuno doctor` mention it without failing. Once it's gone, the next sync drops it from the manifest.
+Delete the old file as well. A `CLAUDE.md` left from an earlier sync is still read by Claude Code, and since nothing updates it, it slowly goes out of date. Sync leaves it in place in case you kept it on purpose; `exuno check` and `exuno doctor` mention it without failing until it is edited, which makes sync refuse it and `check` fail. Once it's gone, the next sync drops it from the manifest.
 
 ## Adding a new tool
 

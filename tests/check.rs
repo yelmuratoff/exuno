@@ -105,10 +105,36 @@ fn check_fails_like_sync_when_outputs_match_the_source_but_not_the_manifest() {
             "Edited since last sync: .claude/rules/core.md (matches source)\n",
         ))
         .stdout(predicate::str::contains(
-            "exuno sync --force records them without changing their content",
+            "  • Edited files that match the source stop exuno sync; exuno sync --force records them as they are",
         ));
 
     project.exuno().args(["sync", "--force"]).assert().success();
+    check(&project).success();
+}
+
+#[test]
+fn check_fails_on_an_edited_leftover_without_offering_force_that_cannot_clear_it() {
+    let project = synced_project();
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  agents:\n    enabled: false\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    project.append("CLAUDE.md", "Edited by hand.\n");
+
+    check(&project)
+        .code(1)
+        .stdout(predicate::str::contains(
+            "  • Delete it, or set targets.agents.enabled back to true",
+        ))
+        .stdout(predicate::str::contains(
+            "Edited since last sync: CLAUDE.md\n",
+        ))
+        .stdout(predicate::str::contains("matches source").not())
+        .stdout(predicate::str::contains("--force").not());
+
+    std::fs::remove_file(project.join("CLAUDE.md")).unwrap();
+    project.exuno().arg("sync").assert().success();
     check(&project).success();
 }
 

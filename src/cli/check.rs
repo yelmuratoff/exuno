@@ -27,7 +27,7 @@ pub const HELP: Help = Help {
     tagline: "verify outputs are in sync with source",
     synopsis: &["check"],
     description: &[
-        "Renders what exuno sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, outputs no longer generated,\nand outputs edited since the last sync, which exuno sync refuses to\noverwrite. Nothing on disk is written.",
+        "Renders what exuno sync --force would write into a temporary\nworkspace and compares every managed output with the project: files\nthat differ, outputs that are missing, outputs no longer generated,\nand outputs edited since the last sync that still match it, which\nexuno sync refuses to overwrite. Nothing on disk is written.",
         "The report goes to stdout so a hook or CI step can read it; the exit\nstatus carries the verdict, following grep's shape.",
         "Honours EXUNO_CONFIG_PATH for the project config and\nEXUNO_REPO_ROOT for the project root, as exuno sync does.",
     ],
@@ -175,9 +175,11 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
                 let on_disk = std::fs::read(&actual).map_err(|e| Error::io(&actual, e))?;
                 if rendered != on_disk {
                     differences.push(format!("Files {rel} differ"));
-                } else if manual_edits.contains(&rel) {
+                } else if manual_edits.contains(&rel) && session.touched().contains(&rel) {
                     differences.push(format!("Edited since last sync: {rel} (matches source)"));
                     edited_to_source = true;
+                } else if manual_edits.contains(&rel) {
+                    differences.push(format!("Edited since last sync: {rel}"));
                 }
             }
             (true, false) => differences.push(format!("Missing: {rel}")),
@@ -200,7 +202,7 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     report.out("Please run: exuno sync");
     if edited_to_source {
         report.out(
-            "Edited files that match the source stop exuno sync; exuno sync --force records them without changing their content",
+            "  • Edited files that match the source stop exuno sync; exuno sync --force records them as they are, and also rewrites any other edited output",
         );
     }
     report.status = 1;
