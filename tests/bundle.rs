@@ -9,6 +9,8 @@ use std::process::Command as StdCommand;
 
 use assert_cmd::Command;
 use common::Project;
+use exuno::paths::DiskText;
+use exuno::transaction::backup::{self, Retention};
 use predicates::prelude::*;
 
 fn exuno_in(dir: &Path) -> Command {
@@ -513,10 +515,10 @@ fn import_copies_a_bundle_into_a_fresh_project() {
     );
 }
 
-// A `bash -lc` hook is a POSIX shell dependency, and SIGKILL is POSIX.
+/// A project whose `sync` was killed with `kill -9` from its hook, leaving a
+/// pending record for the next mutating run to restore.
 #[cfg(unix)]
-#[test]
-fn import_planned_before_restoring_an_interrupted_run_applies_nothing() {
+fn project_with_a_killed_sync() -> Project {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
     project.write(
@@ -531,29 +533,68 @@ fn import_planned_before_restoring_an_interrupted_run_applies_nothing() {
         .interrupted();
     assert!(project.exists(".ai/backups/.pending"));
     project.write(".ai/src/tools/claude.yaml", "{}\n");
-    project.write("source/.ai/src/rules/extra.md", "# Extra\n");
-
     project
-        .exuno()
-        .args(["import", "source", "--force"])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains(
-            "Restored the state from before an interrupted exuno sync",
-        ))
-        .stderr(predicate::str::contains(
-            "Import not applied: its plan predates that restore. Run the import again.",
-        ));
-    assert!(!project.exists(".ai/src/rules/extra.md"));
-    assert!(!project.exists(".ai/backups/.pending"));
+}
+
+#[test]
+fn import_retried_after_a_killed_import_writes_every_planned_file() {
+    let project = Project::seeded(&[]);
+    let root = std::fs::canonicalize(project.path()).unwrap().disk_text();
+    let snapshot = backup::create(
+        &root,
+        "import",
+        &[
+            format!("{root}/.ai/src/rules/extra.md"),
+            format!("{root}/.ai/src/rules/other.md"),
+        ],
+        Retention::Bounded,
+    )
+    .unwrap();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.write(
+        ".ai/backups/.pending",
+        &format!(
+            "operation=import\npid=1\nbackup={}\n",
+            exuno::paths::leaf(&snapshot)
+        ),
+    );
+    project.write("source/.ai/src/rules/extra.md", "# Extra\n");
+    project.write("source/.ai/src/rules/other.md", "# Other\n");
 
     project
         .exuno()
         .args(["import", "source", "--force"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Imported!"));
+        .stdout(predicate::str::contains("Imported!"))
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno import",
+        ));
     assert_eq!(project.read(".ai/src/rules/extra.md"), "# Extra\n");
+    assert_eq!(project.read(".ai/src/rules/other.md"), "# Other\n");
+    assert!(!project.exists(".ai/backups/.pending"));
+}
+
+// A `bash -lc` hook is a POSIX shell dependency, and SIGKILL is POSIX.
+#[cfg(unix)]
+#[test]
+fn import_with_nothing_to_import_still_restores_an_interrupted_run() {
+    let project = project_with_a_killed_sync();
+    project.write(
+        "source/.ai/src/rules/core.md",
+        &project.read(".ai/src/rules/core.md"),
+    );
+
+    project
+        .exuno()
+        .args(["import", "source", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Already up to date!"))
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ));
+    assert!(!project.exists(".ai/backups/.pending"));
 }
 
 #[test]
