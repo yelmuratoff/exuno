@@ -1,9 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.47.0
+
+### Added
+
+- **One run at a time:** `sync`, `rollback`, `import`, `init`, and `mcp use` take a lock on `.ai/backups/.lock`, so a second run started meanwhile stops before touching anything and names the run in its way.
+- **Crash recovery:** a run killed partway through (`kill -9`, a crash, power loss) is restored by the next command that changes the project, which keeps the half-written state as a backup `exuno rollback` can bring back.
+- **Hidden personal skills:** names listed under `skills.hide` in `exuno.yaml` turn off the personal skill a project skill replaces, through `skillOverrides` in `.claude/settings.json` and `permission.skill` in `opencode.json`; `doctor` points out a project skill that shares its name with a personal one.
+
+### Changed
+
+- **Claude settings:** the base settings let agents read `.env` files and deny editing the secret variants; `.env.example` stays editable.
+- **Building from source:** needs Rust 1.89.
 
 ### Fixed
 
+- **Rollback:** restores folders as well as files, so rolling back a first sync no longer leaves an empty `.claude/` behind.
 - **Check:** fails on an output edited since the last sync even when it already matches the source, as a script that edits the source and its outputs together leaves it, so `check` now fails wherever `exuno sync` would refuse an edited output.
 
 ## 0.46.0
