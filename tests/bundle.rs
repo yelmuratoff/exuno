@@ -513,6 +513,49 @@ fn import_copies_a_bundle_into_a_fresh_project() {
     );
 }
 
+// A `bash -lc` hook is a POSIX shell dependency, and SIGKILL is POSIX.
+#[cfg(unix)]
+#[test]
+fn import_planned_before_restoring_an_interrupted_run_applies_nothing() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "post_sync: \"kill -9 $PPID\"\n",
+    );
+    project
+        .exuno()
+        .env("AGENTSYNC_ALLOW_POST_SYNC", "true")
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .interrupted();
+    assert!(project.exists(".ai/backups/.pending"));
+    project.write(".ai/src/tools/claude.yaml", "{}\n");
+    project.write("source/.ai/src/rules/extra.md", "# Extra\n");
+
+    project
+        .exuno()
+        .args(["import", "source", "--force"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ))
+        .stderr(predicate::str::contains(
+            "Import not applied: its plan predates that restore. Run the import again.",
+        ));
+    assert!(!project.exists(".ai/src/rules/extra.md"));
+    assert!(!project.exists(".ai/backups/.pending"));
+
+    project
+        .exuno()
+        .args(["import", "source", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported!"));
+    assert_eq!(project.read(".ai/src/rules/extra.md"), "# Extra\n");
+}
+
 #[test]
 fn import_reports_an_up_to_date_project() {
     let project = Project::seeded(&[]);

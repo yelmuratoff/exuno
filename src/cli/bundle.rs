@@ -1687,6 +1687,9 @@ enum Applied {
     Done(String),
     /// Stopped by this signal and restored; the caller re-raises it.
     Interrupted(i32),
+    /// Not applied: taking the lock restored an interrupted run, so the plan
+    /// describes files that are no longer there.
+    Stale,
 }
 
 /// Applies `plan` inside an `import` backup of every path it touches, as
@@ -1716,8 +1719,14 @@ fn apply_backed_up(
     if let Some(recovered) = recovered {
         put(
             err,
-            format!("  Warning: {}\n", recovered.message()).as_bytes(),
+            format!(
+                "  Warning: {}\n  Import not applied: its plan predates that restore. Run the import again.\n",
+                recovered.message()
+            )
+            .as_bytes(),
         )?;
+        lock.finish()?;
+        return Ok(Applied::Stale);
     }
     let snapshot = backup::create(root, "import", &backup_targets(root, plan), retention)?;
     lock.begin(&snapshot)?;
@@ -1854,6 +1863,7 @@ pub fn import(
             interrupt.resend(signal);
             return Ok(interrupt::status(signal));
         }
+        Applied::Stale => return Ok(1),
     };
     drop(interrupt);
     put(
