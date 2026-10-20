@@ -432,6 +432,7 @@ fn import_lists_what_would_run_commands_and_refuses_without_force() {
         ))
         .stderr(predicate::str::contains("--force"));
     assert!(!project.join(".ai/src/mcp.json").exists());
+    assert!(!project.exists(".ai/backups/.pending"));
     project
         .exuno()
         .args(["import", "other", "--force"])

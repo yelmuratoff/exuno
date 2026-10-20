@@ -69,9 +69,10 @@ struct Sources {
 /// mutating run creates under `.ai/backups/` make no project of their own.
 fn holds_more_than_backups(ai: &Path) -> bool {
     std::fs::read_dir(ai).is_ok_and(|entries| {
-        entries
-            .filter_map(Result::ok)
-            .any(|entry| entry.file_name() != "backups")
+        entries.filter_map(Result::ok).any(|entry| {
+            let name = entry.file_name();
+            name != "backups" && !name.to_string_lossy().starts_with('.')
+        })
     })
 }
 
@@ -1741,6 +1742,15 @@ fn lock_project(root: &str, err: &mut dyn Write) -> Result<Locked, Error> {
     })
 }
 
+/// Clears the record of an import that ends without applying anything; a
+/// record left behind names no backup, so it only warns.
+fn release(locked: Option<&Locked>, err: &mut dyn Write) -> Result<(), Error> {
+    match locked.map(|held| held.lock.finish()) {
+        Some(Err(error)) => put(err, format!("  Warning: {error}\n").as_bytes()),
+        _ => Ok(()),
+    }
+}
+
 /// Applies `plan` inside an `import` backup of every path it touches, as
 /// `sync` and `mcp` back up theirs: a failed write, or a signal `interrupted`
 /// reports, restores the project from it.
@@ -1839,17 +1849,24 @@ pub fn import(
         importer.out,
         format!("  {} {label}\n\n", style.dim("Source:")).as_bytes(),
     )?;
+    let locked = if parsed.dry_run {
+        None
+    } else {
+        Some(lock_project(root, importer.err)?)
+    };
     let src_root = match find_ai_src(&fetched) {
         Some(found) => Some(found),
         None => match stage_skills(root, &fetched, &tmp.join("staged"), &parsed.source)? {
             Ok(staged) => staged,
             Err(message) => {
+                release(locked.as_ref(), importer.err)?;
                 importer.fail(&message)?;
                 return Ok(1);
             }
         },
     };
     let Some(src_root) = src_root else {
+        release(locked.as_ref(), importer.err)?;
         put(
             importer.err,
             format!(
@@ -1865,15 +1882,9 @@ pub fn import(
         only: &parsed.only,
         replace_config: parsed.config,
     };
-    let locked = if parsed.dry_run {
-        None
-    } else {
-        Some(lock_project(root, importer.err)?)
-    };
-    let release = |locked: &Option<Locked>| locked.as_ref().map_or(Ok(()), |l| l.lock.finish());
     let plan = plan_import(root, src_root, &options);
     if plan.diff.changes.is_empty() && !plan.config_action.writes() {
-        release(&locked)?;
+        release(locked.as_ref(), importer.err)?;
         let text = format!(
             "  {} Nothing to import.\n\n",
             style.green("Already up to date!")
@@ -1891,7 +1902,7 @@ pub fn import(
     if !parsed.force
         && let Some(status) = importer.confirm(&plan)?
     {
-        release(&locked)?;
+        release(locked.as_ref(), importer.err)?;
         return Ok(status);
     }
     let mut interrupt = Interrupt::arm();
