@@ -65,6 +65,17 @@ struct Sources {
     dirs: Vec<(&'static str, String)>,
 }
 
+/// Whether `ai` is a flat `.ai/` source tree: the lock and backups every
+/// mutating run creates under `.ai/backups/` make no project of their own.
+fn holds_more_than_backups(ai: &Path) -> bool {
+    std::fs::read_dir(ai).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            let name = entry.file_name();
+            name != "backups" && !name.to_string_lossy().starts_with('.')
+        })
+    })
+}
+
 fn resolve_sources(root: &str) -> Sources {
     let config = format!(
         "{root}/{}",
@@ -72,7 +83,7 @@ fn resolve_sources(root: &str) -> Sources {
     );
     let base = if Path::new(root).join(".ai/src").is_dir() {
         ".ai/src"
-    } else if Path::new(root).join(".ai").is_dir() {
+    } else if holds_more_than_backups(&Path::new(root).join(".ai")) {
         ".ai"
     } else {
         ""
@@ -1689,15 +1700,19 @@ enum Applied {
     Interrupted(i32),
 }
 
-/// Applies `plan` inside an `import` backup of every path it touches, as
-/// `sync` and `mcp` back up theirs: a failed write, or a signal `interrupted`
-/// reports, restores the project from it.
-fn apply_backed_up(
-    root: &str,
-    plan: &ImportPlan,
-    err: &mut dyn Write,
-    interrupted: &dyn Fn() -> Option<i32>,
-) -> Result<Applied, Error> {
+/// The project lock an import holds from its plan to its seal, with the
+/// backup retention it was taken under.
+struct Locked {
+    lock: Lock,
+    retention: backup::Retention,
+    limit: Option<String>,
+    age: Option<String>,
+}
+
+/// Takes the project lock before the import plans, so the plan and its
+/// confirmation see the files a restored interrupted run put back, and no
+/// other run changes them until the import is applied.
+fn lock_project(root: &str, err: &mut dyn Write) -> Result<Locked, Error> {
     let config = present_config(Path::new(root)).and_then(|rel| {
         Some((
             rel,
@@ -1719,6 +1734,40 @@ fn apply_backed_up(
             format!("  Warning: {}\n", recovered.message()).as_bytes(),
         )?;
     }
+    Ok(Locked {
+        lock,
+        retention,
+        limit,
+        age,
+    })
+}
+
+/// Clears the record of an import that ends without applying anything; a
+/// record left behind names no backup, so it only warns.
+fn release(locked: Option<&Locked>, err: &mut dyn Write) -> Result<(), Error> {
+    match locked.map(|held| held.lock.finish()) {
+        Some(Err(error)) => put(err, format!("  Warning: {error}\n").as_bytes()),
+        _ => Ok(()),
+    }
+}
+
+/// Applies `plan` inside an `import` backup of every path it touches, as
+/// `sync` and `mcp` back up theirs: a failed write, or a signal `interrupted`
+/// reports, restores the project from it.
+fn apply_backed_up(
+    root: &str,
+    plan: &ImportPlan,
+    locked: &Locked,
+    err: &mut dyn Write,
+    interrupted: &dyn Fn() -> Option<i32>,
+) -> Result<Applied, Error> {
+    let Locked {
+        lock,
+        retention,
+        limit,
+        age,
+    } = locked;
+    let retention = *retention;
     let snapshot = backup::create(root, "import", &backup_targets(root, plan), retention)?;
     lock.begin(&snapshot)?;
     let finish = |err: &mut dyn Write| match lock.finish() {
@@ -1800,17 +1849,24 @@ pub fn import(
         importer.out,
         format!("  {} {label}\n\n", style.dim("Source:")).as_bytes(),
     )?;
+    let locked = if parsed.dry_run {
+        None
+    } else {
+        Some(lock_project(root, importer.err)?)
+    };
     let src_root = match find_ai_src(&fetched) {
         Some(found) => Some(found),
         None => match stage_skills(root, &fetched, &tmp.join("staged"), &parsed.source)? {
             Ok(staged) => staged,
             Err(message) => {
+                release(locked.as_ref(), importer.err)?;
                 importer.fail(&message)?;
                 return Ok(1);
             }
         },
     };
     let Some(src_root) = src_root else {
+        release(locked.as_ref(), importer.err)?;
         put(
             importer.err,
             format!(
@@ -1828,6 +1884,7 @@ pub fn import(
     };
     let plan = plan_import(root, src_root, &options);
     if plan.diff.changes.is_empty() && !plan.config_action.writes() {
+        release(locked.as_ref(), importer.err)?;
         let text = format!(
             "  {} Nothing to import.\n\n",
             style.green("Already up to date!")
@@ -1839,22 +1896,24 @@ pub fn import(
         importer.out,
         plan_text(style, &plan, parsed.dry_run).as_bytes(),
     )?;
-    if parsed.dry_run {
+    let Some(held) = &locked else {
         return Ok(0);
-    }
+    };
     if !parsed.force
         && let Some(status) = importer.confirm(&plan)?
     {
+        release(locked.as_ref(), importer.err)?;
         return Ok(status);
     }
     let mut interrupt = Interrupt::arm();
-    let backup_id = match apply_backed_up(root, &plan, importer.err, &|| interrupt.received())? {
-        Applied::Done(id) => id,
-        Applied::Interrupted(signal) => {
-            interrupt.resend(signal);
-            return Ok(interrupt::status(signal));
-        }
-    };
+    let backup_id =
+        match apply_backed_up(root, &plan, held, importer.err, &|| interrupt.received())? {
+            Applied::Done(id) => id,
+            Applied::Interrupted(signal) => {
+                interrupt.resend(signal);
+                return Ok(interrupt::status(signal));
+            }
+        };
     drop(interrupt);
     put(
         importer.out,
@@ -1980,7 +2039,8 @@ mod tests {
             (steps.get() > 1).then_some(2)
         };
         let mut err = Vec::new();
-        let applied = apply_backed_up(&root, &plan, &mut err, &after_one_step).unwrap();
+        let locked = lock_project(&root, &mut err).unwrap();
+        let applied = apply_backed_up(&root, &plan, &locked, &mut err, &after_one_step).unwrap();
         assert!(matches!(applied, Applied::Interrupted(2)));
         assert!(
             String::from_utf8(err)
