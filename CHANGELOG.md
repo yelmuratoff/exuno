@@ -4,7 +4,7 @@
 
 ### Added
 
-- **One run at a time:** `sync`, `rollback`, `import`, `init`, and `mcp use` take a lock on `.ai/backups/.lock`, so a second run started meanwhile stops before touching anything and names the run in its way.
+- **One run at a time:** `sync`, `rollback`, `import`, `init`, and `mcp use` take a lock on `.ai/backups/.lock`, so a second run started meanwhile stops before touching anything and names the run in its way. `import` takes it before it plans and holds it through the confirmation, so the changes you approve are the ones it applies.
 - **Crash recovery:** a run killed partway through (`kill -9`, a crash, power loss) is restored by the next command that changes the project, which keeps the half-written state as a backup `exuno rollback` can bring back.
 - **Hidden personal skills:** names listed under `skills.hide` in `exuno.yaml` turn off the personal skill a project skill replaces, through `skillOverrides` in `.claude/settings.json` and `permission.skill` in `opencode.json`; `doctor` points out a project skill that shares its name with a personal one.
 
