@@ -293,7 +293,7 @@ pub fn add(
         Ok(entry) => entry,
         Err(stop) => return report_stop(stop, style, out, err),
     };
-    let _editing = match super::lock_for_edit(&Project::at(root)?, "add", style, err)? {
+    let _editing = match super::lock_for_edit(&Project::configured(root)?, "add", style, err)? {
         Ok(editing) => editing,
         Err(status) => return Ok(status),
     };
@@ -754,7 +754,7 @@ fn add_mcp(
             return Ok(1);
         }
     };
-    let _editing = match super::lock_for_edit(&Project::at(root)?, "add mcp", style, err)? {
+    let _editing = match super::lock_for_edit(&Project::configured(root)?, "add mcp", style, err)? {
         Ok(editing) => editing,
         Err(status) => return Ok(status),
     };

@@ -212,16 +212,16 @@ pub fn enable(
     }
 
     let project = discover()?;
+    let _editing = match super::lock_for_edit(&project, "enable", style, err)? {
+        Ok(editing) => editing,
+        Err(status) => return Ok(status),
+    };
     if !project.tools_dir_in_project() {
         if scaffold == Scaffold::Always {
             return super::refuse_outside_tools_dir(&project, style, err);
         }
         scaffold = Scaffold::Never;
     }
-    let _editing = match super::lock_for_edit(&project, "enable", style, err)? {
-        Ok(editing) => editing,
-        Err(status) => return Ok(status),
-    };
     let config = resolve_or_create_config(&project)?;
 
     let mut enabled = Enabled::default();

@@ -26,6 +26,13 @@ impl Project {
         let cwd = std::env::current_dir().map_err(|e| Error::io(".", e))?;
         let pwd = std::env::var("PWD").ok();
         let root = paths::logical_root(env_root.as_deref(), &cwd, pwd.as_deref());
+        Self::configured(root)
+    }
+
+    /// The project at `root`, with `AGENTSYNC_CONFIG_PATH` authoritative.
+    pub fn configured(root: impl Into<PathBuf>) -> Result<Self, Error> {
+        let msystem = std::env::var("MSYSTEM").ok();
+        let lookup = |name: &str| std::env::var(name).ok();
         let explicit = names::env("CONFIG_PATH", &lookup)
             .map(|path| paths::from_msys(&path, msystem.as_deref()));
         Self::select(root, explicit.as_deref())

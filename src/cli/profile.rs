@@ -248,13 +248,13 @@ fn add(
         Ok(project) => project,
         Err(status) => return Ok(status),
     };
-    if !project.tools_dir_in_project() {
-        return super::refuse_outside_tools_dir(&project, style, err);
-    }
     let _editing = match super::lock_for_edit(&project, "profile add", style, err)? {
         Ok(editing) => editing,
         Err(status) => return Ok(status),
     };
+    if !project.tools_dir_in_project() {
+        return super::refuse_outside_tools_dir(&project, style, err);
+    }
     let Some(config) = project.config_path.clone() else {
         put(
             err,
@@ -591,13 +591,13 @@ fn remove(
         Ok(project) => project,
         Err(status) => return Ok(status),
     };
-    if !project.tools_dir_in_project() {
-        return super::refuse_outside_tools_dir(&project, style, err);
-    }
     let _editing = match super::lock_for_edit(&project, "profile remove", style, err)? {
         Ok(editing) => editing,
         Err(status) => return Ok(status),
     };
+    if !project.tools_dir_in_project() {
+        return super::refuse_outside_tools_dir(&project, style, err);
+    }
     let text = config_text(&project)?;
     if yaml_edit::find_key_line(&text, &format!("profiles.{name}")).is_none() {
         put(

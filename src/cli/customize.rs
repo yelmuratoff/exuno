@@ -150,13 +150,13 @@ pub fn customize(
         return unknown_resource(style, &resource, err);
     }
     let project = discover()?;
-    if !project.tools_dir_in_project() {
-        return super::refuse_outside_tools_dir(&project, style, err);
-    }
     let _editing = match super::lock_for_edit(&project, "customize", style, err)? {
         Ok(editing) => editing,
         Err(status) => return Ok(status),
     };
+    if !project.tools_dir_in_project() {
+        return super::refuse_outside_tools_dir(&project, style, err);
+    }
     let mut request = Customize {
         project: &project,
         slug: &slug,

@@ -77,6 +77,7 @@ fn every_config_writer_refuses_while_another_run_holds_the_lock() {
 #[test]
 fn read_only_runs_take_no_lock() {
     let project = Project::seeded(&[]);
+    project.write(".ai/src/tools/cursor.yaml", "name: Mine\n");
     let (held, _) = Lock::acquire(&root(&project), "sync", Retention::Bounded).unwrap();
     project.exuno().args(["simplify"]).assert().success();
     project.exuno().args(["resolve"]).assert().success();
@@ -85,10 +86,28 @@ fn read_only_runs_take_no_lock() {
 }
 
 #[test]
-fn enable_stops_after_restoring_an_interrupted_run_and_applies_when_run_again() {
+fn add_takes_its_backup_policy_from_the_config_config_path_selects() {
     let project = Project::seeded(&[]);
-    let root = root(&project);
-    let config = project.read(".ai/exuno.yaml");
+    project.write("elsewhere.yaml", "backup:\n  retention: forever\n");
+    for args in [
+        &["add", "rule", "style"][..],
+        &["add", "mcp", "docs", "--url", "https://example.com/mcp"],
+    ] {
+        project
+            .exuno()
+            .env("AGENTSYNC_CONFIG_PATH", project.join("elsewhere.yaml"))
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "Invalid backup.retention 'forever'",
+            ));
+    }
+}
+
+/// Leaves `.ai/exuno.yaml` as `text` under a sync that died before restoring it.
+fn interrupt_with_config(project: &Project, text: &str) {
+    let root = root(project);
     let (lock, _) = Lock::acquire(&root, "sync", Retention::Bounded).unwrap();
     let snapshot = backup::create(
         &root,
@@ -98,8 +117,39 @@ fn enable_stops_after_restoring_an_interrupted_run_and_applies_when_run_again() 
     )
     .unwrap();
     lock.begin(&snapshot).unwrap();
-    project.write(".ai/exuno.yaml", "half-written\n");
+    project.write(".ai/exuno.yaml", text);
     drop(lock);
+}
+
+#[test]
+fn a_tools_directory_an_interrupted_run_moved_outside_is_restored_before_the_refusal() {
+    let project = Project::seeded(&[]);
+    let config = project.read(".ai/exuno.yaml");
+    let outside = tempfile::tempdir().unwrap();
+    let moved = config.replace(
+        "  tools: \".ai/src/tools\"",
+        &format!("  tools: \"{}\"", outside.path().display()),
+    );
+    assert_ne!(moved, config);
+    interrupt_with_config(&project, &moved);
+
+    project
+        .exuno()
+        .args(["customize", "cursor"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "exuno customize changed nothing; run it again.",
+        ))
+        .stderr(predicate::str::contains("resolves outside the project").not());
+    assert_eq!(project.read(".ai/exuno.yaml"), config);
+}
+
+#[test]
+fn enable_stops_after_restoring_an_interrupted_run_and_applies_when_run_again() {
+    let project = Project::seeded(&[]);
+    let config = project.read(".ai/exuno.yaml");
+    interrupt_with_config(&project, "half-written\n");
 
     project
         .exuno()
