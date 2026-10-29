@@ -1,7 +1,3 @@
-//! A forked child holds every descriptor of its parent until it execs, so a
-//! test elsewhere in the same binary spawning a process can keep a dropped
-//! `flock` held for a moment. This file spawns nothing and is its own process.
-
 use exuno::paths::{self, DiskText};
 use exuno::transaction::backup::{self, Retention};
 use exuno::transaction::lock::{Lock, Recovered};

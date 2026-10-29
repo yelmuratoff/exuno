@@ -12,9 +12,18 @@ use crate::transaction::{backup, witness};
 
 /// The held project lock; released when dropped or when the process ends.
 pub struct Lock {
-    _file: File,
+    file: File,
     store: String,
     operation: String,
+}
+
+impl Drop for Lock {
+    // flock belongs to the open file description, which a child forked
+    // elsewhere in the process shares until it execs; closing our descriptor
+    // alone would leave the project busy until then.
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
 }
 
 /// An interrupted run that `Lock::acquire` restored before handing over.
@@ -102,7 +111,7 @@ impl Lock {
             Err(TryLockError::Error(e)) => return Err(Error::io(&path, e)),
         }
         let lock = Self {
-            _file: file,
+            file,
             store,
             operation: operation.to_string(),
         };
@@ -172,5 +181,24 @@ impl Lock {
             backup: id,
             undo: paths::leaf(&undo),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paths::DiskText;
+
+    #[test]
+    fn dropping_the_lock_releases_it_while_a_forked_copy_of_the_descriptor_lives() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap().disk_text();
+        let (lock, _) = Lock::acquire(&root, "rollback", backup::Retention::Bounded).unwrap();
+        let inherited = lock.file.try_clone().unwrap();
+        lock.finish().unwrap();
+        drop(lock);
+
+        assert!(Lock::acquire(&root, "rollback", backup::Retention::Bounded).is_ok());
+        drop(inherited);
     }
 }
