@@ -129,6 +129,14 @@ pub fn simplify(
     if apply && !project.tools_dir_in_project() {
         return super::refuse_outside_tools_dir(&project, style, err);
     }
+    let _editing = if apply {
+        match super::lock_for_edit(&project, "simplify", style, err)? {
+            Ok(editing) => Some(editing),
+            Err(status) => return Ok(status),
+        }
+    } else {
+        None
+    };
     let mut pass = Pass {
         project: &project,
         apply,

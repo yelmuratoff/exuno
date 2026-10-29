@@ -9,6 +9,7 @@ use super::put;
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
+use crate::project::Project;
 use crate::{Error, config::catalog, engine::staging};
 
 pub const HELP: Help = Help {
@@ -291,6 +292,10 @@ pub fn add(
     let entry = match parse_entry(args) {
         Ok(entry) => entry,
         Err(stop) => return report_stop(stop, style, out, err),
+    };
+    let _editing = match super::lock_for_edit(&Project::at(root)?, "add", style, err)? {
+        Ok(editing) => editing,
+        Err(status) => return Ok(status),
     };
     if let Some(stop) = entry_refusal(&entry, root) {
         return report_stop(stop, style, out, err);
@@ -748,6 +753,10 @@ fn add_mcp(
             put(err, refusal.as_bytes())?;
             return Ok(1);
         }
+    };
+    let _editing = match super::lock_for_edit(&Project::at(root)?, "add mcp", style, err)? {
+        Ok(editing) => editing,
+        Err(status) => return Ok(status),
     };
     let mcp_file = PathBuf::from(format!("{root}/.ai/src/mcp.json"));
     let mut created = false;

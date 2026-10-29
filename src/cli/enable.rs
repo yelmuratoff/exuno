@@ -218,6 +218,10 @@ pub fn enable(
         }
         scaffold = Scaffold::Never;
     }
+    let _editing = match super::lock_for_edit(&project, "enable", style, err)? {
+        Ok(editing) => editing,
+        Err(status) => return Ok(status),
+    };
     let config = resolve_or_create_config(&project)?;
 
     let mut enabled = Enabled::default();
@@ -284,6 +288,10 @@ pub fn disable(
         return Ok(1);
     }
     let project = discover()?;
+    let _editing = match super::lock_for_edit(&project, "disable", style, err)? {
+        Ok(editing) => editing,
+        Err(status) => return Ok(status),
+    };
     if !project.tools_dir_in_project() {
         for slug in args {
             if Tool::load(&project, slug)?.user_value("enabled") == "true" {

@@ -36,8 +36,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::Error;
+use crate::config::names;
 use crate::output::style::Style;
 use crate::project::Project;
+use crate::transaction::backup;
+use crate::transaction::lock::Lock;
 
 pub(crate) fn put(writer: &mut dyn Write, bytes: &[u8]) -> Result<(), Error> {
     writer
@@ -93,6 +96,62 @@ pub(crate) fn refuse_outside_tools_dir(
     )
     .map_err(|e| Error::io("<stderr>", e))?;
     Ok(1)
+}
+
+/// The project lock a command that edits the config or `.ai/src/` holds
+/// while it reads and writes them.
+pub(crate) struct Editing(Lock);
+
+impl Drop for Editing {
+    fn drop(&mut self) {
+        // The record names no backup, so one left behind is cleared by the next lock.
+        let _ = self.0.finish();
+    }
+}
+
+/// Takes the project lock for `operation` before the command reads what it
+/// edits, refusing while another run holds it. `Err(1)` once a restore of an
+/// interrupted run is reported: the command found its project before the
+/// restore, so it stops and asks to be run again.
+pub(crate) fn lock_for_edit(
+    project: &Project,
+    operation: &str,
+    style: &Style,
+    err: &mut dyn Write,
+) -> Result<Result<Editing, u8>, Error> {
+    let config = project
+        .config_path
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path)
+                .map(|text| (path.disk_text(), text))
+                .map_err(|e| Error::io(path, e))
+        })
+        .transpose()?;
+    let lookup = |name: &str| std::env::var(name).ok();
+    let retention = backup::configure(
+        config
+            .as_ref()
+            .map(|(path, text)| (path.as_str(), text.as_str())),
+        names::env("BACKUP_LIMIT", &lookup).as_deref(),
+        names::env("BACKUP_MAX_AGE_DAYS", &lookup).as_deref(),
+    )?;
+    let (lock, recovered) = Lock::acquire(&project.root.disk_text(), operation, retention)?;
+    let editing = Editing(lock);
+    let Some(recovered) = recovered else {
+        return Ok(Ok(editing));
+    };
+    put(
+        err,
+        format!(
+            "{}: {}\n{}: exuno {operation} changed nothing; run it again.\n",
+            style.yellow("Warning"),
+            recovered.message(),
+            style.red("Error")
+        )
+        .as_bytes(),
+    )?;
+    Ok(Err(1))
 }
 
 /// The command word `main` dispatches on. Each command parses its own options

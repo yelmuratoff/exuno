@@ -65,6 +65,14 @@ pub fn resolve(
     }
     let filter = args.first().cloned().unwrap_or_default();
     let project = discover()?;
+    let _editing = if interactive {
+        match super::lock_for_edit(&project, "resolve", style, err)? {
+            Ok(editing) => Some(editing),
+            Err(status) => return Ok(status),
+        }
+    } else {
+        None
+    };
     let pending = snapshot::read_pending_pairs(&project.root);
     let overrides = project.user_override_tools()?;
     if overrides.is_empty() {
@@ -343,5 +351,33 @@ mod tests {
             call(&root, &["nope"], true, &[]).2,
             "Error: No override found for 'nope'.\n"
         );
+    }
+
+    #[test]
+    fn an_interactive_walk_refuses_while_another_run_holds_the_lock() {
+        let (_dir, root) = project();
+        let file = format!("{root}/.ai/src/tools/cursor.yaml");
+        std::fs::write(&file, "name: Mine\n").unwrap();
+        let (held, _) = crate::transaction::lock::Lock::acquire(
+            &root,
+            "sync",
+            crate::transaction::backup::Retention::Bounded,
+        )
+        .unwrap();
+        let discover = || Project::at(&root);
+        let refused = resolve(
+            &[],
+            &discover,
+            &Style::plain(),
+            true,
+            &mut |_, _| "a".to_string(),
+            &mut Vec::new(),
+            &mut Vec::new(),
+        );
+        assert!(
+            matches!(refused, Err(Error::Backup(message)) if message.starts_with("Another exuno sync"))
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "name: Mine\n");
+        drop(held);
     }
 }
