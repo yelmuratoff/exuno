@@ -135,10 +135,15 @@ pub(crate) fn lock_for_edit(
             .map(|(path, text)| (path.as_str(), text.as_str())),
         names::env("BACKUP_LIMIT", &lookup).as_deref(),
         names::env("BACKUP_MAX_AGE_DAYS", &lookup).as_deref(),
+    );
+    let (lock, recovered) = Lock::acquire(
+        &project.root.disk_text(),
+        operation,
+        backup::for_recovery(&retention),
     )?;
-    let (lock, recovered) = Lock::acquire(&project.root.disk_text(), operation, retention)?;
     let editing = Editing(lock);
     let Some(recovered) = recovered else {
+        retention?;
         return Ok(Ok(editing));
     };
     put(

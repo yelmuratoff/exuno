@@ -29,6 +29,13 @@ pub enum Retention {
     Preserve,
 }
 
+/// The policy `Lock::acquire` restores an interrupted run under. A policy
+/// that does not parse may be the damage the restore repairs, so it keeps
+/// every backup rather than blocking the restore.
+pub fn for_recovery(configured: &Result<Retention, Error>) -> Retention {
+    configured.as_ref().copied().unwrap_or(Retention::Preserve)
+}
+
 /// `backup_configure` once the project config is selected: the retention
 /// policy in `config` (`(path, text)`, when there is one), then the bounds.
 pub fn configure(

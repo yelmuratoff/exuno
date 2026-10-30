@@ -146,6 +146,40 @@ fn a_tools_directory_an_interrupted_run_moved_outside_is_restored_before_the_ref
 }
 
 #[test]
+fn a_backup_policy_an_interrupted_run_broke_does_not_block_its_restore() {
+    let project = Project::seeded(&[]);
+    project
+        .exuno()
+        .args(["export", "-o", "bundle.tgz"])
+        .assert()
+        .success();
+    let config = project.read(".ai/exuno.yaml");
+    let broken = format!("{config}backup:\n  retention: forever\n");
+
+    interrupt_with_config(&project, &broken);
+    project
+        .exuno()
+        .args(["enable", "cursor", "--no-scaffold"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "exuno enable changed nothing; run it again.",
+        ));
+    assert_eq!(project.read(".ai/exuno.yaml"), config);
+
+    interrupt_with_config(&project, &broken);
+    project
+        .exuno()
+        .args(["import", "bundle.tgz"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ));
+    assert_eq!(project.read(".ai/exuno.yaml"), config);
+}
+
+#[test]
 fn enable_stops_after_restoring_an_interrupted_run_and_applies_when_run_again() {
     let project = Project::seeded(&[]);
     let config = project.read(".ai/exuno.yaml");

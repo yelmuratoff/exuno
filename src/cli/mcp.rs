@@ -382,38 +382,36 @@ impl McpUse<'_> {
         write: impl FnOnce() -> Result<(), Error>,
     ) -> Result<Option<u8>, Error> {
         let root = target.root.as_str();
-        let config = self
-            .project
-            .config_path
-            .as_ref()
-            .map(|path| std::fs::read_to_string(path).map(|text| (path.clone(), text)))
-            .transpose()
-            .map_err(|e| {
-                Error::io(
-                    self.project
-                        .config_path
-                        .as_ref()
-                        .expect("config path exists"),
-                    e,
-                )
-            })?;
         let lookup = |name: &str| std::env::var(name).ok();
         let limit = names::env("BACKUP_LIMIT", &lookup);
         let age = names::env("BACKUP_MAX_AGE_DAYS", &lookup);
-        let retention = backup::configure(
-            config
+        let config_path = self.project.config_path.clone();
+        let configured = || {
+            let config = config_path
                 .as_ref()
-                .map(|(path, text)| (path.to_str().unwrap_or("<config>"), text.as_str())),
-            limit.as_deref(),
-            age.as_deref(),
-        )?;
-        let (lock, recovered) = Lock::acquire(root, "mcp use", retention)?;
+                .map(|path| {
+                    std::fs::read_to_string(path)
+                        .map(|text| (path, text))
+                        .map_err(|e| Error::io(path, e))
+                })
+                .transpose()?;
+            backup::configure(
+                config
+                    .as_ref()
+                    .map(|(path, text)| (path.to_str().unwrap_or("<config>"), text.as_str())),
+                limit.as_deref(),
+                age.as_deref(),
+            )
+        };
+        let (lock, recovered) =
+            Lock::acquire(root, "mcp use", backup::for_recovery(&configured()))?;
         if let Some(recovered) = recovered {
             put(
                 self.err,
                 format!("Warning: {}\n", recovered.message()).as_bytes(),
             )?;
         }
+        let retention = configured()?;
         let previous_latest =
             backup::latest(root)?.map_or_else(String::new, |path| paths::leaf(&path));
         let snapshot = backup::create(root, "mcp-use", &[backup_target], retention)?;
