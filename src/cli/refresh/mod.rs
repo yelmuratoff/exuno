@@ -13,8 +13,11 @@ use std::io::Write;
 use std::path::Path;
 
 use super::put;
+use crate::config::project_config;
 use crate::config::template_manifest::TemplateManifest;
 use crate::output::style::Style;
+use crate::paths::DiskText;
+use crate::project::Project;
 use crate::{Error, config::catalog};
 
 pub use args::HELP;
@@ -75,6 +78,24 @@ pub fn refresh(
             style.cyan("exuno init")
         );
         return fail(err, style, &message);
+    };
+    let _editing = if options.dry_run || options.status_only {
+        None
+    } else {
+        let project = match Project::select(root, env.config_path) {
+            Err(Error::ConfigPathNotFound(path)) => {
+                return fail(
+                    err,
+                    style,
+                    &project_config::missing_message(&path.disk_text()),
+                );
+            }
+            found => found?,
+        };
+        match super::lock_for_edit(&project, "refresh", style, err)? {
+            Ok((editing, _)) => Some(editing),
+            Err(status) => return Ok(status),
+        }
     };
     let user_base_shown = format!("{root}/{src_base}");
     let locator = Locator::new(&user_base_shown);

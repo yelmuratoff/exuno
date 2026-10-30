@@ -212,6 +212,10 @@ pub fn enable(
     }
 
     let project = discover()?;
+    let (_editing, project) = match super::lock_for_edit(&project, "enable", style, err)? {
+        Ok(locked) => locked,
+        Err(status) => return Ok(status),
+    };
     if !project.tools_dir_in_project() {
         if scaffold == Scaffold::Always {
             return super::refuse_outside_tools_dir(&project, style, err);
@@ -284,6 +288,10 @@ pub fn disable(
         return Ok(1);
     }
     let project = discover()?;
+    let (_editing, project) = match super::lock_for_edit(&project, "disable", style, err)? {
+        Ok(locked) => locked,
+        Err(status) => return Ok(status),
+    };
     if !project.tools_dir_in_project() {
         for slug in args {
             if Tool::load(&project, slug)?.user_value("enabled") == "true" {

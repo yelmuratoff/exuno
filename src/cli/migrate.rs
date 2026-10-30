@@ -467,6 +467,14 @@ fn legacy(
         }
     };
     let project = discover()?;
+    let (_editing, project) = if apply {
+        match super::lock_for_edit(&project, "migrate", style, err)? {
+            Ok((editing, project)) => (Some(editing), project),
+            Err(status) => return Ok(status),
+        }
+    } else {
+        (None, project)
+    };
     let root_path = project.root.clone();
     let mut run = Run {
         project: &project,
@@ -987,6 +995,7 @@ mod tests {
         let mut rels: Vec<String> = files
             .iter()
             .map(|f| f.strip_prefix(root).unwrap().disk_text())
+            .filter(|rel| !rel.starts_with(".ai/backups/"))
             .collect();
         rels.sort();
         rels

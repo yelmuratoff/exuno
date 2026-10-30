@@ -12,9 +12,18 @@ use crate::transaction::{backup, witness};
 
 /// The held project lock; released when dropped or when the process ends.
 pub struct Lock {
-    _file: File,
+    file: File,
     store: String,
     operation: String,
+}
+
+impl Drop for Lock {
+    // flock belongs to the open file description, which a child forked
+    // elsewhere in the process shares until it execs; closing our descriptor
+    // alone would leave the project busy until then.
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
 }
 
 /// An interrupted run that `Lock::acquire` restored before handing over.
@@ -50,15 +59,29 @@ fn read_pending(store: &str) -> Option<Pending> {
     let mut pending = Pending::default();
     for line in String::from_utf8_lossy(&bytes).split('\n') {
         match line.split_once('=') {
-            Some(("operation", value)) => pending.operation = value.to_string(),
-            Some(("pid", value)) => pending.pid = value.to_string(),
+            Some(("operation", value)) => pending.operation = printable(value),
+            Some(("pid", value)) => pending.pid = printable(value),
             Some(("backup", value)) if !value.is_empty() => {
-                pending.backup = Some(value.to_string());
+                pending.backup = Some(printable(value));
             }
             _ => {}
         }
     }
     Some(pending)
+}
+
+/// The record comes from the project directory and its fields end up on the
+/// terminal, so control characters are shown escaped rather than emitted.
+fn printable(value: &str) -> String {
+    let mut shown = String::new();
+    for c in value.chars() {
+        if c.is_control() {
+            shown.extend(c.escape_default());
+        } else {
+            shown.push(c);
+        }
+    }
+    shown
 }
 
 fn busy(store: &str) -> Error {
@@ -102,13 +125,25 @@ impl Lock {
             Err(TryLockError::Error(e)) => return Err(Error::io(&path, e)),
         }
         let lock = Self {
-            _file: file,
+            file,
             store,
             operation: operation.to_string(),
         };
         let recovered = lock.recover(root, retention)?;
         lock.record(None)?;
         Ok((lock, recovered))
+    }
+
+    /// Restores an interrupted run for a command that stops because it
+    /// cannot read its backup policy, which the restore may repair. Keeps
+    /// every backup and releases the lock; `None` when no run was interrupted.
+    pub fn recover_only(root: &str, operation: &str) -> Result<Option<Recovered>, Error> {
+        if !Path::new(root).join(".ai/backups/.pending").is_file() {
+            return Ok(None);
+        }
+        let (lock, recovered) = Self::acquire(root, operation, backup::Retention::Preserve)?;
+        lock.finish()?;
+        Ok(recovered)
     }
 
     /// Names `snapshot` as the one to restore if the run dies before `finish`.
@@ -172,5 +207,51 @@ impl Lock {
             backup: id,
             undo: paths::leaf(&undo),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paths::DiskText;
+
+    #[test]
+    fn dropping_the_lock_releases_it_while_a_forked_copy_of_the_descriptor_lives() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap().disk_text();
+        let (lock, _) = Lock::acquire(&root, "rollback", backup::Retention::Bounded).unwrap();
+        let inherited = lock.file.try_clone().unwrap();
+        lock.finish().unwrap();
+        drop(lock);
+
+        assert!(Lock::acquire(&root, "rollback", backup::Retention::Bounded).is_ok());
+        drop(inherited);
+    }
+
+    #[test]
+    fn a_pending_record_reaches_the_terminal_with_its_control_characters_escaped() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap().disk_text();
+        let (held, _) = Lock::acquire(&root, "sync", backup::Retention::Bounded).unwrap();
+        std::fs::write(
+            format!("{}/.pending", held.store),
+            "operation=sync\x1b]0;owned\x07\npid=1\x1b[2J\nbackup=x\x1b[1m\n",
+        )
+        .unwrap();
+
+        let busy = Lock::acquire(&root, "sync", backup::Retention::Bounded)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(!busy.contains('\x1b') && !busy.contains('\x07'), "{busy:?}");
+        assert!(busy.contains(r"exuno sync\u{1b}]0;owned\u{7} (pid 1\u{1b}[2J)"));
+        drop(held);
+
+        let missing = Lock::acquire(&root, "sync", backup::Retention::Bounded)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(!missing.contains('\x1b'), "{missing:?}");
+        assert!(missing.contains(r"backup x\u{1b}[1m missing"));
     }
 }

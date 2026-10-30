@@ -396,6 +396,20 @@ fn profile_remove_deletes_config_home_output_variant_file_and_config_entry() {
 }
 
 #[test]
+fn profile_remove_run_again_after_a_kill_finishes_the_removal() {
+    let project = seeded();
+    add_hub(&project);
+    std::fs::remove_file(project.join(".ai/src/tools/claude-hub.yaml")).unwrap();
+
+    project
+        .exuno()
+        .args(["profile", "remove", "hub", "--yes"])
+        .assert()
+        .success();
+    assert!(!project.read(".ai/exuno.yaml").contains("\nprofiles:"));
+}
+
+#[test]
 fn profile_remove_keeps_files_exuno_did_not_generate_in_the_config_home() {
     let project = seeded();
     add_hub(&project);

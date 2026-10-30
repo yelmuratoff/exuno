@@ -202,7 +202,20 @@ fn load_retention(root: &str, env: &Env, err: &mut dyn Write) -> Result<backup::
         env.backup_limit.as_deref(),
         env.backup_max_age.as_deref(),
     )
-    .map_err(|e| report(err, e))
+    .map_err(|e| {
+        match Lock::recover_only(root, "rollback") {
+            Ok(Some(recovered)) => {
+                let _ = writeln!(err, "Warning: {}", recovered.message());
+                let _ = writeln!(err, "Error: exuno rollback changed nothing; run it again.");
+                return 1;
+            }
+            Ok(None) => {}
+            Err(failed) => {
+                report(err, failed);
+            }
+        }
+        report(err, e)
+    })
 }
 
 /// The snapshot a backup ID names, or the latest complete one without an ID.

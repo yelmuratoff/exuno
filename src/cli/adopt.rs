@@ -578,6 +578,14 @@ pub fn adopt(
         }
         Err(other) => return Err(other),
     };
+    let (_editing, project) = if parsed.dry_run {
+        (None, project)
+    } else {
+        match super::lock_for_edit(&project, "adopt", style, err)? {
+            Ok((editing, project)) => (Some(editing), project),
+            Err(status) => return Ok(status),
+        }
+    };
     if !project.tools_dir_in_project() {
         return super::refuse_outside_tools_dir(&project, style, err);
     }

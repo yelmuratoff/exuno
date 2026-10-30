@@ -1713,27 +1713,30 @@ struct Locked {
 /// confirmation see the files a restored interrupted run put back, and no
 /// other run changes them until the import is applied.
 fn lock_project(root: &str, err: &mut dyn Write) -> Result<Locked, Error> {
-    let config = present_config(Path::new(root)).and_then(|rel| {
-        Some((
-            rel,
-            std::fs::read_to_string(Path::new(root).join(rel)).ok()?,
-        ))
-    });
     let lookup = |name: &str| std::env::var(name).ok();
     let limit = names::env("BACKUP_LIMIT", &lookup);
     let age = names::env("BACKUP_MAX_AGE_DAYS", &lookup);
-    let retention = backup::configure(
-        config.as_ref().map(|(rel, text)| (*rel, text.as_str())),
-        limit.as_deref(),
-        age.as_deref(),
-    )?;
-    let (lock, recovered) = Lock::acquire(root, "import", retention)?;
+    let configured = || {
+        let config = present_config(Path::new(root)).and_then(|rel| {
+            Some((
+                rel,
+                std::fs::read_to_string(Path::new(root).join(rel)).ok()?,
+            ))
+        });
+        backup::configure(
+            config.as_ref().map(|(rel, text)| (*rel, text.as_str())),
+            limit.as_deref(),
+            age.as_deref(),
+        )
+    };
+    let (lock, recovered) = Lock::acquire(root, "import", backup::for_recovery(&configured()))?;
     if let Some(recovered) = recovered {
         put(
             err,
             format!("  Warning: {}\n", recovered.message()).as_bytes(),
         )?;
     }
+    let retention = configured()?;
     Ok(Locked {
         lock,
         retention,
