@@ -202,6 +202,42 @@ fn a_backup_policy_an_interrupted_run_broke_does_not_block_its_restore() {
             "Restored the state from before an interrupted exuno sync",
         ));
     assert_eq!(project.read(".ai/exuno.yaml"), config);
+
+    for command in ["sync", "rollback", "init"] {
+        interrupt_with_config(&project, &broken);
+        project
+            .exuno()
+            .arg(command)
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains(
+                "Restored the state from before an interrupted exuno sync",
+            ))
+            .stderr(predicate::str::contains(format!(
+                "exuno {command} changed nothing; run it again."
+            )));
+        assert_eq!(project.read(".ai/exuno.yaml"), config, "{command}");
+    }
+}
+
+#[test]
+fn a_broken_backup_policy_with_nothing_to_restore_is_still_refused() {
+    let project = Project::seeded(&[]);
+    let config = project.read(".ai/exuno.yaml");
+    project.write(
+        ".ai/exuno.yaml",
+        &format!("{config}backup:\n  retention: forever\n"),
+    );
+    for command in ["sync", "rollback", "init"] {
+        project
+            .exuno()
+            .arg(command)
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains(
+                "Invalid backup.retention 'forever'",
+            ));
+    }
 }
 
 #[test]

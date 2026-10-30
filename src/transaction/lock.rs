@@ -134,6 +134,18 @@ impl Lock {
         Ok((lock, recovered))
     }
 
+    /// Restores an interrupted run for a command that stops because it
+    /// cannot read its backup policy, which the restore may repair. Keeps
+    /// every backup and releases the lock; `None` when no run was interrupted.
+    pub fn recover_only(root: &str, operation: &str) -> Result<Option<Recovered>, Error> {
+        if !Path::new(root).join(".ai/backups/.pending").is_file() {
+            return Ok(None);
+        }
+        let (lock, recovered) = Self::acquire(root, operation, backup::Retention::Preserve)?;
+        lock.finish()?;
+        Ok(recovered)
+    }
+
     /// Names `snapshot` as the one to restore if the run dies before `finish`.
     pub fn begin(&self, snapshot: &str) -> Result<(), Error> {
         self.record(Some(&paths::leaf(snapshot)))

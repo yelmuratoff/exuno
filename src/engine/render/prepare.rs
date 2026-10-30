@@ -9,7 +9,7 @@ use crate::engine::overlay::{self, Sources};
 use crate::engine::session::Session;
 use crate::{
     config::catalog, config::project_config, config::version, config::yaml_subset, engine_version,
-    paths, transaction::backup,
+    paths, transaction::backup, transaction::lock::Lock,
 };
 
 /// `_load_run_config` and `_resolve_sources`.
@@ -46,6 +46,17 @@ fn load_run_config(s: &mut Session, env: &Env, selection: Selection) -> Result<R
         match backup::configure(selected, bounds.limit.as_deref(), bounds.max_age.as_deref()) {
             Ok(policy) => retention = policy,
             Err(e) => {
+                if !s.dry_run {
+                    match Lock::recover_only(&root, "sync") {
+                        Ok(Some(recovered)) => {
+                            s.log.warning(&recovered.message());
+                            s.log.error("exuno sync changed nothing; run it again.");
+                            return Err(Stop(1));
+                        }
+                        Ok(None) => {}
+                        Err(failed) => s.log.err(format!("Error: {failed}")),
+                    }
+                }
                 s.log.err(format!("Error: {e}"));
                 return Err(Stop(1));
             }

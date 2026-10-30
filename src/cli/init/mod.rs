@@ -239,13 +239,23 @@ fn load_retention(run: &mut Run, target: &str) -> Result<Result<backup::Retentio
         run.env.backup_limit.as_deref(),
         run.env.backup_max_age.as_deref(),
     );
-    match configured {
-        Ok(retention) => Ok(Ok(retention)),
-        Err(e) => {
-            report_backup_error(run, &e)?;
-            Ok(Err(1))
+    let e = match configured {
+        Ok(retention) => return Ok(Ok(retention)),
+        Err(e) => e,
+    };
+    match Lock::recover_only(target, "init") {
+        Ok(Some(recovered)) => {
+            run.tell(&format!(
+                "Warning: {}\nError: exuno init changed nothing; run it again.\n",
+                recovered.message()
+            ))?;
+            return Ok(Err(1));
         }
+        Ok(None) => {}
+        Err(failed) => report_backup_error(run, &failed)?,
     }
+    report_backup_error(run, &e)?;
+    Ok(Err(1))
 }
 
 /// The content sections and tools the flags and the tool detection name.
