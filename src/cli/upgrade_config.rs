@@ -103,6 +103,10 @@ pub fn run(
         }
     }
     let project = discover()?;
+    let (_editing, project) = match super::lock_for_edit(&project, "upgrade-config", style, err)? {
+        Ok(locked) => locked,
+        Err(status) => return Ok(status),
+    };
     let Some(config) = project.config_path else {
         put(
             err,

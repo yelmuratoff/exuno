@@ -11,6 +11,7 @@ use crate::config::project_config::{self, Selection};
 use crate::engine::{skill_tree, workspace::Workspace};
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
+use crate::project::Project;
 use crate::{
     Error, config::catalog, config::template_manifest, config::yaml_edit, engine::overlay, paths,
 };
@@ -213,6 +214,11 @@ fn run_one(run: &mut Run, repo_root: &str, against: &str, cwd: &str) -> Result<u
             )?;
             return Ok(1);
         }
+    };
+    let project = Project::select(repo_root, run.explicit_config)?;
+    let (_editing, _) = match super::lock_for_edit(&project, "dedupe", style, run.err)? {
+        Ok(locked) => locked,
+        Err(status) => return Ok(status),
     };
     let (parent_src, from_shared) = match parent_for(run, repo_root, against, cwd)? {
         Ok(Some(found)) => found,

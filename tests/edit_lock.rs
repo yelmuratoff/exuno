@@ -52,7 +52,7 @@ fn every_config_writer_refuses_while_another_run_holds_the_lock() {
         "Another exuno sync (pid {}) is changing this project",
         std::process::id()
     );
-    let writers: [&[&str]; 8] = [
+    let writers: [&[&str]; 13] = [
         &["enable", "cursor"],
         &["disable", "claude"],
         &["customize", "cursor"],
@@ -61,6 +61,11 @@ fn every_config_writer_refuses_while_another_run_holds_the_lock() {
         &["simplify", "--apply"],
         &["profile", "add", "work", "--tools", "claude"],
         &["profile", "remove", "hub", "--yes"],
+        &["adopt", "CLAUDE.md", "--yes"],
+        &["dedupe", "--yes"],
+        &["migrate", "--legacy", "--apply", "--yes"],
+        &["upgrade-config"],
+        &["refresh", "--yes"],
     ];
     for args in writers {
         project
@@ -82,6 +87,14 @@ fn read_only_runs_take_no_lock() {
     project.exuno().args(["simplify"]).assert().success();
     project.exuno().args(["resolve"]).assert().success();
     project.exuno().args(["profile", "list"]).assert().success();
+    project.exuno().args(["migrate", "--legacy"]).assert().success();
+    project.exuno().args(["refresh", "--dry-run"]).assert().success();
+    project.exuno().args(["refresh", "--status"]).assert().success();
+    project
+        .exuno()
+        .args(["adopt", "CLAUDE.md", "--dry-run"])
+        .assert()
+        .stderr(predicate::str::contains("is changing this project").not());
     drop(held);
 }
 

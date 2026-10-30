@@ -467,6 +467,14 @@ fn legacy(
         }
     };
     let project = discover()?;
+    let (_editing, project) = if apply {
+        match super::lock_for_edit(&project, "migrate", style, err)? {
+            Ok((editing, project)) => (Some(editing), project),
+            Err(status) => return Ok(status),
+        }
+    } else {
+        (None, project)
+    };
     let root_path = project.root.clone();
     let mut run = Run {
         project: &project,
