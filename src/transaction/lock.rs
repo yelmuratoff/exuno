@@ -59,15 +59,29 @@ fn read_pending(store: &str) -> Option<Pending> {
     let mut pending = Pending::default();
     for line in String::from_utf8_lossy(&bytes).split('\n') {
         match line.split_once('=') {
-            Some(("operation", value)) => pending.operation = value.to_string(),
-            Some(("pid", value)) => pending.pid = value.to_string(),
+            Some(("operation", value)) => pending.operation = printable(value),
+            Some(("pid", value)) => pending.pid = printable(value),
             Some(("backup", value)) if !value.is_empty() => {
-                pending.backup = Some(value.to_string());
+                pending.backup = Some(printable(value));
             }
             _ => {}
         }
     }
     Some(pending)
+}
+
+/// The record comes from the project directory and its fields end up on the
+/// terminal, so control characters are shown escaped rather than emitted.
+fn printable(value: &str) -> String {
+    let mut shown = String::new();
+    for c in value.chars() {
+        if c.is_control() {
+            shown.extend(c.escape_default());
+        } else {
+            shown.push(c);
+        }
+    }
+    shown
 }
 
 fn busy(store: &str) -> Error {
@@ -200,5 +214,32 @@ mod tests {
 
         assert!(Lock::acquire(&root, "rollback", backup::Retention::Bounded).is_ok());
         drop(inherited);
+    }
+
+    #[test]
+    fn a_pending_record_reaches_the_terminal_with_its_control_characters_escaped() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap().disk_text();
+        let (held, _) = Lock::acquire(&root, "sync", backup::Retention::Bounded).unwrap();
+        std::fs::write(
+            format!("{}/.pending", held.store),
+            "operation=sync\x1b]0;owned\x07\npid=1\x1b[2J\nbackup=x\x1b[1m\n",
+        )
+        .unwrap();
+
+        let busy = Lock::acquire(&root, "sync", backup::Retention::Bounded)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(!busy.contains('\x1b') && !busy.contains('\x07'), "{busy:?}");
+        assert!(busy.contains(r"exuno sync\u{1b}]0;owned\u{7} (pid 1\u{1b}[2J)"));
+        drop(held);
+
+        let missing = Lock::acquire(&root, "sync", backup::Retention::Bounded)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(!missing.contains('\x1b'), "{missing:?}");
+        assert!(missing.contains(r"backup x\u{1b}[1m missing"));
     }
 }
