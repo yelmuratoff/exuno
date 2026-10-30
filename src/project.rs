@@ -38,6 +38,12 @@ impl Project {
         Self::select(root, explicit.as_deref())
     }
 
+    /// The same root and config file, read again for what the config says now.
+    pub fn reloaded(&self) -> Result<Self, Error> {
+        let config = self.config_path.as_ref().map(|path| path.disk_text());
+        Self::select(self.root.clone(), config.as_deref())
+    }
+
     /// Config is the first of [`names::CONFIG_CANDIDATES`] present.
     pub fn at(root: impl Into<PathBuf>) -> Result<Self, Error> {
         Self::select(root, None)

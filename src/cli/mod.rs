@@ -110,7 +110,8 @@ impl Drop for Editing {
 }
 
 /// Takes the project lock for `operation` before the command reads what it
-/// edits, refusing while another run holds it. `Err(1)` once a restore of an
+/// edits, refusing while another run holds it, and hands back `project` as
+/// its config reads under the lock. `Err(1)` once a restore of an
 /// interrupted run is reported: the command found its project before the
 /// restore, so it stops and asks to be run again.
 pub(crate) fn lock_for_edit(
@@ -118,7 +119,7 @@ pub(crate) fn lock_for_edit(
     operation: &str,
     style: &Style,
     err: &mut dyn Write,
-) -> Result<Result<Editing, u8>, Error> {
+) -> Result<Result<(Editing, Project), u8>, Error> {
     let config = project
         .config_path
         .as_ref()
@@ -144,7 +145,7 @@ pub(crate) fn lock_for_edit(
     let editing = Editing(lock);
     let Some(recovered) = recovered else {
         retention?;
-        return Ok(Ok(editing));
+        return Ok(Ok((editing, project.reloaded()?)));
     };
     put(
         err,
@@ -307,5 +308,30 @@ mod tests {
         assert_eq!(Command::parse("help"), None);
         assert_eq!(Command::parse("--help"), None);
         assert_eq!(Command::parse("synch"), None);
+    }
+
+    #[test]
+    fn lock_for_edit_hands_back_the_tools_directory_the_config_names_under_the_lock() {
+        use crate::output::style::Style;
+        use crate::paths::DiskText;
+        use crate::project::Project;
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap();
+        std::fs::create_dir_all(root.join(".ai")).unwrap();
+        let config = root.join(".ai/exuno.yaml");
+        std::fs::write(&config, "source:\n  tools: \"old\"\n").unwrap();
+        let found = Project::at(&root).unwrap();
+        std::fs::write(&config, "source:\n  tools: \"new\"\n").unwrap();
+
+        let (_editing, project) =
+            super::lock_for_edit(&found, "enable", &Style::plain(), &mut Vec::new())
+                .unwrap()
+                .unwrap();
+        assert_eq!(found.user_tools_dir(), root.join("old"));
+        assert_eq!(
+            project.user_tools_dir().disk_text(),
+            root.join("new").disk_text()
+        );
     }
 }

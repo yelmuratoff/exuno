@@ -126,13 +126,13 @@ pub fn simplify(
         }
     };
     let project = discover()?;
-    let _editing = if apply {
+    let (_editing, project) = if apply {
         match super::lock_for_edit(&project, "simplify", style, err)? {
-            Ok(editing) => Some(editing),
+            Ok((editing, project)) => (Some(editing), project),
             Err(status) => return Ok(status),
         }
     } else {
-        None
+        (None, project)
     };
     if apply && !project.tools_dir_in_project() {
         return super::refuse_outside_tools_dir(&project, style, err);

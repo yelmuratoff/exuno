@@ -65,13 +65,13 @@ pub fn resolve(
     }
     let filter = args.first().cloned().unwrap_or_default();
     let project = discover()?;
-    let _editing = if interactive {
+    let (_editing, project) = if interactive {
         match super::lock_for_edit(&project, "resolve", style, err)? {
-            Ok(editing) => Some(editing),
+            Ok((editing, project)) => (Some(editing), project),
             Err(status) => return Ok(status),
         }
     } else {
-        None
+        (None, project)
     };
     let pending = snapshot::read_pending_pairs(&project.root);
     let overrides = project.user_override_tools()?;

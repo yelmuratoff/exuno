@@ -212,8 +212,8 @@ pub fn enable(
     }
 
     let project = discover()?;
-    let _editing = match super::lock_for_edit(&project, "enable", style, err)? {
-        Ok(editing) => editing,
+    let (_editing, project) = match super::lock_for_edit(&project, "enable", style, err)? {
+        Ok(locked) => locked,
         Err(status) => return Ok(status),
     };
     if !project.tools_dir_in_project() {
@@ -288,8 +288,8 @@ pub fn disable(
         return Ok(1);
     }
     let project = discover()?;
-    let _editing = match super::lock_for_edit(&project, "disable", style, err)? {
-        Ok(editing) => editing,
+    let (_editing, project) = match super::lock_for_edit(&project, "disable", style, err)? {
+        Ok(locked) => locked,
         Err(status) => return Ok(status),
     };
     if !project.tools_dir_in_project() {

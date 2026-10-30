@@ -150,8 +150,8 @@ pub fn customize(
         return unknown_resource(style, &resource, err);
     }
     let project = discover()?;
-    let _editing = match super::lock_for_edit(&project, "customize", style, err)? {
-        Ok(editing) => editing,
+    let (_editing, project) = match super::lock_for_edit(&project, "customize", style, err)? {
+        Ok(locked) => locked,
         Err(status) => return Ok(status),
     };
     if !project.tools_dir_in_project() {

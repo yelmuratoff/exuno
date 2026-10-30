@@ -293,8 +293,9 @@ pub fn add(
         Ok(entry) => entry,
         Err(stop) => return report_stop(stop, style, out, err),
     };
-    let _editing = match super::lock_for_edit(&Project::configured(root)?, "add", style, err)? {
-        Ok(editing) => editing,
+    let (_editing, _) = match super::lock_for_edit(&Project::configured(root)?, "add", style, err)?
+    {
+        Ok(locked) => locked,
         Err(status) => return Ok(status),
     };
     if let Some(stop) = entry_refusal(&entry, root) {
@@ -754,10 +755,11 @@ fn add_mcp(
             return Ok(1);
         }
     };
-    let _editing = match super::lock_for_edit(&Project::configured(root)?, "add mcp", style, err)? {
-        Ok(editing) => editing,
-        Err(status) => return Ok(status),
-    };
+    let (_editing, _) =
+        match super::lock_for_edit(&Project::configured(root)?, "add mcp", style, err)? {
+            Ok(locked) => locked,
+            Err(status) => return Ok(status),
+        };
     let mcp_file = PathBuf::from(format!("{root}/.ai/src/mcp.json"));
     let mut created = false;
     if !mcp_file.is_file() {

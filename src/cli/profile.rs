@@ -248,8 +248,8 @@ fn add(
         Ok(project) => project,
         Err(status) => return Ok(status),
     };
-    let _editing = match super::lock_for_edit(&project, "profile add", style, err)? {
-        Ok(editing) => editing,
+    let (_editing, project) = match super::lock_for_edit(&project, "profile add", style, err)? {
+        Ok(locked) => locked,
         Err(status) => return Ok(status),
     };
     if !project.tools_dir_in_project() {
@@ -591,8 +591,8 @@ fn remove(
         Ok(project) => project,
         Err(status) => return Ok(status),
     };
-    let _editing = match super::lock_for_edit(&project, "profile remove", style, err)? {
-        Ok(editing) => editing,
+    let (_editing, project) = match super::lock_for_edit(&project, "profile remove", style, err)? {
+        Ok(locked) => locked,
         Err(status) => return Ok(status),
     };
     if !project.tools_dir_in_project() {
