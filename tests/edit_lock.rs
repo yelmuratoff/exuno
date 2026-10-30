@@ -87,9 +87,21 @@ fn read_only_runs_take_no_lock() {
     project.exuno().args(["simplify"]).assert().success();
     project.exuno().args(["resolve"]).assert().success();
     project.exuno().args(["profile", "list"]).assert().success();
-    project.exuno().args(["migrate", "--legacy"]).assert().success();
-    project.exuno().args(["refresh", "--dry-run"]).assert().success();
-    project.exuno().args(["refresh", "--status"]).assert().success();
+    project
+        .exuno()
+        .args(["migrate", "--legacy"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .args(["refresh", "--dry-run"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .args(["refresh", "--status"])
+        .assert()
+        .success();
     project
         .exuno()
         .args(["adopt", "CLAUDE.md", "--dry-run"])
