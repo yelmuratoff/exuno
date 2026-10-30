@@ -11,7 +11,7 @@ use crate::config::tool::Tool;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
 use crate::project::Project;
-use crate::{Error, config::catalog, text};
+use crate::{Error, config::catalog, engine::staging, text};
 
 pub const VALID_RESOURCES: [&str; 4] = ["tool", "hooks", "mcp", "settings"];
 
@@ -218,7 +218,7 @@ impl Customize<'_> {
             std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         }
         if let (true, Some(base)) = (full, base) {
-            std::fs::write(&user_file, base).map_err(|e| Error::io(&user_file, e))?;
+            staging::create_beside(&user_file, base.as_bytes())?;
             put(
                 out,
                 format!(
@@ -238,7 +238,7 @@ impl Customize<'_> {
             stub.push_str("#\n# This is a custom tool — no base template exists.\n# Define the full config here, then add to tools.enabled in exuno.yaml.\n");
         }
         stub.push('\n');
-        std::fs::write(&user_file, stub).map_err(|e| Error::io(&user_file, e))?;
+        staging::create_beside(&user_file, stub.as_bytes())?;
         put(
             out,
             format!(
@@ -299,7 +299,7 @@ impl Customize<'_> {
         if let Some(dir) = user_file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
         }
-        std::fs::write(&user_file, &base_bytes).map_err(|e| Error::io(&user_file, e))?;
+        staging::create_beside(&user_file, &base_bytes)?;
         put(
             out,
             format!(
