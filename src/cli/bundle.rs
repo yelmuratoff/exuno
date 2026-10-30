@@ -1729,8 +1729,7 @@ fn lock_project(root: &str, err: &mut dyn Write) -> Result<Locked, Error> {
             age.as_deref(),
         )
     };
-    let (lock, recovered) =
-        Lock::acquire(root, "import", backup::for_recovery(&configured()))?;
+    let (lock, recovered) = Lock::acquire(root, "import", backup::for_recovery(&configured()))?;
     if let Some(recovered) = recovered {
         put(
             err,
