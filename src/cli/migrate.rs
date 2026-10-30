@@ -995,6 +995,7 @@ mod tests {
         let mut rels: Vec<String> = files
             .iter()
             .map(|f| f.strip_prefix(root).unwrap().disk_text())
+            .filter(|rel| !rel.starts_with(".ai/backups/"))
             .collect();
         rels.sort();
         rels
