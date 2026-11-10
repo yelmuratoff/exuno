@@ -1357,6 +1357,75 @@ fn sync_follows_a_symlink_that_stays_inside_the_project() {
     project.exuno().arg("sync").assert().success();
 }
 
+#[cfg(unix)]
+#[test]
+fn sync_refuses_to_write_through_a_symlink_into_ai_or_git() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/mine/SKILL.md", "---\nname: mine\n---\n");
+    std::fs::create_dir_all(project.join(".claude")).unwrap();
+    std::os::unix::fs::symlink("../.ai/src/skills", project.join(".claude/skills")).unwrap();
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Refusing to write .claude/skills: .claude/skills is a symlink to",
+        ))
+        .stderr(predicate::str::contains(
+            "inside .ai/, where the sources live",
+        ));
+    assert!(!project.exists(".ai/src/skills/exuno"));
+    assert!(project.exists(".ai/src/skills/mine/SKILL.md"));
+
+    std::fs::remove_file(project.join(".claude/skills")).unwrap();
+    std::fs::create_dir_all(project.join(".git/info")).unwrap();
+    std::os::unix::fs::symlink("../.git/info", project.join(".claude/rules")).unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(".claude/rules is a symlink to"))
+        .stderr(predicate::str::contains("inside .git/"));
+    assert!(!project.exists(".git/info/core.md"));
+}
+
+#[cfg(unix)]
+#[test]
+fn cleanup_refuses_to_remove_through_a_symlink_that_leaves_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let synced = project.read(".cursor/skills/demo/SKILL.md");
+    std::fs::write(outside.path().join("SKILL.md"), &synced).unwrap();
+    std::fs::remove_dir_all(project.join(".cursor/skills/demo")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), project.join(".cursor/skills/demo")).unwrap();
+
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Refusing to remove .cursor/skills/demo/SKILL.md: .cursor/skills/demo is a symlink to",
+        ));
+    assert_eq!(
+        std::fs::read_to_string(outside.path().join("SKILL.md")).unwrap(),
+        synced
+    );
+}
+
 /// A synced claude project, then a hand-written `.cursor/rules/core.mdc` that
 /// enabling cursor would overwrite.
 fn unrecorded_cursor_rule() -> Project {

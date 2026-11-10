@@ -498,22 +498,66 @@ impl Paths {
         Ok(())
     }
 
-    /// The first symlink between the project root and `path`, `path` itself
-    /// included, that resolves outside the safe roots, with where it resolves
-    /// (empty when it cannot be resolved). Links that stay inside are fine.
-    pub fn escaping_output_link(&self, path: &str) -> Option<(String, String)> {
-        let rel = path.strip_prefix(&format!("{}/", self.root))?;
-        let mut current = self.root.clone();
-        for segment in rel.split('/') {
+    /// Why sync may not write `path`, or `None` when it may: `path` lies
+    /// outside the project, or a symlink between the project root and it (the
+    /// link at `path` itself only with `include_last`) resolves outside the
+    /// project, into `.ai/` or `.git/`, into an explicit source root, or nowhere.
+    /// Links that stay among the project's outputs are followed.
+    pub fn unsafe_output(&self, path: &str, include_last: bool) -> Option<String> {
+        let under = |root: &str| {
+            path.strip_prefix(&format!("{root}/"))
+                .map(|rel| (root.to_string(), rel))
+        };
+        let Some((root, rel)) = under(&self.root).or_else(|| under(&self.root_canonical)) else {
+            if path == self.root || path == self.root_canonical {
+                return None;
+            }
+            return Some("it is outside the project".to_string());
+        };
+        let shown = |abs: &str| {
+            self.to_repo_relative(abs)
+                .unwrap_or_else(|| abs.to_string())
+        };
+        let segments: Vec<&str> = rel.split('/').filter(|s| !s.is_empty()).collect();
+        let mut current = root;
+        for (index, segment) in segments.iter().enumerate() {
             current = format!("{current}/{segment}");
+            let last = index + 1 == segments.len();
             if is_symlink(&current) {
-                let target = link_target(&current).unwrap_or_default();
-                if target.is_empty() || !self.is_safe_source(&target) {
-                    return Some((current, target));
+                if last && !include_last {
+                    break;
+                }
+                let Some(target) = link_target(&current) else {
+                    return Some(format!(
+                        "{} is a symlink that cannot be resolved",
+                        shown(&current)
+                    ));
+                };
+                if let Some(place) = self.unwritable_place(&target) {
+                    return Some(format!(
+                        "{} is a symlink to {target}, {place}",
+                        shown(&current)
+                    ));
                 }
             } else if !Path::new(&current).exists() {
                 break;
             }
+        }
+        None
+    }
+
+    fn unwritable_place(&self, canonical: &str) -> Option<&'static str> {
+        if !is_within(canonical, &self.root_canonical) {
+            return Some("outside the project");
+        }
+        if is_within(canonical, &format!("{}/.ai", self.root_canonical)) {
+            return Some("inside .ai/, where the sources live");
+        }
+        if is_within(canonical, &format!("{}/.git", self.root_canonical)) {
+            return Some("inside .git/");
+        }
+        if self.explicit.iter().any(|root| is_within(canonical, root)) {
+            return Some("inside a source directory");
         }
         None
     }
@@ -955,6 +999,65 @@ mod tests {
         std::fs::create_dir_all(format!("{base}/outside/rules")).unwrap();
         std::fs::write(format!("{base}/outside/rules/o.md"), "o\n").unwrap();
         (dir, base, root)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn outputs_through_links_that_leave_the_writable_tree_are_unsafe() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = dir.path().disk_text();
+        let p = Paths::for_disk_root(&root);
+        std::fs::create_dir_all(dir.path().join(".ai/src")).unwrap();
+        std::fs::create_dir_all(dir.path().join("store/real")).unwrap();
+        symlink(outside.path(), dir.path().join("away")).unwrap();
+        symlink("store", dir.path().join("hop")).unwrap();
+        symlink("hop/real", dir.path().join("chain")).unwrap();
+        symlink("missing/target", dir.path().join("dangling")).unwrap();
+        symlink(
+            outside.path().join("missing"),
+            dir.path().join("dangling-away"),
+        )
+        .unwrap();
+        symlink("loop-b", dir.path().join("loop-a")).unwrap();
+        symlink("loop-a", dir.path().join("loop-b")).unwrap();
+        symlink(".ai/src", dir.path().join("sources")).unwrap();
+        symlink(outside.path().join("f"), dir.path().join("link-file")).unwrap();
+
+        let reason = p.unsafe_output(&format!("{root}/away/x.md"), true).unwrap();
+        assert!(reason.starts_with("away is a symlink to "), "{reason}");
+        assert!(reason.ends_with(", outside the project"), "{reason}");
+        assert_eq!(p.unsafe_output(&format!("{root}/chain/x.md"), true), None);
+        assert_eq!(
+            p.unsafe_output(&format!("{root}/dangling/x.md"), true),
+            None
+        );
+        let dangling = p
+            .unsafe_output(&format!("{root}/dangling-away/x.md"), true)
+            .unwrap();
+        assert!(dangling.ends_with(", outside the project"), "{dangling}");
+        assert_eq!(
+            p.unsafe_output(&format!("{root}/loop-a/x.md"), true),
+            Some("loop-a is a symlink that cannot be resolved".into())
+        );
+        let into_ai = p
+            .unsafe_output(&format!("{root}/sources/x.md"), true)
+            .unwrap();
+        assert!(
+            into_ai.ends_with("inside .ai/, where the sources live"),
+            "{into_ai}"
+        );
+        assert!(
+            p.unsafe_output(&format!("{root}/link-file"), true)
+                .is_some()
+        );
+        assert_eq!(p.unsafe_output(&format!("{root}/link-file"), false), None);
+        assert_eq!(p.unsafe_output(&format!("{root}/new/dir/x.md"), true), None);
+        assert_eq!(
+            p.unsafe_output("/elsewhere/x.md", true),
+            Some("it is outside the project".into())
+        );
     }
 
     #[cfg(unix)]

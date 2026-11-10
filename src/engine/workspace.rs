@@ -135,25 +135,29 @@ impl Workspace {
     }
 
     fn refuse_escape(&self, path: &str) -> Result<(), Error> {
+        self.refuse_unsafe(path, "write", true)
+    }
+
+    /// Removing a link deletes the link alone, so only the links above `path`
+    /// matter for a removal.
+    fn refuse_unsafe(
+        &self,
+        path: &str,
+        action: &'static str,
+        include_last: bool,
+    ) -> Result<(), Error> {
         let Some(guard) = self.guard.as_ref().filter(|_| self.writes_disk(path)) else {
             return Ok(());
         };
-        let Some((link, target)) = guard.escaping_output_link(path) else {
+        let Some(reason) = guard.unsafe_output(path, include_last) else {
             return Ok(());
         };
-        let shown = |abs: &str| {
-            guard
-                .to_repo_relative(abs)
-                .unwrap_or_else(|| abs.to_string())
-        };
-        Err(Error::EscapingOutput {
-            path: shown(path),
-            link: shown(&link),
-            target: if target.is_empty() {
-                "a path that cannot be resolved".to_string()
-            } else {
-                target
-            },
+        Err(Error::UnsafeOutput {
+            action,
+            path: guard
+                .to_repo_relative(path)
+                .unwrap_or_else(|| path.to_string()),
+            reason,
         })
     }
 
@@ -383,7 +387,7 @@ impl Workspace {
 
     /// `rm -rf`.
     pub fn remove(&mut self, path: &str) -> Result<(), Error> {
-        self.refuse_escape(path)?;
+        self.refuse_unsafe(path, "remove", false)?;
         self.remember(path)?;
         if self.writes_disk(path) {
             let removed = match std::fs::symlink_metadata(path) {

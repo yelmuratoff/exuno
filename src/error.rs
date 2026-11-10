@@ -17,11 +17,11 @@ pub enum Error {
     ConfigPathNotFound(PathBuf),
     #[error("Manifest template {template}: {reason}")]
     Manifest { template: String, reason: String },
-    #[error("Refusing to write {path}: {link} is a symlink to {target}, outside the project")]
-    EscapingOutput {
+    #[error("Refusing to {action} {path}: {reason}")]
+    UnsafeOutput {
+        action: &'static str,
         path: String,
-        link: String,
-        target: String,
+        reason: String,
     },
 }
 

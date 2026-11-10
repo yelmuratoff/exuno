@@ -409,8 +409,12 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
 /// leaves empty; true when something went. A failed removal is not an error:
 /// cleanup of a disabled tool never stops a sync.
 fn remove_recorded_outputs(s: &mut Session, path: &str, protected: &[String]) -> bool {
-    let Ok(removed) = file_ops::remove_recorded_outside(s, path, protected) else {
-        return false;
+    let removed = match file_ops::remove_recorded_outside(s, path, protected) {
+        Ok(removed) => removed,
+        Err(error) => {
+            s.log.warning(&error.to_string());
+            return false;
+        }
     };
     if removed == 0 {
         return false;
