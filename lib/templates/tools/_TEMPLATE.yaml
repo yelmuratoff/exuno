@@ -107,8 +107,9 @@ targets:
 
     # Optional, skills and commands: keep only these top-level frontmatter keys
     # in each synced SKILL.md (or command file). A dropped key goes with its
-    # whole value, continuation lines included, and sync warns once per key.
-    # A file whose frontmatter it can't read is copied unfiltered, with a warning.
+    # whole value, continuation lines included; sync prints one warning per
+    # target listing the keys it dropped. A file whose frontmatter it can't
+    # read is copied unfiltered, with a warning naming the file.
     # frontmatter_keys: [name, description]
 
   # Custom slash commands (optional)

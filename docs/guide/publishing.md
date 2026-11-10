@@ -18,7 +18,7 @@ Sync writes:
 | `.claude-plugin/marketplace.json` | The marketplace index claude.ai and ChatGPT read |
 | `.agents/plugins/marketplace.json` | The marketplace index Codex reads |
 
-claude.ai refuses a skill whose frontmatter has a key outside `name`, `description`, `license`, `compatibility`, `metadata`, and `allowed-tools`. The copies in `plugin/skills/` keep only those keys, and the commands in `plugin/commands/` keep only `description`. Sync prints a warning for each key it drops. The copies other tools get, such as `.claude/skills/`, keep every key.
+claude.ai refuses a skill whose frontmatter has a key outside `name`, `description`, `license`, `compatibility`, `metadata`, and `allowed-tools`. The copies in `plugin/skills/` keep only those keys, and the commands in `plugin/commands/` keep only `description`. After each sync, one warning per target lists the keys it dropped and how many files lost one. The copies other tools get, such as `.claude/skills/`, keep every key.
 
 None of these paths go into the managed `.gitignore` block, even with `outputs: local`, because the hosts read them from the repository. The manifests have no `version` field, so each host versions the plugin by commit. Disabling the tool later removes only the files sync wrote; anything you added under those paths by hand stays. The tool has no config-home [profiles](workspaces-and-profiles.md#profiles-separate-config-homes), because the indexes always point at `./plugin`.
 

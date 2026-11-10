@@ -1106,14 +1106,23 @@ fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
         project.read("plugin/skills/demo/SKILL.md"),
         "---\nname: demo\ndescription: Runs the demo\n---\n\n# Demo\n\nBody.\n"
     );
-    for key in ["argument-hint", "disable-model-invocation"] {
-        assert!(
-            stderr.contains(&format!(
-                "Dropped frontmatter key '{key}' from plugin/skills/demo/SKILL.md"
-            )),
-            "{stderr}"
-        );
-    }
+    assert!(
+        stderr.contains(
+            "[WARNING] Agent plugin (claude.ai, ChatGPT, Codex): dropped frontmatter keys argument-hint, disable-model-invocation (allowlist targets.skills.frontmatter_keys) from 1 skill\n"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "[WARNING] Agent plugin (claude.ai, ChatGPT, Codex): dropped frontmatter key"
+        ) && stderr.contains("(allowlist targets.commands.frontmatter_keys) from "),
+        "{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("dropped frontmatter key").count(),
+        2,
+        "{stderr}"
+    );
     assert_eq!(project.read(".claude/skills/demo/SKILL.md"), skill);
     assert!(project.exists("plugin/skills/exuno/SKILL.md"));
     assert_eq!(

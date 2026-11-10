@@ -1,5 +1,7 @@
 //! The per-target steps of one tool: rules, skills, commands, subagents, payloads, and the OpenCode composition.
 
+use std::collections::BTreeSet;
+
 use super::passes::{Dests, source_path, tool_source};
 use super::{Run, Step, Stop, io, tools};
 use crate::config::skill_metadata;
@@ -387,7 +389,8 @@ pub(super) fn sync_commands_step(
 }
 
 /// `targets.<target>.frontmatter_keys`: each written file keeps only the
-/// listed top-level frontmatter keys, and every dropped key is a warning.
+/// listed top-level frontmatter keys; one warning per target names the keys
+/// dropped and how many files lost any.
 fn retain_frontmatter_keys(s: &mut Session, tool: &Tool, target: &str, files: &[String]) -> Step {
     let keep: Vec<String> = tool
         .filter(&format!("targets.{target}.frontmatter_keys"))
@@ -397,6 +400,8 @@ fn retain_frontmatter_keys(s: &mut Session, tool: &Tool, target: &str, files: &[
     if keep.is_empty() || s.dry_run {
         return Ok(());
     }
+    let mut dropped_keys: BTreeSet<String> = BTreeSet::new();
+    let mut filtered_files = 0usize;
     for path in files {
         if !s.ws.is_file(path) {
             continue;
@@ -419,14 +424,31 @@ fn retain_frontmatter_keys(s: &mut Session, tool: &Tool, target: &str, files: &[
         if dropped.is_empty() {
             continue;
         }
-        for key in dropped {
-            s.log
-                .warning(&format!("Dropped frontmatter key '{key}' from {shown}"));
-        }
+        dropped_keys.extend(dropped);
+        filtered_files += 1;
         s.ws.write(path, filtered.into_bytes())
             .map_err(|e| io(s, e))?;
         s.record_write(path);
     }
+    if filtered_files == 0 {
+        return Ok(());
+    }
+    let key_noun = if dropped_keys.len() == 1 {
+        "key"
+    } else {
+        "keys"
+    };
+    let singular = target.strip_suffix('s').unwrap_or(target);
+    let file_noun = if filtered_files == 1 {
+        singular
+    } else {
+        target
+    };
+    let keys = dropped_keys.into_iter().collect::<Vec<_>>().join(", ");
+    s.log.warning(&format!(
+        "{}: dropped frontmatter {key_noun} {keys} (allowlist targets.{target}.frontmatter_keys) from {filtered_files} {file_noun}",
+        tool.display_name()
+    ));
     Ok(())
 }
 

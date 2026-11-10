@@ -600,6 +600,14 @@ fn skills_frontmatter_keys_strips_unlisted_keys_and_warns() {
         ".ai/src/skills/demo/SKILL.md",
         "---\nname: demo\nargument-hint: <file>\ndescription: >-\n  Does the demo\n  in two lines\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody: kept.\n",
     );
+    project.write(
+        ".ai/src/skills/other/SKILL.md",
+        "---\nname: other\nmodel: haiku\nargument-hint: <x>\ndescription: Other\n---\n",
+    );
+    project.write(
+        ".ai/src/skills/clean/SKILL.md",
+        "---\nname: clean\ndescription: Clean\n---\n",
+    );
     let output = project.exuno().arg("sync").assert().success();
     let stderr = String::from_utf8(output.get_output().stderr.clone()).unwrap();
     assert_eq!(
@@ -607,17 +615,17 @@ fn skills_frontmatter_keys_strips_unlisted_keys_and_warns() {
         "---\nname: demo\ndescription: >-\n  Does the demo\n  in two lines\n---\n\n# Demo\n\nBody: kept.\n"
     );
     assert!(
-        stderr
-            .contains("Dropped frontmatter key 'argument-hint' from .claude/skills/demo/SKILL.md")
-    );
-    assert!(stderr.contains(
-        "Dropped frontmatter key 'disable-model-invocation' from .claude/skills/demo/SKILL.md"
-    ));
-    assert_eq!(
-        stderr.matches("Dropped frontmatter key").count(),
-        2,
+        stderr.contains(
+            "[WARNING] Claude Code: dropped frontmatter keys argument-hint, disable-model-invocation, model (allowlist targets.skills.frontmatter_keys) from 2 skills\n"
+        ),
         "{stderr}"
     );
+    assert_eq!(
+        stderr.matches("dropped frontmatter key").count(),
+        1,
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Dropped frontmatter key"), "{stderr}");
     project.exuno().arg("check").assert().success();
 }
 
@@ -639,13 +647,24 @@ fn commands_frontmatter_keys_strips_unlisted_keys() {
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "Dropped frontmatter key 'model' from .claude/commands/review.md",
+            "[WARNING] Claude Code: dropped frontmatter keys argument-hint, model (allowlist targets.commands.frontmatter_keys) from 2 commands\n",
         ));
     assert_eq!(
         project.read(".claude/commands/review.md"),
         "---\ndescription: Review a file\n---\nReview $ARGUMENTS.\n"
     );
     project.exuno().arg("check").assert().success();
+
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  commands:\n    frontmatter_keys: [description, argument-hint, model]\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("dropped frontmatter key").not());
 }
 
 #[test]
