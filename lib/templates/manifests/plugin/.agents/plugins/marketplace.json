@@ -1,0 +1,20 @@
+{
+  "name": "${name}",
+  "interface": {
+    "displayName": "${name}"
+  },
+  "plugins": [
+    {
+      "name": "${name}",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

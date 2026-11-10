@@ -1,0 +1,13 @@
+{
+  "name": "${name}",
+  "owner": {
+    "name": "${owner}"
+  },
+  "plugins": [
+    {
+      "name": "${name}",
+      "source": "./plugin",
+      "description": "${description}"
+    }
+  ]
+}

@@ -201,12 +201,12 @@ fn owned_paths(s: &Session, tool: &Tool, key: &str, abs: &str) -> Vec<String> {
     if key != "manifests" {
         return vec![abs.to_string()];
     }
-    manifests::owned_paths(&s.ws, &s.tools_dir, &tool.slug, abs, &s.paths.root)
+    manifests::owned_paths(&s.ws, &s.tools_dir, tool, abs, &s.paths.root)
 }
 
 /// The repo-relative files a `manifests` target at the project root writes.
 fn root_manifest_entries(s: &Session, tool: &Tool) -> Vec<String> {
-    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, &tool.slug) else {
+    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, tool) else {
         return Vec::new();
     };
     let filter = tool.target_filter("manifests");

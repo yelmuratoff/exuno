@@ -272,6 +272,29 @@ fn check_agrees_with_sync_when_shared_inherit_names_a_category_sync_skips() {
 }
 
 #[test]
+fn check_passes_after_a_plugin_sync() {
+    let project = Project::seeded(&[]);
+    project
+        .exuno()
+        .args(["enable", "plugin"])
+        .assert()
+        .success();
+    project.exuno().arg("sync").assert().success();
+    let manifest = ".claude-plugin/marketplace.json";
+    let first = project.read(manifest);
+    let recorded = project.read(".ai/.sync-manifest");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(manifest), first);
+    assert_eq!(project.read(".ai/.sync-manifest"), recorded);
+    check(&project).success();
+
+    project.write(manifest, &first.replace("my-skills", "edited"));
+    check(&project)
+        .code(1)
+        .stdout(predicate::str::contains(manifest));
+}
+
+#[test]
 fn check_help_is_answered_on_stdout_without_rendering() {
     Project::empty()
         .exuno()

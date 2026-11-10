@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::Project;
+use common::{Project, is_ignored};
 use predicates::prelude::*;
 use std::path::Path;
 
@@ -21,6 +21,13 @@ const ENABLED_TOOLS: &[&str] = &[
     "kimi",
     "minimax",
     "opencode",
+    "plugin",
+];
+
+const PLUGIN_MANIFESTS: [&str; 3] = [
+    "plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    ".agents/plugins/marketplace.json",
 ];
 
 const SCOPED_FIXTURE_RULE: &str =
@@ -1083,4 +1090,82 @@ fn sync_warns_when_skills_hide_has_no_settings_file_to_land_in() {
         .stderr(predicate::str::contains(
             "skills.hide has no settings file to land in for Claude Code",
         ));
+}
+
+// ── Plugin ───────────────────────────────────────────────────────────────
+
+#[test]
+fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
+    let project = synced_project();
+    let skill = "---\nname: demo\nargument-hint: <file>\ndescription: Runs the demo\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody.\n";
+    project.write(".ai/src/skills/demo/SKILL.md", skill);
+    let output = project.exuno().arg("sync").assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).unwrap();
+
+    assert_eq!(
+        project.read("plugin/skills/demo/SKILL.md"),
+        "---\nname: demo\ndescription: Runs the demo\n---\n\n# Demo\n\nBody.\n"
+    );
+    for key in ["argument-hint", "disable-model-invocation"] {
+        assert!(
+            stderr.contains(&format!(
+                "Dropped frontmatter key '{key}' from plugin/skills/demo/SKILL.md"
+            )),
+            "{stderr}"
+        );
+    }
+    assert_eq!(project.read(".claude/skills/demo/SKILL.md"), skill);
+    assert!(project.exists("plugin/skills/exuno/SKILL.md"));
+    assert_eq!(
+        project.read("plugin/commands/explicit-only.md"),
+        "---\ndescription: Explicit-only fixture command\n---\n\nBody.\n"
+    );
+    assert!(project.join("plugin/agents").is_dir());
+
+    for rel in PLUGIN_MANIFESTS {
+        let manifest = json(&project, rel);
+        assert_eq!(manifest["name"], "my-skills", "{rel}");
+        assert!(manifest.get("version").is_none(), "{rel}");
+        assert!(project.read(rel).ends_with("}\n"), "{rel}");
+    }
+    let plugin = json(&project, "plugin/plugin.json");
+    assert_eq!(
+        plugin["$schema"],
+        "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+    );
+    assert_eq!(
+        plugin["description"],
+        "Skills, commands and agents synced by Exuno"
+    );
+    let claude = json(&project, ".claude-plugin/marketplace.json");
+    assert_eq!(claude["owner"]["name"], "exuno");
+    assert_eq!(claude["plugins"][0]["name"], "my-skills");
+    assert_eq!(claude["plugins"][0]["source"], "./plugin");
+    let codex = json(&project, ".agents/plugins/marketplace.json");
+    assert_eq!(codex["interface"]["displayName"], "my-skills");
+    assert_eq!(codex["plugins"][0]["source"]["source"], "local");
+    assert_eq!(codex["plugins"][0]["source"]["path"], "./plugin");
+    assert_eq!(codex["plugins"][0]["policy"]["installation"], "AVAILABLE");
+    assert_eq!(codex["plugins"][0]["category"], "Productivity");
+}
+
+#[test]
+fn sync_plugin_outputs_are_not_gitignored() {
+    let project = synced_project();
+    let mut plugin_outputs = vec![
+        "plugin/skills/exuno/SKILL.md",
+        "plugin/commands/explicit-only.md",
+    ];
+    plugin_outputs.extend(PLUGIN_MANIFESTS);
+    for rel in plugin_outputs {
+        assert!(project.exists(rel), "{rel}");
+        assert!(!is_ignored(&project, rel), "{rel}");
+    }
+    for rel in [
+        "CLAUDE.md",
+        ".claude/skills/exuno/SKILL.md",
+        ".agents/skills/exuno/SKILL.md",
+    ] {
+        assert!(is_ignored(&project, rel), "{rel}");
+    }
 }

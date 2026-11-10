@@ -82,7 +82,7 @@ fn tool_dests(
             dests.extend(manifests::owned_paths(
                 &ws,
                 &tools_dir,
-                slug,
+                &tool,
                 &abs,
                 &paths.root,
             ));

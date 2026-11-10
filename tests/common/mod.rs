@@ -126,6 +126,18 @@ pub fn scrub(command: &mut Command) {
         .env("GIT_CONFIG_SYSTEM", absent_git_config());
 }
 
+/// `git check-ignore -q <rel>`: whether git ignores the path.
+pub fn is_ignored(project: &Project, rel: &str) -> bool {
+    StdCommand::new("git")
+        .args(["check-ignore", "-q", rel])
+        .current_dir(project.path())
+        .env("GIT_CONFIG_GLOBAL", absent_git_config())
+        .env("GIT_CONFIG_SYSTEM", absent_git_config())
+        .status()
+        .unwrap()
+        .success()
+}
+
 fn absent_git_config() -> PathBuf {
     std::env::temp_dir().join("agentsync-tests-absent-gitconfig")
 }

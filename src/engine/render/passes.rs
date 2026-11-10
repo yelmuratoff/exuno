@@ -377,7 +377,7 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
         }
         if key == "manifests" {
             let root = s.paths.root.clone();
-            for owned in manifests::owned_paths(&s.ws, &s.tools_dir, &tool.slug, &abs, &root) {
+            for owned in manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs, &root) {
                 if run.protected.contains(&owned) {
                     continue;
                 }

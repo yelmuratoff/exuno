@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::config::tool::Tool;
 use crate::engine::workspace::Workspace;
 use crate::paths::ENGINE_ROOT;
 
@@ -61,18 +62,28 @@ fn is_key(key: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
-fn shipped_dir(slug: &str) -> String {
-    format!("{ENGINE_ROOT}/lib/templates/manifests/{slug}")
+/// The template directories that may serve `tool`, most specific first: the
+/// project's `<tools dir>/<slug>/manifests/`, then the shipped set, each for
+/// the tool and then for its `base:` tool.
+fn candidate_dirs(tools_dir: &str, tool: &Tool) -> Vec<String> {
+    let base = tool.base_name();
+    let slugs: Vec<&str> = [tool.slug.as_str(), base.as_str()]
+        .into_iter()
+        .filter(|slug| !slug.is_empty())
+        .collect();
+    let overrides = slugs
+        .iter()
+        .map(|slug| format!("{tools_dir}/{slug}/manifests"));
+    let shipped = slugs
+        .iter()
+        .map(|slug| format!("{ENGINE_ROOT}/lib/templates/manifests/{slug}"));
+    overrides.chain(shipped).collect()
 }
 
-fn override_dir(tools_dir: &str, slug: &str) -> String {
-    format!("{tools_dir}/{slug}/manifests")
-}
-
-/// The directory a tool's templates come from: the project's override when it
-/// exists, else the shipped set; `None` when the tool has neither.
-pub fn template_dir(ws: &Workspace, tools_dir: &str, slug: &str) -> Option<String> {
-    [override_dir(tools_dir, slug), shipped_dir(slug)]
+/// The directory a tool's templates come from: the first candidate that
+/// exists; `None` when the tool has no templates at all.
+pub fn template_dir(ws: &Workspace, tools_dir: &str, tool: &Tool) -> Option<String> {
+    candidate_dirs(tools_dir, tool)
         .into_iter()
         .find(|dir| ws.is_dir(dir))
 }
@@ -90,19 +101,19 @@ pub fn templates(ws: &Workspace, dir: &str) -> Vec<String> {
 
 /// The paths a `manifests` target at `dest` owns: `dest` itself when it is a
 /// directory of its own, and below the project root only the files a template
-/// of either set (override or shipped) maps to, so nothing else there is
-/// ever snapshotted, cleaned, or pruned as the target's.
+/// of any candidate set maps to, so nothing else there is ever snapshotted,
+/// cleaned, or pruned as the target's.
 pub fn owned_paths(
     ws: &Workspace,
     tools_dir: &str,
-    slug: &str,
+    tool: &Tool,
     dest: &str,
     root: &str,
 ) -> Vec<String> {
     if dest != root {
         return vec![dest.to_string()];
     }
-    let rels: BTreeSet<String> = [override_dir(tools_dir, slug), shipped_dir(slug)]
+    let rels: BTreeSet<String> = candidate_dirs(tools_dir, tool)
         .iter()
         .flat_map(|dir| templates(ws, dir))
         .collect();

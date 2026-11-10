@@ -4,26 +4,8 @@
 
 mod common;
 
-use std::process::Command as StdCommand;
-
-use common::Project;
+use common::{Project, is_ignored};
 use predicates::prelude::*;
-
-/// `git check-ignore -q <rel>`: whether git ignores the path.
-fn is_ignored(project: &Project, rel: &str) -> bool {
-    StdCommand::new("git")
-        .args(["check-ignore", "-q", rel])
-        .current_dir(project.path())
-        .env("GIT_CONFIG_GLOBAL", absent_git_config())
-        .env("GIT_CONFIG_SYSTEM", absent_git_config())
-        .status()
-        .unwrap()
-        .success()
-}
-
-fn absent_git_config() -> std::path::PathBuf {
-    std::env::temp_dir().join("agentsync-tests-absent-gitconfig")
-}
 
 /// Rewrite the `outputs:` line in `.ai/exuno.yaml`.
 fn set_outputs_mode(project: &Project, mode: &str) {

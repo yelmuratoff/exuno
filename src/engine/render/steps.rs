@@ -465,7 +465,7 @@ pub(super) fn sync_manifests_step(s: &mut Session, tool: &Tool, dests: &Dests) -
     if dests.manifests.is_empty() {
         return Ok(());
     }
-    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, &tool.slug) else {
+    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, tool) else {
         return Ok(());
     };
     let filter = tool.target_filter("manifests");
@@ -508,7 +508,7 @@ pub(super) fn sync_manifests_step(s: &mut Session, tool: &Tool, dests: &Dests) -
     }
     let root = s.paths.root.clone();
     let mut removed = 0;
-    for owned in manifests::owned_paths(&s.ws, &s.tools_dir, &tool.slug, &dests.manifests, &root) {
+    for owned in manifests::owned_paths(&s.ws, &s.tools_dir, tool, &dests.manifests, &root) {
         removed += if s.dry_run {
             file_ops::recorded_under(s, &owned)
                 .iter()

@@ -449,3 +449,24 @@ fn profile_add_scaffolds_a_readme_not_empty_overlay_dirs() {
     assert!(!project.join(".ai/profiles/hub/src/rules").is_dir());
     assert!(!project.join(".ai/profiles/hub/src/skills").is_dir());
 }
+
+#[test]
+fn a_plugin_profile_variant_renders_the_base_manifests_outside_gitignore() {
+    let project = Project::seeded(&["--no-detect", "--yes", "--outputs", "local"]);
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "plugin"])
+        .assert()
+        .success();
+    project.exuno().arg("sync").assert().success();
+    for rel in [
+        ".plugin-hub/plugin/plugin.json",
+        ".plugin-hub/.claude-plugin/marketplace.json",
+        ".plugin-hub/.agents/plugins/marketplace.json",
+    ] {
+        assert!(project.read(rel).contains("\"my-skills\""), "{rel}");
+    }
+    assert!(project.exists(".plugin-hub/skills/exuno/SKILL.md"));
+    assert!(!project.read(".gitignore").contains(".plugin-hub"));
+    project.exuno().arg("check").assert().success();
+}
