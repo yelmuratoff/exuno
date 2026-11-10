@@ -375,9 +375,8 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
             }
             continue;
         }
-        let root = s.paths.root.clone();
         let owned = if key == "manifests" {
-            manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs, &root)
+            manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs)
         } else if tool.value(&format!("targets.{key}.cleanup")) == "recorded" {
             vec![abs]
         } else {

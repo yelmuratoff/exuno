@@ -181,8 +181,10 @@ targets:
   # directory is missing) is written to the same relative path below `dest`,
   # with every ${key} filled from vars.<key>. In a .json template each value
   # is JSON-escaped and the result must parse. A missing value stops the sync.
-  # Sync owns only the files it wrote, so `dest: "."` leaves the rest of the
-  # project alone.
+  # The target owns only the paths its templates map to, so `dest: "."` or a
+  # directory another tool writes to is safe. When you delete a template from
+  # the override directory, its old output stays; neither sync nor check
+  # notices it, so remove that file by hand.
   # manifests:
   #   dest: "."
   #   vars:

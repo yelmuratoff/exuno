@@ -175,13 +175,10 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
         if tool.flag(&format!("targets.{key}.gitignore")) == Some(false) {
             continue;
         }
-        let entries = if key == "manifests" && abs == s.paths.root {
-            root_manifest_entries(s, tool)
+        let entries = if key == "manifests" {
+            manifest_entries(s, tool, &rel)
         } else {
-            if matches!(
-                key,
-                "rules" | "skills" | "commands" | "subagents" | "manifests"
-            ) {
+            if matches!(key, "rules" | "skills" | "commands" | "subagents") {
                 rel.push('/');
             }
             vec![rel]
@@ -196,16 +193,16 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
 }
 
 /// What a target at `abs` claims: the dest itself, or for a `manifests`
-/// target at the project root only the files its templates map to.
+/// target only the files its templates map to.
 fn owned_paths(s: &Session, tool: &Tool, key: &str, abs: &str) -> Vec<String> {
     if key != "manifests" {
         return vec![abs.to_string()];
     }
-    manifests::owned_paths(&s.ws, &s.tools_dir, tool, abs, &s.paths.root)
+    manifests::owned_paths(&s.ws, &s.tools_dir, tool, abs)
 }
 
-/// The repo-relative files a `manifests` target at the project root writes.
-fn root_manifest_entries(s: &Session, tool: &Tool) -> Vec<String> {
+/// The repo-relative files a `manifests` target at `dest_rel` writes.
+fn manifest_entries(s: &Session, tool: &Tool, dest_rel: &str) -> Vec<String> {
     let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, tool) else {
         return Vec::new();
     };
@@ -213,5 +210,9 @@ fn root_manifest_entries(s: &Session, tool: &Tool) -> Vec<String> {
     manifests::templates(&s.ws, &dir)
         .into_iter()
         .filter(|rel| filter.accepts(rel))
+        .map(|rel| match dest_rel {
+            "." => rel,
+            dest => format!("{dest}/{rel}"),
+        })
         .collect()
 }

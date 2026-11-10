@@ -79,7 +79,7 @@ fn manifests_exclude_skips_matching_templates() {
     );
     project.exuno().arg("sync").assert().success();
     assert!(project.exists("out/a.json"));
-    assert!(!project.exists("out/nested/b.json"));
+    assert!(!project.exists("out/nested"));
     project.exuno().arg("check").assert().success();
 }
 
@@ -96,18 +96,46 @@ fn a_root_dest_leaves_unrelated_root_files_alone() {
     assert_eq!(project.read("nested/user.json"), "{}\n");
     project.exuno().arg("check").assert().success();
 
+    let claude_md = project.read("CLAUDE.md");
+    let core_rule = project.read(".claude/rules/core.md");
     project.write(
         ".ai/src/tools/demo.yaml",
         &demo_yaml(".", "").replace("enabled: true", "enabled: false"),
     );
-    project.exuno().arg("sync").assert().success();
+    project
+        .exuno()
+        .args(["sync", "--skip", "claude"])
+        .assert()
+        .success();
     assert!(!project.exists("a.json"));
     assert!(!project.exists("nested/b.json"));
     assert_eq!(project.read("notes.txt"), "mine\n");
     assert_eq!(project.read("nested/user.json"), "{}\n");
-    assert!(project.exists("CLAUDE.md"));
+    assert_eq!(project.read("CLAUDE.md"), claude_md);
+    assert_eq!(project.read(".claude/rules/core.md"), core_rule);
     assert!(project.exists(".ai/exuno.yaml"));
     assert!(project.exists(".ai/src/tools/demo/manifests/a.json"));
+}
+
+#[test]
+fn a_dest_shared_with_another_tool_prunes_only_template_outputs() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/tools/aaa.yaml", &demo_yaml(".claude", ""));
+    project.write(".ai/src/tools/aaa/manifests/a.json", A_JSON);
+    project.exuno().arg("sync").assert().success();
+    let core_rule = project.read(".claude/rules/core.md");
+    assert!(project.exists(".claude/a.json"));
+
+    project
+        .exuno()
+        .args(["sync", "--only", "aaa"])
+        .assert()
+        .success();
+    assert!(project.exists(".claude/a.json"));
+    assert_eq!(project.read(".claude/rules/core.md"), core_rule);
+    assert!(project.exists(".claude/skills/exuno/SKILL.md"));
+    assert!(project.exists(".claude/settings.json"));
 }
 
 #[test]
@@ -133,13 +161,13 @@ fn a_root_dest_lists_its_files_in_the_managed_gitignore_block() {
 }
 
 #[test]
-fn removing_a_template_removes_only_its_output() {
+fn removing_an_override_template_leaves_its_output_in_place() {
     let project = demo("out", "");
     project.exuno().arg("sync").assert().success();
     project.write("out/user.txt", "mine\n");
     std::fs::remove_file(project.join(".ai/src/tools/demo/manifests/nested/b.json")).unwrap();
     project.exuno().arg("sync").assert().success();
-    assert!(!project.exists("out/nested/b.json"));
+    assert!(project.exists("out/nested/b.json"));
     assert!(project.exists("out/a.json"));
     assert_eq!(project.read("out/user.txt"), "mine\n");
 }

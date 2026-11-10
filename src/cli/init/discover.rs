@@ -79,13 +79,7 @@ fn tool_dests(
         if key == "manifests" {
             let ws = Workspace::on_disk(&paths.root);
             let tools_dir = project.user_tools_dir().disk_text();
-            dests.extend(manifests::owned_paths(
-                &ws,
-                &tools_dir,
-                &tool,
-                &abs,
-                &paths.root,
-            ));
+            dests.extend(manifests::owned_paths(&ws, &tools_dir, &tool, &abs));
         } else {
             dests.push(abs);
         }

@@ -506,17 +506,20 @@ pub(super) fn sync_manifests_step(s: &mut Session, tool: &Tool, dests: &Dests) -
             s.record_write(path);
         }
     }
-    let root = s.paths.root.clone();
     let mut removed = 0;
-    for owned in manifests::owned_paths(&s.ws, &s.tools_dir, tool, &dests.manifests, &root) {
-        removed += if s.dry_run {
-            file_ops::recorded_under(s, &owned)
+    for owned in manifests::owned_paths(&s.ws, &s.tools_dir, tool, &dests.manifests) {
+        if s.dry_run {
+            removed += file_ops::recorded_under(s, &owned)
                 .iter()
                 .filter(|file| !rendered.iter().any(|(path, _)| path == *file))
-                .count()
-        } else {
-            file_ops::remove_recorded(s, &owned).map_err(|e| io(s, e))?
-        };
+                .count();
+            continue;
+        }
+        let went = file_ops::remove_recorded(s, &owned).map_err(|e| io(s, e))?;
+        if went > 0 {
+            file_ops::remove_empty_parents(s, &owned, &dests.manifests).map_err(|e| io(s, e))?;
+        }
+        removed += went;
     }
     let suffix = if s.dry_run { " (dry-run)" } else { "" };
     s.log.step(&format!(
