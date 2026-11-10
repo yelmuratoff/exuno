@@ -1139,6 +1139,10 @@ fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
     );
     let claude = json(&project, ".claude-plugin/marketplace.json");
     assert_eq!(claude["owner"]["name"], "exuno");
+    assert_eq!(
+        claude["description"],
+        "Skills, commands and agents synced by Exuno"
+    );
     assert_eq!(claude["plugins"][0]["name"], "my-skills");
     assert_eq!(claude["plugins"][0]["source"], "./plugin");
     let codex = json(&project, ".agents/plugins/marketplace.json");
@@ -1221,5 +1225,23 @@ fn disabling_the_plugin_removes_only_what_it_wrote() {
         assert!(!project.exists(gone), "{gone}");
     }
     assert!(project.exists("CLAUDE.md"));
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn a_tool_based_on_plugin_renders_the_plugin_templates_with_its_own_vars() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/tools/team.yaml",
+        "base: plugin\nenabled: true\ntargets:\n  manifests:\n    vars:\n      name: \"team-skills\"\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    for rel in PLUGIN_MANIFESTS {
+        assert_eq!(json(&project, rel)["name"], "team-skills", "{rel}");
+    }
+    assert_eq!(
+        json(&project, ".claude-plugin/marketplace.json")["owner"]["name"],
+        "exuno"
+    );
     project.exuno().arg("check").assert().success();
 }

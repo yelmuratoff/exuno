@@ -451,22 +451,16 @@ fn profile_add_scaffolds_a_readme_not_empty_overlay_dirs() {
 }
 
 #[test]
-fn a_plugin_profile_variant_renders_the_base_manifests_outside_gitignore() {
-    let project = Project::seeded(&["--no-detect", "--yes", "--outputs", "local"]);
+fn profile_add_refuses_the_plugin_tool_before_writing() {
+    let project = seeded();
     project
         .exuno()
         .args(["profile", "add", "hub", "--tools", "plugin"])
         .assert()
-        .success();
-    project.exuno().arg("sync").assert().success();
-    for rel in [
-        ".plugin-hub/plugin/plugin.json",
-        ".plugin-hub/.claude-plugin/marketplace.json",
-        ".plugin-hub/.agents/plugins/marketplace.json",
-    ] {
-        assert!(project.read(rel).contains("\"my-skills\""), "{rel}");
-    }
-    assert!(project.exists(".plugin-hub/skills/exuno/SKILL.md"));
-    assert!(!project.read(".gitignore").contains(".plugin-hub"));
-    project.exuno().arg("check").assert().success();
+        .code(2)
+        .stderr(predicate::str::contains(
+            "does not support config-home profiles",
+        ));
+    assert!(!project.exists(".ai/profiles/hub"));
+    assert!(!project.exists(".ai/src/tools/plugin-hub.yaml"));
 }

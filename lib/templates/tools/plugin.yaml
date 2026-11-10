@@ -1,5 +1,8 @@
 name: "Agent plugin (claude.ai, ChatGPT, Codex)"
 enabled: false
+# A config-home variant would move the plugin folder while the marketplace
+# indexes still point at ./plugin.
+profile_supported: false
 
 # claude.ai, ChatGPT and Codex pull this plugin from the repository, so every
 # output stays out of the managed .gitignore block and is committed. The dests
