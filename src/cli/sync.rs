@@ -668,7 +668,19 @@ fn finalize(
             ignored.extend(run.gitignore_generated.iter().cloned());
             ignored.push(manifest::REL.to_string());
         }
-        let path = Path::new(&root).join(".gitignore");
+        if let Some(reason) = s.paths.unsafe_output(&format!("{root}/.gitignore"), true) {
+            let refusal = Error::UnsafeOutput {
+                action: "write",
+                path: ".gitignore".to_string(),
+                reason,
+            };
+            s.log.error(&refusal.to_string());
+            return Err(Stop(1));
+        }
+        // A rename would replace a `.gitignore` link with a plain file, so an
+        // in-project link is written at the file it points to.
+        let link = Path::new(&root).join(".gitignore");
+        let path = std::fs::canonicalize(&link).unwrap_or(link);
         if !ignored.is_empty() || gitignore::has_managed_block(&path) {
             s.log.info("Updating .gitignore");
             gitignore::update(&path, &ignored, &mut s.log).map_err(|e| io(s, e))?;

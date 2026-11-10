@@ -1665,3 +1665,50 @@ fn an_unrecorded_command_skill_folder_is_kept_and_a_recorded_obsolete_one_goes()
         "mine\n"
     );
 }
+
+/// A seeded project with local outputs, so sync manages `.gitignore`, and no
+/// `.gitignore` yet.
+#[cfg(unix)]
+fn local_outputs_project() -> Project {
+    let project = Project::seeded(&["--outputs", "local"]);
+    let _ = std::fs::remove_file(project.join(".gitignore"));
+    project.enable_tools(&["claude"]);
+    project
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_a_gitignore_link_that_leaves_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("ignore.txt");
+    std::fs::write(&target, "outside\n").unwrap();
+    let project = local_outputs_project();
+    std::os::unix::fs::symlink(&target, project.join(".gitignore")).unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Refusing to write .gitignore: .gitignore is a symlink to",
+        ));
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "outside\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_writes_through_a_gitignore_link_inside_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = local_outputs_project();
+    project.write("config/gitignore", "node_modules/\n");
+    std::os::unix::fs::symlink("config/gitignore", project.join(".gitignore")).unwrap();
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.exuno().arg("sync").assert().success();
+    let meta = std::fs::symlink_metadata(project.join(".gitignore")).unwrap();
+    assert!(meta.file_type().is_symlink());
+    let text = project.read("config/gitignore");
+    assert!(text.starts_with("node_modules/\n"), "{text}");
+    assert!(text.contains("AI SYNC GENERATED START"), "{text}");
+}
