@@ -4,7 +4,7 @@
 
 use crate::engine::filters::Filter;
 use crate::engine::session::Session;
-use crate::{Error, engine::convert, engine::file_ops, paths, text};
+use crate::{Error, engine::convert, engine::file_ops, engine::frontmatter, paths, text};
 
 /// `add_header`: `printf '%b\n'` of the header, a blank line, the file.
 pub fn add_header(file: &[u8], header: &str) -> Vec<u8> {
@@ -15,17 +15,6 @@ pub fn add_header(file: &[u8], header: &str) -> Vec<u8> {
     out.push(b'\n');
     out.extend_from_slice(file);
     out
-}
-
-fn frontmatter_key(line: &[u8]) -> Option<&[u8]> {
-    let first = *line.first()?;
-    if !(first.is_ascii_alphabetic() || first == b'_') {
-        return None;
-    }
-    let end = line
-        .iter()
-        .position(|b| !(b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-'))?;
-    (line[end] == b':').then_some(&line[..end])
 }
 
 /// `merge_or_prepend_header`: a file without frontmatter gets the header; a
@@ -45,7 +34,7 @@ pub fn merge_or_prepend_header(file: &[u8], header: &str) -> Vec<u8> {
             in_fm = true;
             continue;
         }
-        if in_fm && let Some(key) = frontmatter_key(line) {
+        if in_fm && let Some(key) = frontmatter::key(line) {
             existing.push(key);
         }
     }
@@ -55,7 +44,7 @@ pub fn merge_or_prepend_header(file: &[u8], header: &str) -> Vec<u8> {
         if hline == b"---" || hline.is_empty() {
             continue;
         }
-        if let Some(key) = frontmatter_key(hline)
+        if let Some(key) = frontmatter::key(hline)
             && !existing.contains(&key)
         {
             additions.extend_from_slice(hline);

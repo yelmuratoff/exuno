@@ -5,6 +5,7 @@ pub mod codex_toml;
 pub mod convert;
 pub mod file_ops;
 pub mod filters;
+pub mod frontmatter;
 pub mod gitignore;
 pub mod json_keys;
 pub mod keyed;

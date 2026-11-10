@@ -5,6 +5,7 @@ use super::{Run, Step, Stop, io, tools};
 use crate::config::skill_metadata;
 use crate::config::tool::Tool;
 use crate::engine::filters::Filter;
+use crate::engine::frontmatter;
 use crate::engine::keyed;
 use crate::engine::rules::{self, Conversion, RuleOptions};
 use crate::engine::session::Session;
@@ -273,8 +274,15 @@ pub(super) fn sync_skills_step(
         refuse_hidden_skill_names(s, &src_skills, &filter, &hidden_skills(run))?;
         refuse_skill_collisions(s, &src_skills, &filter)?;
         let effective = filter.excluding("command-*");
-        return file_ops::sync_skills_dir(s, &src_skills, &dests.skills, &effective)
-            .map_err(|e| io(s, e));
+        file_ops::sync_skills_dir(s, &src_skills, &dests.skills, &effective)
+            .map_err(|e| io(s, e))?;
+        let written: Vec<String> = skill_tree::discover(&s.ws, &src_skills)
+            .skills
+            .into_iter()
+            .filter(|skill| effective.accepts_skill(skill))
+            .map(|skill| format!("{}/{}/SKILL.md", dests.skills, skill.name))
+            .collect();
+        return retain_frontmatter_keys(s, tool, "skills", &written);
     }
     if tool.value("targets.skills.inline_into_agents") == "true" && s.ws.is_dir(&src_skills) {
         refuse_hidden_skill_names(s, &src_skills, &filter, &hidden_skills(run))?;
@@ -314,19 +322,40 @@ pub(super) fn sync_commands_step(
     }
 
     if !dests.commands.is_empty() {
-        let result = if tool.value("targets.commands.format") == "toml" {
-            rules::sync_converted(s, &src, &dests.commands, Conversion::CommandToml, &filter)
-        } else {
-            let extension = tool.value("targets.commands.extension");
-            let opts = RuleOptions {
-                extension: &extension,
-                header: "",
-                scoped_header: "",
-                filter: &filter,
-            };
-            rules::sync_rules(s, &src, &dests.commands, &opts)
+        if tool.value("targets.commands.format") == "toml" {
+            return rules::sync_converted(
+                s,
+                &src,
+                &dests.commands,
+                Conversion::CommandToml,
+                &filter,
+            )
+            .map_err(|e| io(s, e));
+        }
+        let extension = tool.value("targets.commands.extension");
+        let opts = RuleOptions {
+            extension: &extension,
+            header: "",
+            scoped_header: "",
+            filter: &filter,
         };
-        return result.map_err(|e| io(s, e));
+        rules::sync_rules(s, &src, &dests.commands, &opts).map_err(|e| io(s, e))?;
+        let written: Vec<String> =
+            s.ws.glob(&src)
+                .into_iter()
+                .filter(|name| {
+                    name.ends_with(".md")
+                        && filter.accepts(name)
+                        && s.ws.is_file(&format!("{src}/{name}"))
+                })
+                .map(|name| match name.strip_suffix(".md") {
+                    Some(stem) if !extension.is_empty() => {
+                        format!("{}/{stem}{extension}", dests.commands)
+                    }
+                    _ => format!("{}/{name}", dests.commands),
+                })
+                .collect();
+        return retain_frontmatter_keys(s, tool, "commands", &written);
     }
     if tool.value("targets.commands.as_skills") == "true" && !dests.skills.is_empty() {
         s.log
@@ -352,6 +381,41 @@ pub(super) fn sync_commands_step(
             ));
             rules::inline_commands_to_file(s, &src, &target, &filter).map_err(|e| io(s, e))?;
         }
+    }
+    Ok(())
+}
+
+/// `targets.<target>.frontmatter_keys`: each written file keeps only the
+/// listed top-level frontmatter keys, and every dropped key is a warning.
+fn retain_frontmatter_keys(s: &mut Session, tool: &Tool, target: &str, files: &[String]) -> Step {
+    let keep: Vec<String> = tool
+        .filter(&format!("targets.{target}.frontmatter_keys"))
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    if keep.is_empty() || s.dry_run {
+        return Ok(());
+    }
+    for path in files {
+        if !s.ws.is_file(path) {
+            continue;
+        }
+        let bytes = s.ws.read(path).map_err(|e| io(s, e))?;
+        let Ok(text) = String::from_utf8(bytes) else {
+            continue;
+        };
+        let (filtered, dropped) = frontmatter::retain_keys(&text, &keep);
+        if dropped.is_empty() {
+            continue;
+        }
+        let shown = s.display(path);
+        for key in dropped {
+            s.log
+                .warning(&format!("Dropped frontmatter key '{key}' from {shown}"));
+        }
+        s.ws.write(path, filtered.into_bytes())
+            .map_err(|e| io(s, e))?;
+        s.record_write(path);
     }
     Ok(())
 }

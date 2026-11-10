@@ -546,3 +546,65 @@ fn sync_json_on_a_dry_run_reports_no_writes_and_no_backup() {
         ))
         .stdout(predicate::str::starts_with("{\"dry_run\":true,"));
 }
+
+// ── frontmatter_keys keeps only the listed frontmatter keys ─────────────
+
+#[test]
+fn skills_frontmatter_keys_strips_unlisted_keys_and_warns() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    frontmatter_keys: [name, description]\n",
+    );
+    project.write(
+        ".ai/src/skills/demo/SKILL.md",
+        "---\nname: demo\nargument-hint: <file>\ndescription: >-\n  Does the demo\n  in two lines\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody: kept.\n",
+    );
+    let output = project.exuno().arg("sync").assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\ndescription: >-\n  Does the demo\n  in two lines\n---\n\n# Demo\n\nBody: kept.\n"
+    );
+    assert!(
+        stderr
+            .contains("Dropped frontmatter key 'argument-hint' from .claude/skills/demo/SKILL.md")
+    );
+    assert!(stderr.contains(
+        "Dropped frontmatter key 'disable-model-invocation' from .claude/skills/demo/SKILL.md"
+    ));
+    assert_eq!(
+        stderr.matches("Dropped frontmatter key").count(),
+        2,
+        "{stderr}"
+    );
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn commands_frontmatter_keys_strips_unlisted_keys() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  commands:\n    frontmatter_keys: [description]\n",
+    );
+    project.write(
+        ".ai/src/commands/review.md",
+        "---\ndescription: Review a file\nargument-hint: <file>\nmodel: haiku\n---\nReview $ARGUMENTS.\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Dropped frontmatter key 'model' from .claude/commands/review.md",
+        ));
+    assert_eq!(
+        project.read(".claude/commands/review.md"),
+        "---\ndescription: Review a file\n---\nReview $ARGUMENTS.\n"
+    );
+    project.exuno().arg("check").assert().success();
+}
