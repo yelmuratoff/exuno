@@ -176,6 +176,21 @@ pub fn recorded_under(s: &Session, path: &str) -> Vec<String> {
     files.into_iter().filter(|file| s.recorded(file)).collect()
 }
 
+/// Removes each directory above `path` that is empty, deepest first, up to
+/// but not including `stop`.
+pub fn remove_empty_parents(s: &mut Session, path: &str, stop: &str) -> Result<(), Error> {
+    let mut dir = paths::parent(path);
+    while dir != stop
+        && paths::is_within(&dir, stop)
+        && s.ws.is_dir(&dir)
+        && s.ws.list(&dir).is_empty()
+    {
+        s.ws.remove(&dir)?;
+        dir = paths::parent(&dir);
+    }
+    Ok(())
+}
+
 /// Whether `dir` ended up removed, being empty once its empty children went.
 fn remove_empty_dirs(s: &mut Session, dir: &str) -> Result<bool, Error> {
     let mut empty = true;

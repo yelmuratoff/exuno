@@ -199,6 +199,7 @@ targets:
 | `source` (settings, MCP, hooks) | A declared source path. The canonical `.ai/src/tools/<tool>/<resource>.<ext>` beats it automatically. |
 | `enabled` (on a target) | `false` turns off one output category while the rest keep syncing |
 | `gitignore: false` | On any target: keeps its dest out of the managed `.gitignore` block, for output a host reads from the repository (`plugin`) |
+| `cleanup: recorded` | On any target: when the tool is disabled, cleanup removes only the files the manifest records under the dest, not the whole dest (`plugin`) |
 | `frontmatter_keys` (skills, commands) | Keeps only the listed top-level frontmatter keys in each synced `SKILL.md` or command, and warns once for each key it drops (`plugin`) |
 | `manifests` (target) | Writes each template under `.ai/src/tools/<tool>/manifests/` (or the tool's shipped set) to the same path under `dest`, filling `${key}` from `vars.<key>`. Values in a `.json` template are JSON-escaped and the result must parse. `include` / `exclude` filter template paths. Sync owns only the files it wrote, so `dest: "."` is safe (`plugin`) |
 | `legacy_dest` | Where an earlier config wrote the target. Once the target moves, sync removes the files there that the manifest recorded (Windsurf, Cline) |

@@ -196,5 +196,9 @@ targets:
   # `gitignore: false` works on any target: the dest stays out of the managed
   # .gitignore block, for output a host reads from the repository.
 
+  # `cleanup: recorded` works on any target: once the tool is disabled, cleanup
+  # removes only the files the manifest records under the dest, instead of the
+  # whole dest, so hand-written files there stay.
+
 # Optional: Command to run after sync (e.g. linter or formatter)
 # post_sync: "npx prettier --write .tool/rules/*.mdc"

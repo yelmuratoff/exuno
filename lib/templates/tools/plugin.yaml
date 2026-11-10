@@ -2,26 +2,31 @@ name: "Agent plugin (claude.ai, ChatGPT, Codex)"
 enabled: false
 
 # claude.ai, ChatGPT and Codex pull this plugin from the repository, so every
-# output stays out of the managed .gitignore block and is committed.
+# output stays out of the managed .gitignore block and is committed. The dests
+# are ordinary project paths, so a disabled plugin removes only what sync wrote.
 targets:
   skills:
     dest: "plugin/skills"
     gitignore: false
+    cleanup: recorded
     # claude.ai rejects a skill whose frontmatter carries any other key.
     frontmatter_keys: [name, description, license, compatibility, metadata, allowed-tools]
 
   commands:
     dest: "plugin/commands"
     gitignore: false
+    cleanup: recorded
     frontmatter_keys: [description]
 
   subagents:
     dest: "plugin/agents"
     gitignore: false
+    cleanup: recorded
 
   manifests:
     dest: "."
     gitignore: false
+    cleanup: recorded
     vars:
       name: "my-skills"
       description: "Skills, commands and agents synced by Exuno"

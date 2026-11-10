@@ -375,34 +375,49 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
             }
             continue;
         }
-        if key == "manifests" {
-            let root = s.paths.root.clone();
-            for owned in manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs, &root) {
-                if run.protected.contains(&owned) {
-                    continue;
-                }
-                let Ok(removed) = file_ops::remove_recorded(s, &owned) else {
-                    continue;
-                };
-                if removed > 0 {
-                    let verb = if s.dry_run { "Would remove" } else { "Removed" };
-                    s.log.step(&format!(
-                        "{verb} {removed} manifest output(s) at {}",
-                        s.display(&owned)
-                    ));
-                    cleaned = true;
-                }
+        let root = s.paths.root.clone();
+        let owned = if key == "manifests" {
+            manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs, &root)
+        } else if tool.value(&format!("targets.{key}.cleanup")) == "recorded" {
+            vec![abs]
+        } else {
+            if !run.protected.contains(&abs) && file_ops::cleanup_path(s, &abs) {
+                cleaned = true;
             }
             continue;
-        }
-        if !run.protected.contains(&abs) && file_ops::cleanup_path(s, &abs) {
-            cleaned = true;
+        };
+        for path in owned {
+            if !run.protected.contains(&path) && remove_recorded_outputs(s, &path) {
+                cleaned = true;
+            }
         }
     }
     if cleaned {
         s.log.info(&format!("Cleaned up {display} (disabled)"));
         run.printed = true;
     }
+}
+
+/// Removes the files at or below `path` the previous manifest records, then
+/// the directories that leaves empty; true when something went. A failed
+/// removal is not an error, as for `cleanup_path`.
+fn remove_recorded_outputs(s: &mut Session, path: &str) -> bool {
+    let Ok(removed) = file_ops::remove_recorded(s, path) else {
+        return false;
+    };
+    if removed == 0 {
+        return false;
+    }
+    let verb = if s.dry_run { "Would remove" } else { "Removed" };
+    s.log.step(&format!(
+        "{verb} {removed} recorded output(s) at {}",
+        s.display(path)
+    ));
+    if !s.dry_run {
+        let root = s.paths.root.clone();
+        let _ = file_ops::remove_empty_parents(s, path, &root);
+    }
+    true
 }
 
 #[cfg(test)]

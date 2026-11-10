@@ -1169,3 +1169,57 @@ fn sync_plugin_outputs_are_not_gitignored() {
         assert!(is_ignored(&project, rel), "{rel}");
     }
 }
+
+const HAND_WRITTEN_SKILL: &str = "plugin/skills/mine/SKILL.md";
+
+#[test]
+fn a_disabled_plugin_leaves_hand_written_files_in_its_dests() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(HAND_WRITTEN_SKILL, "---\nname: mine\n---\n");
+    project.write("plugin/agents/mine.md", "mine\n");
+    project.write(".claude-plugin/marketplace.json", "{}\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Cleaned up Agent plugin").not());
+    assert_eq!(project.read(HAND_WRITTEN_SKILL), "---\nname: mine\n---\n");
+    assert_eq!(project.read("plugin/agents/mine.md"), "mine\n");
+    assert_eq!(project.read(".claude-plugin/marketplace.json"), "{}\n");
+}
+
+#[test]
+fn disabling_the_plugin_removes_only_what_it_wrote() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "plugin"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists("plugin/skills/exuno/SKILL.md"));
+    project.write(HAND_WRITTEN_SKILL, "---\nname: mine\n---\n");
+
+    project
+        .exuno()
+        .args(["disable", "plugin"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Cleaned up Agent plugin"));
+    assert_eq!(project.read(HAND_WRITTEN_SKILL), "---\nname: mine\n---\n");
+    for gone in [
+        "plugin/skills/exuno",
+        "plugin/commands",
+        "plugin/agents",
+        "plugin/plugin.json",
+        ".claude-plugin",
+        ".agents",
+    ] {
+        assert!(!project.exists(gone), "{gone}");
+    }
+    assert!(project.exists("CLAUDE.md"));
+    project.exuno().arg("check").assert().success();
+}
