@@ -354,7 +354,7 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
     if run.cleanup != "true" {
         return;
     }
-    let mut cleaned = false;
+    let mut owned_paths: Vec<String> = Vec::new();
     for key in TARGET_KEYS {
         let raw = tool.value(&format!("targets.{key}.dest"));
         if raw.is_empty() {
@@ -376,26 +376,30 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
             }
             continue;
         }
-        let owned = if key == "manifests" {
-            manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs)
+        if key == "manifests" {
+            owned_paths.extend(manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs));
         } else {
-            vec![abs]
-        };
-        for path in owned {
-            if run.protected.contains(&path) {
-                continue;
-            }
-            if s.ws.exists(&path) && file_ops::recorded_under(s, &path).is_empty() {
-                s.log.info(&format!(
-                    "Left {} in place: {display} is disabled and sync recorded no files there",
-                    s.display(&path)
-                ));
-                run.printed = true;
-                continue;
-            }
-            if remove_recorded_outputs(s, &path, &run.protected) {
-                cleaned = true;
-            }
+            owned_paths.push(abs);
+        }
+    }
+    owned_paths.retain(|path| !run.protected.contains(path));
+    let has_history = owned_paths
+        .iter()
+        .any(|path| !file_ops::recorded_under(s, path).is_empty());
+    if !has_history {
+        return;
+    }
+    let mut cleaned = false;
+    for path in owned_paths {
+        if remove_recorded_outputs(s, &path, &run.protected) {
+            cleaned = true;
+        }
+        if !s.dry_run && s.ws.exists(&path) && s.ws.is_dir(&path) {
+            s.log.info(&format!(
+                "Left {} in place: it holds files sync did not write",
+                s.display(&path)
+            ));
+            run.printed = true;
         }
     }
     if cleaned {

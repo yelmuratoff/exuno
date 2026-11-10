@@ -227,7 +227,7 @@ enabled: false
 
 To skip a tool for one run, use `exuno sync --skip cursor`.
 
-On the next sync after you turn a tool off (with `defaults.cleanup: true`, the default), Exuno removes the files its earlier syncs recorded in `.ai/.sync-manifest` for that tool, then the folders that leaves empty. It never removes a file nothing recorded, such as one you added by hand, or a file under another enabled tool's destination. When a destination has no recorded files at all, it stays as it is and sync prints `Left <path> in place`.
+On the next sync after you turn a tool off (with `defaults.cleanup: true`, the default), Exuno removes the files its earlier syncs recorded in `.ai/.sync-manifest` for that tool, then the folders that leaves empty. It never removes a file nothing recorded, such as one you added by hand, or a file under another enabled tool's destination. A folder that still holds files sync did not write stays, and that sync says so once with `Left <path> in place`.
 
 To keep a tool on but drop one kind of output, set that target's `enabled` to `false`. Everything else keeps syncing:
 

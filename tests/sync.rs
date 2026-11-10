@@ -1246,6 +1246,9 @@ fn disabling_a_tool_removes_only_its_recorded_files() {
         .success()
         .stderr(predicate::str::contains(
             "[INFO] Cleaned up Cursor (disabled)",
+        ))
+        .stderr(predicate::str::contains(
+            "[INFO] Left .cursor/rules in place: it holds files sync did not write\n",
         ));
     assert!(!project.exists(".cursor/rules/core.mdc"));
     assert!(!project.exists(".cursor/mcp.json"));
@@ -1256,9 +1259,7 @@ fn disabling_a_tool_removes_only_its_recorded_files() {
         .arg("sync")
         .assert()
         .success()
-        .stderr(predicate::str::contains(
-            "[INFO] Left .cursor/rules in place: Cursor is disabled and sync recorded no files there\n",
-        ))
+        .stderr(predicate::str::contains("Left .cursor").not())
         .stderr(predicate::str::contains("Cleaned up Cursor").not());
     assert_eq!(project.read(".cursor/rules/mine.mdc"), "mine\n");
 }
