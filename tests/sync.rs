@@ -1206,14 +1206,14 @@ fn a_disabled_plugin_leaves_hand_written_files_in_its_dests() {
 }
 
 #[test]
-fn recorded_cleanup_leaves_an_enabled_tools_outputs_below_its_dest() {
+fn disabling_a_tool_leaves_another_tools_files_under_its_dest() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);
     project.exuno().arg("sync").assert().success();
     let core_rule = project.read(".claude/rules/core.md");
     project.write(
         ".ai/src/tools/aaa.yaml",
-        "name: \"A\"\nenabled: false\ntargets:\n  subagents:\n    dest: \".claude\"\n    cleanup: recorded\n",
+        "name: \"A\"\nenabled: false\ntargets:\n  subagents:\n    dest: \".claude\"\n",
     );
     project
         .exuno()
@@ -1224,6 +1224,43 @@ fn recorded_cleanup_leaves_an_enabled_tools_outputs_below_its_dest() {
     assert!(project.exists(".claude/skills/exuno/SKILL.md"));
     assert!(project.exists(".claude/settings.json"));
     assert!(project.exists(".claude/hooks/agentsync-guard.sh"));
+}
+
+#[test]
+fn disabling_a_tool_removes_only_its_recorded_files() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".cursor/rules/core.mdc"));
+    project.write(".cursor/rules/mine.mdc", "mine\n");
+
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[INFO] Cleaned up Cursor (disabled)",
+        ));
+    assert!(!project.exists(".cursor/rules/core.mdc"));
+    assert!(!project.exists(".cursor/mcp.json"));
+    assert_eq!(project.read(".cursor/rules/mine.mdc"), "mine\n");
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[INFO] Left .cursor/rules in place: Cursor is disabled and sync recorded no files there\n",
+        ))
+        .stderr(predicate::str::contains("Cleaned up Cursor").not());
+    assert_eq!(project.read(".cursor/rules/mine.mdc"), "mine\n");
 }
 
 #[test]

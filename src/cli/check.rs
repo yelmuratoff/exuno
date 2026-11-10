@@ -127,6 +127,7 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     let previous = Manifest::load(root)?;
     let mut session = Session::new(ws, Paths::for_disk_root(root));
     session.force = true;
+    session.activate_manifest(previous.as_ref().map(Manifest::paths).unwrap_or_default());
     session.set_owned_before(
         previous
             .as_ref()

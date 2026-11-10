@@ -343,7 +343,8 @@ fn remove_legacy_outputs(s: &mut Session, tool: &Tool) -> Step {
     Ok(())
 }
 
-/// `cleanup_tool`: remove a disabled tool's unprotected outputs.
+/// `cleanup_tool`: remove the outputs a disabled tool's earlier syncs recorded,
+/// never a file nothing recorded or one below another tool's dest.
 fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
     let tool = load_tool(s, slug);
     let display = tool.display_name();
@@ -377,16 +378,22 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
         }
         let owned = if key == "manifests" {
             manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs)
-        } else if tool.value(&format!("targets.{key}.cleanup")) == "recorded" {
-            vec![abs]
         } else {
-            if !run.protected.contains(&abs) && file_ops::cleanup_path(s, &abs) {
-                cleaned = true;
-            }
-            continue;
+            vec![abs]
         };
         for path in owned {
-            if !run.protected.contains(&path) && remove_recorded_outputs(s, &path, &run.protected) {
+            if run.protected.contains(&path) {
+                continue;
+            }
+            if s.ws.exists(&path) && file_ops::recorded_under(s, &path).is_empty() {
+                s.log.info(&format!(
+                    "Left {} in place: {display} is disabled and sync recorded no files there",
+                    s.display(&path)
+                ));
+                run.printed = true;
+                continue;
+            }
+            if remove_recorded_outputs(s, &path, &run.protected) {
                 cleaned = true;
             }
         }
@@ -399,8 +406,8 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
 
 /// Removes the files at or below `path` the previous manifest records, except
 /// those at or below a dest another tool claims, then the directories that
-/// leaves empty; true when something went. A failed removal is not an error,
-/// as for `cleanup_path`.
+/// leaves empty; true when something went. A failed removal is not an error:
+/// cleanup of a disabled tool never stops a sync.
 fn remove_recorded_outputs(s: &mut Session, path: &str, protected: &[String]) -> bool {
     let Ok(removed) = file_ops::remove_recorded_outside(s, path, protected) else {
         return false;
@@ -455,8 +462,11 @@ mod tests {
             "tools:\n  enabled: [cursor]\n",
         );
         file(&mut s, "/proj/.codex/agents/x.toml", "x");
+        file(&mut s, "/proj/.codex/agents/mine.toml", "mine");
+        s.activate_manifest([".codex/agents/x.toml".to_string()].into());
         render(&mut s, &Env::default()).unwrap();
-        assert!(!s.ws.exists("/proj/.codex/agents"));
+        assert!(!s.ws.exists("/proj/.codex/agents/x.toml"));
+        assert_eq!(text_of(&s, "/proj/.codex/agents/mine.toml"), "mine");
         assert!(s.ws.is_file("/proj/AGENTS.md"));
         assert!(
             s.log

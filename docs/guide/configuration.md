@@ -199,7 +199,6 @@ targets:
 | `source` (settings, MCP, hooks) | A declared source path. The canonical `.ai/src/tools/<tool>/<resource>.<ext>` beats it automatically. |
 | `enabled` (on a target) | `false` turns off one output category while the rest keep syncing |
 | `gitignore: false` | On any target: keeps its dest out of the managed `.gitignore` block, for output a host reads from the repository (`plugin`) |
-| `cleanup: recorded` | On any target: when the tool is disabled, cleanup removes only the files the manifest records under the dest, not the whole dest (`plugin`) |
 | `frontmatter_keys` (skills, commands) | Keeps only the listed top-level frontmatter keys in each synced `SKILL.md` or command, and prints one warning per target that lists the dropped keys and how many files lost one (`plugin`) |
 | `manifests` (target) | Writes each template under `.ai/src/tools/<tool>/manifests/` (or the tool's shipped set) to the same path under `dest`, filling `${key}` from `vars.<key>`. Values in a `.json` template are JSON-escaped and the result must parse. `include` / `exclude` filter template paths. The target owns only the paths the templates of the set in use map to, so `dest: "."` is safe. An output whose template leaves that set (deleted from the override folder, or missing from an override that replaces the shipped set) stays, and neither sync nor check notices it; remove it by hand (`plugin`) |
 | `legacy_dest` | Where an earlier config wrote the target. Once the target moves, sync removes the files there that the manifest recorded (Windsurf, Cline) |
@@ -227,6 +226,8 @@ enabled: false
 ```
 
 To skip a tool for one run, use `exuno sync --skip cursor`.
+
+On the next sync after you turn a tool off (with `defaults.cleanup: true`, the default), Exuno removes the files its earlier syncs recorded in `.ai/.sync-manifest` for that tool, then the folders that leaves empty. It never removes a file nothing recorded, such as one you added by hand, or a file under another enabled tool's destination. When a destination has no recorded files at all, it stays as it is and sync prints `Left <path> in place`.
 
 To keep a tool on but drop one kind of output, set that target's `enabled` to `false`. Everything else keeps syncing:
 

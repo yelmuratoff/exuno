@@ -49,7 +49,7 @@ A sync goes through these steps:
 2. **Work out each tool's config.** Every tool is described by a YAML file that ships inside the binary: where its files go, which extension they get, what header they need. If you put a file with the same name in `.ai/src/tools/`, your values replace the shipped ones.
 3. **Stop if someone hand-edited a generated file.** Exuno remembers the hash of every file it wrote in `.ai/.sync-manifest`. If a generated file changed since the last sync, it stops and tells you which one, so the edit isn't lost.
 4. **Back up, then write.** Exuno copies everything it is about to change into `.ai/backups/`, then writes each tool's files. If anything fails, it puts the old files back. `exuno rollback` undoes a sync that worked but that you didn't want.
-5. **Record what it wrote.** Exuno updates the manifest and its block in `.gitignore`, and removes the files of tools you turned off.
+5. **Record what it wrote.** Exuno updates the manifest and its block in `.gitignore`, and removes the files it wrote for tools you turned off.
 
 Rules apply everywhere by default. To make a rule apply only to certain files, give it `paths:` frontmatter with a list of globs. Exuno then writes each tool's own way of saying "only for these files" (`alwaysApply: false` for Cursor, `applyTo:` for Copilot, `trigger: glob` for Windsurf; Claude keeps `paths:`), so the agent loads the rule only when it works on a matching file.
 

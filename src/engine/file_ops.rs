@@ -6,25 +6,6 @@ use crate::engine::session::Session;
 use crate::engine::skill_tree::{self, Skill};
 use crate::{Error, paths};
 
-/// `cleanup_path`: removes `target` when it exists; true when something went.
-/// A failed removal is not an error: Bash calls it inside an `if`, where
-/// `set -e` does not apply.
-pub fn cleanup_path(s: &mut Session, target: &str) -> bool {
-    if !s.ws.exists(target) {
-        return false;
-    }
-    let shown = s.display(target);
-    if s.dry_run {
-        s.log.step(&format!("Would remove: {shown} (dry-run)"));
-    } else if let Err(error) = s.ws.remove(target) {
-        s.log.warning(&error.to_string());
-        return false;
-    } else {
-        s.log.step(&format!("Removed: {shown}"));
-    }
-    true
-}
-
 /// `copy_file`: a missing source is a warning, not a failure.
 pub fn copy_file(s: &mut Session, src: &str, dest: &str) -> Result<(), Error> {
     copy_file_noted(s, src, dest, "")
@@ -391,21 +372,12 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_path_reports_whether_anything_was_removed() {
-        let mut s = test_session();
-        file(&mut s, "/proj/.cursor/rules/core.mdc", "x");
-        assert!(cleanup_path(&mut s, "/proj/.cursor/rules"));
-        assert!(!cleanup_path(&mut s, "/proj/.cursor/rules"));
-    }
-
-    #[test]
     fn a_dry_run_reports_every_change_and_makes_none() {
         let mut s = test_session();
         s.dry_run = true;
         file(&mut s, "/proj/.ai/src/AGENTS.md", "new");
         file(&mut s, "/proj/.ai/src/skills/a/SKILL.md", "a");
         file(&mut s, "/proj/.claude/skills/stale/SKILL.md", "s");
-        file(&mut s, "/proj/.cursor/rules/core.mdc", "x");
         copy_file(&mut s, "/proj/.ai/src/AGENTS.md", "/proj/CLAUDE.md").unwrap();
         sync_skills_dir(
             &mut s,
@@ -414,19 +386,16 @@ mod tests {
             &Filter::default(),
         )
         .unwrap();
-        assert!(cleanup_path(&mut s, "/proj/.cursor/rules"));
         assert!(!s.ws.exists("/proj/CLAUDE.md"));
         assert!(s.ws.exists("/proj/.claude/skills/stale"));
         assert!(!s.ws.exists("/proj/.claude/skills/a"));
-        assert!(s.ws.exists("/proj/.cursor/rules/core.mdc"));
         assert!(s.touched().is_empty());
         assert_eq!(
-            s.log.tail(4),
+            s.log.tail(3),
             [
                 "   .ai/src/AGENTS.md → CLAUDE.md (dry-run)",
                 "   Would remove: .claude/skills/stale (extraneous)",
                 "   .ai/src/skills/ → .claude/skills/ (1 updated, 1 removed) (dry-run)",
-                "   Would remove: .cursor/rules (dry-run)"
             ]
         );
     }
