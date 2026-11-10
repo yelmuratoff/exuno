@@ -1,30 +1,62 @@
-//! Layered tool config: user override → shipped base → `base:` variant,
-//! resolved per field exactly as `get_tool_value_r` in `lib/helpers/tool_resolver.sh`.
+//! Layered tool config: user override → shipped base → the `base:` tool's
+//! project override → its shipped base, resolved per field as
+//! `get_tool_value_r` in `lib/helpers/tool_resolver.sh` did for the shipped layers.
 
 use include_dir::File;
 
 use crate::engine::filters::Filter;
 use crate::{Error, config::catalog, config::yaml_subset, project::Project};
 
+/// Keys a variant never takes from its base tool's project override. A variant
+/// owns its identity and its paths: inheriting a project-level `dest` would
+/// make two tools write one file, and a `post_sync` would run twice.
+const NOT_FROM_BASE_OVERRIDE: [&str; 8] = [
+    "name",
+    "base",
+    "profile_home",
+    "enabled",
+    "post_sync",
+    "targets.*.dest",
+    "targets.*.source",
+    "targets.*.user_dirs",
+];
+
+fn inherits_from_base_override(key_path: &str) -> bool {
+    let segments: Vec<&str> = key_path.split('.').collect();
+    !NOT_FROM_BASE_OVERRIDE.iter().any(|pattern| {
+        let parts: Vec<&str> = pattern.split('.').collect();
+        parts.len() == segments.len()
+            && parts
+                .iter()
+                .zip(&segments)
+                .all(|(part, segment)| *part == "*" || part == segment)
+    })
+}
+
 pub struct Tool {
     pub slug: String,
     user_yaml: Option<String>,
     base_yaml: Option<&'static str>,
+    base_override: Option<String>,
 }
 
 impl Tool {
     pub fn load(project: &Project, slug: &str) -> Result<Self, Error> {
-        let path = project.user_tool_file(slug);
-        let user_yaml = if path.is_file() {
-            Some(std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?)
-        } else {
-            None
+        let read = |slug: &str| -> Result<Option<String>, Error> {
+            let path = project.user_tool_file(slug);
+            if !path.is_file() {
+                return Ok(None);
+            }
+            std::fs::read_to_string(&path)
+                .map(Some)
+                .map_err(|e| Error::io(&path, e))
         };
-        Ok(Self::from_parts(
-            slug,
-            user_yaml,
-            catalog::base_tool_yaml(slug),
-        ))
+        let tool = Self::from_parts(slug, read(slug)?, catalog::base_tool_yaml(slug));
+        let base = tool.base_name();
+        if base.is_empty() || base == slug {
+            return Ok(tool);
+        }
+        Ok(tool.with_base_override(read(&base)?))
     }
 
     /// A tool whose override text was read by the caller, with its shipped base.
@@ -37,7 +69,22 @@ impl Tool {
             slug: slug.to_string(),
             user_yaml,
             base_yaml,
+            base_override: None,
         }
+    }
+
+    /// This tool with the project's `.ai/src/tools/<base>.yaml` text as the
+    /// layer between its own files and the `base:` tool's shipped one.
+    pub fn with_base_override(mut self, text: Option<String>) -> Self {
+        self.base_override = text;
+        self
+    }
+
+    fn base_override_found(&self, key_path: &str) -> Option<String> {
+        if !inherits_from_base_override(key_path) {
+            return None;
+        }
+        yaml_subset::found(self.base_override.as_deref()?, key_path)
     }
 
     /// `base:` from the user file: the slug a profile variant inherits from.
@@ -50,7 +97,8 @@ impl Tool {
 
     /// Effective scalar for a dotted key. A key the user file writes wins, even
     /// empty; the shipped file answers next; what both leave empty comes from
-    /// the `base:` tool, never for `base` or `name`.
+    /// the `base:` tool, never for `base` or `name`: its project override first
+    /// (except the [`NOT_FROM_BASE_OVERRIDE`] keys), then its shipped file.
     pub fn value(&self, key_path: &str) -> String {
         if let Some(found) = self
             .user_yaml
@@ -65,6 +113,9 @@ impl Tool {
             .unwrap_or_default();
         if !shipped.is_empty() || key_path == "base" || key_path == "name" {
             return shipped;
+        }
+        if let Some(found) = self.base_override_found(key_path) {
+            return found;
         }
         catalog::base_tool_yaml(&self.base_name())
             .map(|text| yaml_subset::value(text, key_path))
@@ -111,6 +162,11 @@ impl Tool {
             .unwrap_or_default();
         if !shipped.is_empty() {
             return shipped;
+        }
+        if self.base_override_found(key_path).is_some()
+            && let Some(text) = &self.base_override
+        {
+            return read_filter(text, key_path);
         }
         catalog::base_tool_yaml(&self.base_name())
             .map(|text| read_filter(text, key_path))
@@ -274,6 +330,28 @@ mod tests {
             .base_payload("settings")
             .expect("inherits claude's settings");
         assert!(payload.path().ends_with("claude.json"));
+    }
+
+    #[test]
+    fn a_variant_takes_its_base_override_but_never_its_paths_or_identity() {
+        let tool = Tool::from_parts(
+            "claude-hub",
+            Some("base: claude\nprofile_home: \".claude-hub\"\n".to_string()),
+            None,
+        )
+        .with_base_override(Some(
+            "name: \"Mine\"\nenabled: true\npost_sync: \"x\"\ntargets:\n  rules:\n    extension: \".x.md\"\n    dest: \".claude/custom\"\n    exclude: [secret.md]\n  agents:\n    source: \"o.md\"\n  skills:\n    user_dirs: \".claude/skills\"\n  manifests:\n    vars:\n      name: \"n\"\n".to_string(),
+        ));
+        assert_eq!(tool.value("targets.rules.extension"), ".x.md");
+        assert_eq!(tool.filter("targets.rules.exclude"), "secret.md");
+        assert_eq!(tool.value("targets.manifests.vars.name"), "n");
+        assert_eq!(tool.value("targets.rules.dest"), ".claude/rules");
+        assert_eq!(tool.value("targets.agents.source"), "");
+        assert_eq!(tool.value("targets.skills.user_dirs"), ".claude/skills");
+        assert_eq!(tool.value("post_sync"), "");
+        assert_eq!(tool.value("enabled"), "false");
+        assert_eq!(tool.display_name(), "claude-hub");
+        assert_eq!(tool.value("profile_home"), ".claude-hub");
     }
 
     #[test]

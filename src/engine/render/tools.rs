@@ -53,14 +53,20 @@ pub(super) fn user_tool_slugs(s: &Session) -> Vec<String> {
         .collect()
 }
 
-/// The layered tool with its `<tools dir>/<slug>.yaml` read from the workspace.
+/// The layered tool with its `<tools dir>/<slug>.yaml`, and its `base:` tool's,
+/// read from the workspace.
 pub(super) fn load_tool(s: &Session, slug: &str) -> Tool {
-    let path = format!("{}/{slug}.yaml", s.tools_dir);
-    let user_yaml =
-        s.ws.read(&path)
+    let read = |slug: &str| {
+        s.ws.read(&format!("{}/{slug}.yaml", s.tools_dir))
             .ok()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
-    Tool::new(slug, user_yaml)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+    };
+    let tool = Tool::new(slug, read(slug));
+    let base = tool.base_name();
+    if base.is_empty() || base == slug {
+        return tool;
+    }
+    tool.with_base_override(read(&base))
 }
 
 /// `_collect_protected_dests`: cleanup never removes what an enabled tool or
