@@ -449,7 +449,7 @@ pub fn sync_commands_as_skills(
                 b"policy:\n  allow_implicit_invocation: false\n".to_vec(),
             )?;
             s.record_write(&policy);
-        } else if s.ws.is_file(&policy) {
+        } else if s.ws.is_file(&policy) && s.may_prune(&policy) {
             s.ws.remove(&policy)?;
             let agents_dir = format!("{skill_dir}/agents");
             if s.ws.list(&agents_dir).is_empty() {
@@ -462,7 +462,12 @@ pub fn sync_commands_as_skills(
         if !name.starts_with("command-") || !s.ws.is_dir(&format!("{dest_dir}/{name}")) {
             continue;
         }
-        if valid.contains(&name) {
+        let path = format!("{dest_dir}/{name}");
+        if valid.contains(&name) || s.was_touched(&path) {
+            continue;
+        }
+        if !s.may_prune(&path) {
+            s.note_preserved(&format!("{dest_disp}/{name}"));
             continue;
         }
         if s.dry_run {
@@ -765,7 +770,13 @@ mod tests {
             "---\ndescription: D\ndisable-model-invocation: true\n---\nBody\n",
         );
         file(&mut s, "/proj/.agents/skills/command-gone/SKILL.md", "x");
+        file(&mut s, "/proj/.agents/skills/command-kept/SKILL.md", "x");
         file(&mut s, "/proj/.agents/skills/mine/SKILL.md", "x");
+        s.activate_manifest(
+            [".agents/skills/command-gone/SKILL.md"]
+                .map(String::from)
+                .into(),
+        );
         sync_commands_as_skills(
             &mut s,
             "/proj/.ai/src/commands",
@@ -778,6 +789,7 @@ mod tests {
             "policy:\n  allow_implicit_invocation: false\n"
         );
         assert!(!s.ws.exists("/proj/.agents/skills/command-gone"));
+        assert!(s.ws.exists("/proj/.agents/skills/command-kept"));
         assert!(s.ws.exists("/proj/.agents/skills/mine"));
     }
 
@@ -800,9 +812,13 @@ mod tests {
         file(&mut s, "/proj/.codex/agents/mine.toml", "mine");
         file(&mut s, "/proj/.agents/skills/command-gone/SKILL.md", "x");
         s.activate_manifest(
-            [".cursor/rules/old.mdc", ".codex/agents/old.toml"]
-                .map(String::from)
-                .into(),
+            [
+                ".cursor/rules/old.mdc",
+                ".codex/agents/old.toml",
+                ".agents/skills/command-gone/SKILL.md",
+            ]
+            .map(String::from)
+            .into(),
         );
         s
     }

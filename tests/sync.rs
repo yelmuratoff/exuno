@@ -1639,3 +1639,29 @@ fn a_synced_skill_folder_keeps_unrecorded_files_and_drops_what_the_source_lost()
     project.exuno().arg("sync").assert().success();
     project.exuno().arg("check").assert().success();
 }
+
+#[test]
+fn an_unrecorded_command_skill_folder_is_kept_and_a_recorded_obsolete_one_goes() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/commands/old.md",
+        "---\ndescription: Old\n---\nOld.\n",
+    );
+    project.enable_tools(&["codex"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".agents/skills/command-old/SKILL.md"));
+    project.write(".agents/skills/command-mine/SKILL.md", "mine\n");
+
+    std::fs::remove_file(project.join(".ai/src/commands/old.md")).unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Kept .agents/skills/command-mine"));
+    assert!(!project.exists(".agents/skills/command-old"));
+    assert_eq!(
+        project.read(".agents/skills/command-mine/SKILL.md"),
+        "mine\n"
+    );
+}
