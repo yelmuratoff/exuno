@@ -84,14 +84,14 @@ The manifest is tracked by git exactly like the files it describes: committed wi
 
 ## What a sync replaces
 
-Generated folders belong to Exuno. Anything there that isn't in `.ai/src/` gets replaced or removed:
+Exuno manages the files it wrote, which `.ai/.sync-manifest` records. A file in a generated folder that it never wrote stays: sync warns `Kept <path> (not from .ai/src/ …)` and leaves it, and `--force` is the only way to have sync remove it. Before the first sync there is no manifest, so nothing extra is removed.
 
 | Target | What happens |
 | --- | --- |
-| Rules folders (`.claude/rules/`, `.cursor/rules/`, ...) | Files with the synced extension are managed. Ones without a source are removed. |
+| Rules folders (`.claude/rules/`, `.cursor/rules/`, ...) | Files with the synced extension are managed. A recorded file whose source is gone is removed. |
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, ... | Replaced from `.ai/src/AGENTS.md` on every sync. |
 | `settings.json`, `.mcp.json`, `hooks.json` | Replaced from their source, except the shared settings files described above. |
-| Skills, commands, and agents folders | Replaced from the source. Extra files are removed. |
+| Skills, commands, and agents folders | Replaced from the source. Recorded entries whose source is gone are removed. |
 | `.gitignore` | Only the block between `AI SYNC GENERATED START` and `END` is managed. |
 
 If you already have tool config, `exuno init` adopts it into `.ai/src/` first. To move files by hand, see [Migrating existing tool configs](migrating.md#existing-tool-configs).

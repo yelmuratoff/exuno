@@ -275,6 +275,10 @@ mod tests {
         file(&mut s, "/proj/.ai/src/skills/.hidden/SKILL.md", "h");
         file(&mut s, "/proj/.claude/skills/stale/SKILL.md", "s");
         file(&mut s, "/proj/.claude/skills/command-review/SKILL.md", "c");
+        s.activate_manifest(BTreeSet::from([
+            ".claude/skills/stale/SKILL.md".to_string(),
+            ".claude/skills/command-review/SKILL.md".to_string(),
+        ]));
         sync_skills_dir(
             &mut s,
             "/proj/.ai/src/skills",
@@ -378,6 +382,9 @@ mod tests {
         file(&mut s, "/proj/.ai/src/AGENTS.md", "new");
         file(&mut s, "/proj/.ai/src/skills/a/SKILL.md", "a");
         file(&mut s, "/proj/.claude/skills/stale/SKILL.md", "s");
+        s.activate_manifest(BTreeSet::from(
+            [".claude/skills/stale/SKILL.md".to_string()],
+        ));
         copy_file(&mut s, "/proj/.ai/src/AGENTS.md", "/proj/CLAUDE.md").unwrap();
         sync_skills_dir(
             &mut s,

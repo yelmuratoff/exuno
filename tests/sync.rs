@@ -1411,3 +1411,23 @@ fn a_first_sync_without_a_manifest_still_writes_over_existing_files() {
     project.exuno().arg("sync").assert().success();
     assert_eq!(project.read("CLAUDE.md"), project.read(".ai/src/AGENTS.md"));
 }
+
+#[test]
+fn a_first_sync_prunes_nothing_unrecorded() {
+    let project = Project::seeded(&[]);
+    assert!(!project.exists(".ai/.sync-manifest"));
+    project.write(".claude/rules/mine.md", "# Mine\n");
+    project.write(".claude/skills/mine/SKILL.md", "---\nname: mine\n---\n");
+    project.write(".claude/agents/mine.md", "mine\n");
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Kept .claude/rules/mine.md"));
+    assert_eq!(project.read(".claude/rules/mine.md"), "# Mine\n");
+    assert!(project.exists(".claude/skills/mine/SKILL.md"));
+    assert_eq!(project.read(".claude/agents/mine.md"), "mine\n");
+    assert!(project.exists(".claude/rules/core.md"));
+}

@@ -65,16 +65,16 @@ impl Session {
         self.manifest = Some(paths);
     }
 
-    /// `sync_may_prune`: outside a manifest-aware run, or under `--force`,
-    /// every extraneous entry may go; otherwise a file the manifest records, or
-    /// a directory it records a file below.
+    /// `sync_may_prune`: a file the manifest records, or a directory it records
+    /// a file below. Without a manifest nothing may go; `--force` lets every
+    /// extraneous entry go, as its `Kept … --force to prune` hint promises.
     pub fn may_prune(&self, abs: &str) -> bool {
-        let Some(manifest) = &self.manifest else {
-            return true;
-        };
         if self.force {
             return true;
         }
+        let Some(manifest) = &self.manifest else {
+            return false;
+        };
         self.paths.to_repo_relative(abs).is_none_or(|rel| {
             let below = format!("{rel}/");
             manifest.contains(&rel)
@@ -212,7 +212,8 @@ mod tests {
         let mut s = test_session();
         s.ws.create_dir_all("/proj/.claude/skills/old").unwrap();
         s.ws.create_dir_all("/proj/.claude/skills/mine").unwrap();
-        assert!(s.may_prune("/proj/.claude/rules/mine.md"));
+        assert!(!s.may_prune("/proj/.claude/rules/mine.md"));
+        assert!(!s.may_prune("/proj/.claude/skills/old"));
         s.activate_manifest(BTreeSet::from([
             ".claude/rules/old.md".to_string(),
             ".claude/skills/old/SKILL.md".to_string(),

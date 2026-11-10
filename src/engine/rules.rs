@@ -683,6 +683,7 @@ mod tests {
         file(&mut s, "/proj/.ai/src/rules/core.md", "# Core\n");
         file(&mut s, "/proj/.cursor/rules/old.mdc", "x");
         file(&mut s, "/proj/.cursor/rules/notes.txt", "keep");
+        s.activate_manifest([".cursor/rules/old.mdc"].map(String::from).into());
         let opts = RuleOptions {
             extension: ".mdc",
             header: CURSOR_HEADER,
@@ -902,6 +903,7 @@ mod tests {
         );
         file(&mut s, "/proj/.codex/agents/old.toml", "x");
         file(&mut s, "/proj/.codex/agents/keep.json", "x");
+        s.activate_manifest([".codex/agents/old.toml"].map(String::from).into());
         sync_converted(
             &mut s,
             "/proj/.ai/src/agents",
