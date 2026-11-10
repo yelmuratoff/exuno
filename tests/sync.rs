@@ -1431,3 +1431,37 @@ fn a_first_sync_prunes_nothing_unrecorded() {
     assert_eq!(project.read(".claude/agents/mine.md"), "mine\n");
     assert!(project.exists(".claude/rules/core.md"));
 }
+
+#[test]
+fn a_synced_skill_folder_keeps_unrecorded_files_and_drops_what_the_source_lost() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.write(".ai/src/skills/demo/references/old.md", "old\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/demo/__pycache__/x.pyc", "cache");
+    project.write(".claude/skills/demo/.DS_Store", "finder");
+
+    std::fs::remove_file(project.join(".ai/src/skills/demo/references/old.md")).unwrap();
+    project.write(
+        ".ai/src/skills/demo/SKILL.md",
+        "---\nname: demo\n---\nNew.\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/__pycache__/x.pyc"),
+        "cache"
+    );
+    assert_eq!(project.read(".claude/skills/demo/.DS_Store"), "finder");
+    assert!(!project.exists(".claude/skills/demo/references/old.md"));
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\nNew.\n"
+    );
+    let manifest = project.read(".ai/.sync-manifest");
+    assert!(!manifest.contains("__pycache__"), "{manifest}");
+    assert!(!manifest.contains(".DS_Store"), "{manifest}");
+
+    project.exuno().arg("sync").assert().success();
+    project.exuno().arg("check").assert().success();
+}

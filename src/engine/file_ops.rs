@@ -76,14 +76,9 @@ pub fn sync_skills_dir(
         if s.dry_run {
             continue;
         }
+        let source = format!("{src}/{}", entry.rel);
         let target = format!("{dest}/{}", entry.name);
-        let _ = s.ws.remove(&target);
-        s.ws.copy(&format!("{src}/{}", entry.rel), &target)?;
-        if s.ws.is_dir(&target) {
-            s.record_tree(&target);
-        } else {
-            s.record_write(&target);
-        }
+        replace_skill(s, &source, &target)?;
     }
 
     let mut cleaned = 0usize;
@@ -123,6 +118,39 @@ pub fn sync_skills_dir(
     s.log.step(&format!(
         "{src_disp}/ → {dest_disp}/ {counts}{extra}{suffix}"
     ));
+    Ok(())
+}
+
+/// Puts the skill at `source` at `target`. A folder an earlier sync recorded
+/// files in is updated in place: the recorded files the source no longer has
+/// go, and files nothing recorded (caches, `.DS_Store`) stay. Any other target
+/// is replaced whole. Only the files copied from `source` are recorded.
+fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Error> {
+    let recorded = if s.ws.is_dir(target) {
+        recorded_under(s, target)
+    } else {
+        Vec::new()
+    };
+    if recorded.is_empty() {
+        let _ = s.ws.remove(target);
+    } else {
+        for file in recorded {
+            let rel = &file[target.len() + 1..];
+            if s.ws.is_file(&format!("{source}/{rel}")) || s.was_touched(&file) {
+                continue;
+            }
+            s.ws.remove(&file)?;
+            remove_empty_parents(s, &file, target)?;
+        }
+    }
+    s.ws.copy(source, target)?;
+    if s.ws.is_dir(source) {
+        for file in s.ws.files_under(source) {
+            s.record_write(&format!("{target}{}", &file[source.len()..]));
+        }
+    } else {
+        s.record_write(target);
+    }
     Ok(())
 }
 

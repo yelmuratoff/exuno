@@ -142,13 +142,6 @@ impl Session {
         }
     }
 
-    /// `manifest_record_tree`.
-    pub fn record_tree(&mut self, dir: &str) {
-        for file in self.ws.files_under(dir) {
-            self.record_write(&file);
-        }
-    }
-
     /// `manifest_was_touched`.
     pub fn was_touched(&self, abs: &str) -> bool {
         self.paths
