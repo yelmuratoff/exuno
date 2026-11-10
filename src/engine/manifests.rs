@@ -13,13 +13,16 @@ use crate::paths::ENGINE_ROOT;
 pub enum FillError {
     #[error("no value for ${{{0}}} (set targets.manifests.vars.{0})")]
     MissingKey(String),
+    #[error("{0} is not a placeholder (a key uses only a-z, 0-9 and _)")]
+    InvalidKey(String),
     #[error("filled template is not valid JSON: {0}")]
     InvalidJson(String),
 }
 
-/// `template` with every `${key}` (`[a-z0-9_]+`) replaced by `value(key)`;
-/// anything else after a `$` stays as written. With `json`, each value goes
-/// in JSON-string-escaped and the result must parse as JSON.
+/// `template` with every `${key}` (`[a-z0-9_]+`) replaced by `value(key)`. A
+/// `${…}` closed on the same line that is not such a key is an error; any
+/// other `$` stays as written. With `json`, each value goes in
+/// JSON-string-escaped and the result must parse as JSON.
 pub fn fill(
     template: &str,
     json: bool,
@@ -30,15 +33,18 @@ pub fn fill(
     while let Some(start) = rest.find("${") {
         out.push_str(&rest[..start]);
         let after = &rest[start + 2..];
-        let key = after
+        let token = after
             .find('}')
             .map(|end| &after[..end])
-            .filter(|key| is_key(key));
-        let Some(key) = key else {
+            .filter(|token| !token.contains('\n'));
+        let Some(key) = token else {
             out.push_str("${");
             rest = after;
             continue;
         };
+        if !is_key(key) {
+            return Err(FillError::InvalidKey(format!("${{{key}}}")));
+        }
         let found = value(key).ok_or_else(|| FillError::MissingKey(key.to_string()))?;
         if json {
             let quoted = serde_json::Value::String(found).to_string();
@@ -134,8 +140,25 @@ mod tests {
             "my-skills by exuno: my-skills\n"
         );
         assert_eq!(
-            fill("$5 ${Name} ${} ${a-b} $name ${name", false, &value).unwrap(),
-            "$5 ${Name} ${} ${a-b} $name ${name"
+            fill("$5 $name {name} ${name\n}", false, &value).unwrap(),
+            "$5 $name {name} ${name\n}"
+        );
+    }
+
+    #[test]
+    fn rejects_a_placeholder_that_is_not_a_key() {
+        let value = vars(&[("name", "x")]);
+        for token in ["${display-name}", "${Name}", "${}", "${a.b}"] {
+            let template = format!("{{\"n\": \"${{name}} {token}\"}}");
+            assert_eq!(
+                fill(&template, true, &value),
+                Err(FillError::InvalidKey(token.to_string())),
+                "{template}"
+            );
+        }
+        assert_eq!(
+            FillError::InvalidKey("${Name}".into()).to_string(),
+            "${Name} is not a placeholder (a key uses only a-z, 0-9 and _)"
         );
     }
 
