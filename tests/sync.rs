@@ -1611,6 +1611,9 @@ fn a_preflight_that_cannot_render_stops_the_sync() {
         .stderr(predicate::str::contains("Syncing Claude Code").not());
 }
 
+// The post_sync hook runs through `bash`, which on the Windows runner is the
+// WSL launcher with no distribution installed.
+#[cfg(unix)]
 #[test]
 fn a_refused_overwrite_runs_no_post_sync_hook() {
     let project = Project::seeded(&[]);
