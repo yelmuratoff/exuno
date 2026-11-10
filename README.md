@@ -19,7 +19,7 @@
   </p>
 </div>
 
-Exuno keeps your AI agent instructions in one folder, `.ai/src/`, and writes them out in the format each coding tool expects. It supports 15 tools: Claude Code, GitHub Copilot, Cursor, Gemini CLI, OpenAI Codex, Kimi Code, MiniMax Code, OpenCode, Devin Desktop (Windsurf), JetBrains Junie, Cline, Kiro, Amazon Q, Zed, and Google Antigravity.
+Exuno keeps your AI agent instructions in one folder, `.ai/src/`, and writes them out in the format each coding tool expects. It supports 15 tools: Claude Code, GitHub Copilot, Cursor, Gemini CLI, OpenAI Codex, Kimi Code, MiniMax Code, OpenCode, Devin Desktop (Windsurf), JetBrains Junie, Cline, Kiro, Amazon Q, Zed, and Google Antigravity. The `plugin` target also packages your skills as a plugin that claude.ai, ChatGPT, and Codex install from your repository.
 
 ## Why you might want it
 
@@ -230,6 +230,7 @@ exuno check                      # in CI: fail when generated files don't match 
 | [How sync works](docs/guide/how-sync-works.md) | What happens during a sync, where each setting comes from, how hand edits are caught, and [what the terms mean](docs/guide/how-sync-works.md#words-used-in-these-docs) |
 | [Configuration](docs/guide/configuration.md) | Every `exuno.yaml` option, tool YAML fields, overrides, sources outside the project, adding a tool |
 | [Supported tools](docs/guide/tools.md) | What each tool receives, format conversions, models and providers |
+| [Publishing](docs/guide/publishing.md) | Getting your skills onto claude.ai, ChatGPT, and Codex through a plugin in your repository |
 | [Skills](docs/guide/skills.md) | Skill categories, inspecting skills, the built-in `exuno` skill, hiding personal skills |
 | [Team setup and automation](docs/guide/team-and-automation.md) | Committed or local outputs, version pinning, shell and git hooks, editing generated files |
 | [Backups and rollback](docs/guide/backups-and-rollback.md) | What gets backed up, how rollback decides it is safe, retention |

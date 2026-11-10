@@ -105,6 +105,11 @@ targets:
     # from. `exuno doctor` advises when a project skill shares a name with one.
     # user_dirs: ".tool/skills"
 
+    # Optional, skills and commands: keep only these top-level frontmatter keys
+    # in each synced SKILL.md (or command file). A dropped key goes with its
+    # whole value, continuation lines included, and sync warns once per key.
+    # frontmatter_keys: [name, description]
+
   # Custom slash commands (optional)
   # commands:
   #   dest: ".tool/commands"
@@ -171,9 +176,25 @@ targets:
   #   dest: ".tool/hooks/agentsync-guard.sh"
   #   profile_scoped: false   # config-home profiles share one copy at this path
 
+  # Manifest files rendered from templates (optional). Each file below
+  # .ai/src/tools/<tool>/manifests/ (or the tool's shipped set when that
+  # directory is missing) is written to the same relative path below `dest`,
+  # with every ${key} filled from vars.<key>. In a .json template each value
+  # is JSON-escaped and the result must parse. A missing value stops the sync.
+  # Sync owns only the files it wrote, so `dest: "."` leaves the rest of the
+  # project alone.
+  # manifests:
+  #   dest: "."
+  #   vars:
+  #     name: "my-skills"
+  #   # exclude: ".agents/*"     # Optional: filter template paths
+
   # `profile_scoped: false` works on any target: `exuno profile add` keeps
   # the base dest instead of rewriting it into the profile's config home, for
   # project-level content every home shares.
+
+  # `gitignore: false` works on any target: the dest stays out of the managed
+  # .gitignore block, for output a host reads from the repository.
 
 # Optional: Command to run after sync (e.g. linter or formatter)
 # post_sync: "npx prettier --write .tool/rules/*.mdc"

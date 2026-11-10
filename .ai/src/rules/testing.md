@@ -19,7 +19,7 @@ Tests exercise the in-tree binary against local fixtures only. Behaviour names, 
 
 - `tests/common/mod.rs` is the shared harness. `Project::empty()` is a temp directory with `git init` and a test identity; `Project::seeded(&[])` adds `exuno init`.
 - `project.exuno()` returns an `assert_cmd::Command` in the project with the developer's `EXUNO_*` and `AGENTSYNC_*` variables removed and git pointed at an absent global and system config.
-- The harness also carries `write`, `append`, `read`, `exists`, `join`, `path`, `sha256`, `git`, and `enable_tools`, plus `unreadable_dirs_are_possible()` and `chmod()` for permission cases.
+- The harness also carries `write`, `append`, `read`, `exists`, `join`, `path`, `sha256`, `git`, and `enable_tools`, plus `is_ignored(project, rel)` for `git check-ignore`, `unreadable_dirs_are_possible()` and `chmod()` for permission cases.
 - A fixture only one file needs stays a plain function in that file; the harness grows only when a second file needs the same helper.
 - A pure function's behaviour is a unit test in its own module; a command's observable contract — exit status, output, files on disk — is an integration test in `tests/`.
 

@@ -198,6 +198,9 @@ targets:
 | `format` | Converts the file. `toml` for Gemini commands and Codex subagents, `amazonq_json` for Amazon Q agents, `opencode_md` and `kiro_md` for OpenCode and Kiro agents, `opencode_json` and `codex_toml` for MCP |
 | `source` (settings, MCP, hooks) | A declared source path. The canonical `.ai/src/tools/<tool>/<resource>.<ext>` beats it automatically. |
 | `enabled` (on a target) | `false` turns off one output category while the rest keep syncing |
+| `gitignore: false` | On any target: keeps its dest out of the managed `.gitignore` block, for output a host reads from the repository (`plugin`) |
+| `frontmatter_keys` (skills, commands) | Keeps only the listed top-level frontmatter keys in each synced `SKILL.md` or command, and warns once for each key it drops (`plugin`) |
+| `manifests` (target) | Writes each template under `.ai/src/tools/<tool>/manifests/` (or the tool's shipped set) to the same path under `dest`, filling `${key}` from `vars.<key>`. Values in a `.json` template are JSON-escaped and the result must parse. `include` / `exclude` filter template paths. Sync owns only the files it wrote, so `dest: "."` is safe (`plugin`) |
 | `legacy_dest` | Where an earlier config wrote the target. Once the target moves, sync removes the files there that the manifest recorded (Windsurf, Cline) |
 | `guard` | Copies the tool's write-guard script to `dest` and makes it executable. Override it at `.ai/src/tools/<tool>/guard.sh` and register it from the tool's settings (Claude). |
 | `profile_scoped: false` | On any target: `exuno profile add` keeps the base `dest` instead of moving it into the profile's config home |
