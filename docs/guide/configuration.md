@@ -206,7 +206,7 @@ targets:
 | `profile_scoped: false` | On any target: `exuno profile add` keeps the base `dest` instead of moving it into the profile's config home |
 | `profile_supported: false` | Refuses config-home profiles for a tool that reads only project files |
 | `adoptable: false` (agents) | Refuses `adopt` when the agents file can't be copied back into its source safely |
-| `base` | Makes this tool a variant of another one that inherits everything else (used by profiles): your `.ai/src/tools/<base>.yaml` first, then the shipped base. A variant never inherits `name`, `base`, `profile_home`, `enabled`, `post_sync`, or a target's `dest`, `source`, and `user_dirs` from your override |
+| `base` | Makes this tool a variant of another one that inherits everything else (used by profiles): your `.ai/src/tools/<base>.yaml` first, then the shipped base. A variant never inherits `name`, `base`, `profile_home`, `enabled`, `post_sync`, or a target's `dest`, `legacy_dest`, `source`, `user_dirs`, and `ownership` from your override |
 
 [`lib/templates/tools/_TEMPLATE.yaml`](../../lib/templates/tools/_TEMPLATE.yaml) documents every option, including ones this table leaves out.
 

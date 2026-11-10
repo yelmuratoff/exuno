@@ -56,7 +56,7 @@ exuno profile remove hub                    # delete the profile and its config-
 
 `profile add` writes three things:
 
-- a small variant tool, `.ai/src/tools/<tool>-hub.yaml`, which inherits everything from the base tool through `base:` and changes only the destinations. It inherits your project's override of the base tool too (`.ai/src/tools/<tool>.yaml`), except the fields a variant must own: `name`, `base`, `profile_home`, `enabled`, `post_sync`, and every target's `dest`, `source`, and `user_dirs`
+- a small variant tool, `.ai/src/tools/<tool>-hub.yaml`, which inherits everything from the base tool through `base:` and changes only the destinations. It inherits your project's override of the base tool too (`.ai/src/tools/<tool>.yaml`), except the fields a variant must own: `name`, `base`, `profile_home`, `enabled`, `post_sync`, and every target's `dest`, `legacy_dest`, `source`, `user_dirs`, and `ownership`
 - an overlay folder, `.ai/profiles/hub/src/`, for profile-only rules, skills, commands, agents, and `AGENTS.md` (the profile wins when names collide)
 - a `profiles:` block in `exuno.yaml`
 

@@ -9,16 +9,20 @@ use crate::{Error, config::catalog, config::yaml_subset, project::Project};
 
 /// Keys a variant never takes from its base tool's project override. A variant
 /// owns its identity and its paths: inheriting a project-level `dest` would
-/// make two tools write one file, and a `post_sync` would run twice.
-const NOT_FROM_BASE_OVERRIDE: [&str; 8] = [
+/// make two tools write one file, a `legacy_dest` would remove the base's old
+/// outputs, an `ownership` would change how the variant's own files merge, and
+/// a `post_sync` would run twice.
+const NOT_FROM_BASE_OVERRIDE: [&str; 10] = [
     "name",
     "base",
     "profile_home",
     "enabled",
     "post_sync",
     "targets.*.dest",
+    "targets.*.legacy_dest",
     "targets.*.source",
     "targets.*.user_dirs",
+    "targets.*.ownership",
 ];
 
 fn inherits_from_base_override(key_path: &str) -> bool {
@@ -340,14 +344,16 @@ mod tests {
             None,
         )
         .with_base_override(Some(
-            "name: \"Mine\"\nenabled: true\npost_sync: \"x\"\ntargets:\n  rules:\n    extension: \".x.md\"\n    dest: \".claude/custom\"\n    exclude: [secret.md]\n  agents:\n    source: \"o.md\"\n  skills:\n    user_dirs: \".claude/skills\"\n  manifests:\n    vars:\n      name: \"n\"\n".to_string(),
+            "name: \"Mine\"\nenabled: true\npost_sync: \"x\"\ntargets:\n  rules:\n    extension: \".x.md\"\n    dest: \".claude/custom\"\n    legacy_dest: \".claude/old-rules\"\n    exclude: [secret.md]\n  agents:\n    source: \"o.md\"\n  skills:\n    user_dirs: \".claude/my-skills\"\n  settings:\n    ownership: keys\n  manifests:\n    vars:\n      name: \"n\"\n".to_string(),
         ));
         assert_eq!(tool.value("targets.rules.extension"), ".x.md");
         assert_eq!(tool.filter("targets.rules.exclude"), "secret.md");
         assert_eq!(tool.value("targets.manifests.vars.name"), "n");
         assert_eq!(tool.value("targets.rules.dest"), ".claude/rules");
+        assert_eq!(tool.value("targets.rules.legacy_dest"), "");
         assert_eq!(tool.value("targets.agents.source"), "");
         assert_eq!(tool.value("targets.skills.user_dirs"), ".claude/skills");
+        assert_eq!(tool.value("targets.settings.ownership"), "");
         assert_eq!(tool.value("post_sync"), "");
         assert_eq!(tool.value("enabled"), "false");
         assert_eq!(tool.display_name(), "claude-hub");

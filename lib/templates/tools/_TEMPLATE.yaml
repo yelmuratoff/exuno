@@ -15,7 +15,8 @@ enabled: false
 # `base:` to inherit every field it does not set from the base tool, so it only
 # needs to override the config-home dests below. It inherits the project's
 # .ai/src/tools/<base>.yaml as well, except name, base, profile_home, enabled,
-# post_sync, and each target's dest, source, and user_dirs. `profile_home` records the
+# post_sync, and each target's dest, legacy_dest, source, user_dirs, and
+# ownership. `profile_home` records the
 # config-home directory the variant writes into. Both are managed by
 # `exuno profile add` — you rarely write them by hand.
 # base: claude
