@@ -103,6 +103,45 @@ fn sync_only_and_skip_filter_kiro() {
 }
 
 #[test]
+fn sync_only_and_skip_filter_plugin() {
+    let project = seeded();
+    project.enable_tools(&["claude", "plugin"]);
+    project
+        .exuno()
+        .args(["sync", "--only", "plugin"])
+        .assert()
+        .success();
+    assert!(project.exists("plugin/skills/exuno/SKILL.md"));
+    assert!(project.exists(".claude-plugin/marketplace.json"));
+    assert!(!project.exists("CLAUDE.md"));
+
+    let skipped = seeded();
+    skipped.enable_tools(&["claude", "plugin"]);
+    skipped
+        .exuno()
+        .args(["sync", "--skip", "plugin"])
+        .assert()
+        .success();
+    assert!(skipped.exists("CLAUDE.md"));
+    assert!(!skipped.exists("plugin"));
+    assert!(!skipped.exists(".claude-plugin"));
+
+    skipped
+        .exuno()
+        .args(["sync", "--only", "plugin"])
+        .assert()
+        .success();
+    skipped
+        .exuno()
+        .args(["sync", "--skip", "plugin"])
+        .assert()
+        .success();
+    assert!(skipped.exists("CLAUDE.md"));
+    assert!(skipped.exists("plugin/plugin.json"));
+    assert!(skipped.exists(".agents/plugins/marketplace.json"));
+}
+
+#[test]
 fn sync_only_and_skip_filter_minimax() {
     let project = seeded();
     project.enable_tools(&["claude", "minimax"]);
