@@ -479,6 +479,9 @@ fn a_variant_inherits_a_base_project_override() {
     assert!(!project.exists(".claude-hub/rules/core.md"));
 }
 
+// The post_sync hook runs through `bash`, which on the Windows runner is the
+// WSL launcher with no distribution installed.
+#[cfg(unix)]
 #[test]
 fn a_variant_never_inherits_dest_source_or_post_sync_from_the_base_override() {
     let project = seeded();
