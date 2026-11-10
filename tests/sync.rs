@@ -1410,6 +1410,35 @@ fn sync_refuses_to_write_through_a_symlink_into_ai_or_git() {
 
 #[cfg(unix)]
 #[test]
+fn sync_refuses_to_write_through_a_symlink_into_an_in_project_source() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    let config = project
+        .read(".ai/exuno.yaml")
+        .replace("  rules: \".ai/src/rules\"", "  rules: \"docs/rules\"");
+    project.write(".ai/exuno.yaml", &config);
+    project.write("docs/rules/core.md", "# Core\n");
+    std::fs::create_dir_all(project.join(".claude")).unwrap();
+    std::os::unix::fs::symlink("../docs/rules", project.join(".claude/rules")).unwrap();
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(".claude/rules is a symlink to"))
+        .stderr(predicate::str::contains("inside a source directory"));
+    assert_eq!(project.read("docs/rules/core.md"), "# Core\n");
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("inside a source directory"));
+}
+
+#[cfg(unix)]
+#[test]
 fn cleanup_refuses_to_remove_through_a_symlink_that_leaves_the_project() {
     // Creating a symlink on Windows needs Developer Mode or admin rights.
     let outside = tempfile::tempdir().unwrap();

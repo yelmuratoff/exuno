@@ -842,8 +842,10 @@ Appended one line at a time as they are found, with the phase:
   empty filters there and applied them only to generated command skills and
   the inlined command index.
 - After Phase 7: sync refuses to write, copy, or remove an output through a
-  symlink that resolves outside the project, into `.ai/` or `.git/`, or into an
-  explicit source root, and a `.gitignore` link that leaves the project. Bash
+  symlink that resolves outside the project, into `.ai/` or `.git/`, or into a
+  source directory (a `source.*` directory other than `agents`, the tools
+  directory, or a profile overlay, inside or outside the project), and a
+  `.gitignore` link that leaves the project. Bash
   followed every link. A link that stays among the outputs is still followed,
   and removing a link removes only the link.
 - After Phase 7: with a manifest present, sync renders in memory first and

@@ -305,6 +305,7 @@ pub struct Paths {
     lexical_below_root: bool,
     external: Vec<String>,
     explicit: Vec<String>,
+    unwritable: Vec<String>,
 }
 
 impl Paths {
@@ -316,6 +317,7 @@ impl Paths {
             lexical_below_root: true,
             external: Vec::new(),
             explicit: Vec::new(),
+            unwritable: Vec::new(),
         }
     }
 
@@ -451,6 +453,12 @@ impl Paths {
         self.explicit = roots;
     }
 
+    /// Canonical source directories inside the project that an output link
+    /// may never lead into.
+    pub fn register_unwritable_roots(&mut self, roots: Vec<String>) {
+        self.unwritable = roots;
+    }
+
     /// `refuse_escaping_source_links`: every symlink at or below `roots`, and
     /// below each safe directory a link reaches, must resolve to a safe source
     /// or a trusted external root. `Err` is the message to log.
@@ -556,7 +564,12 @@ impl Paths {
         if is_within(canonical, &format!("{}/.git", self.root_canonical)) {
             return Some("inside .git/");
         }
-        if self.explicit.iter().any(|root| is_within(canonical, root)) {
+        if self
+            .explicit
+            .iter()
+            .chain(&self.unwritable)
+            .any(|root| is_within(canonical, root))
+        {
             return Some("inside a source directory");
         }
         None

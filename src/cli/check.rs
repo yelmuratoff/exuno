@@ -318,7 +318,7 @@ pub(crate) fn hazards(
         if skipped_by_sync(&abs) {
             continue;
         }
-        if let Some(reason) = disk.unsafe_output(&abs, true) {
+        if let Some(reason) = rendered.paths.unsafe_output(&abs, true) {
             refused.entry(reason).or_default().push(rel.clone());
             continue;
         }
