@@ -148,9 +148,18 @@ pub fn sync_skills_dir(
 /// nothing recorded stay. Returns how many files went, or would under
 /// `--dry-run`.
 pub fn remove_recorded(s: &mut Session, path: &str) -> Result<usize, Error> {
+    remove_recorded_outside(s, path, &[])
+}
+
+/// [`remove_recorded`], keeping every file at or below one of `kept`.
+pub fn remove_recorded_outside(
+    s: &mut Session,
+    path: &str,
+    kept: &[String],
+) -> Result<usize, Error> {
     let mut removed = 0;
     for file in recorded_under(s, path) {
-        if s.was_touched(&file) {
+        if s.was_touched(&file) || kept.iter().any(|keep| paths::is_within(&file, keep)) {
             continue;
         }
         if !s.dry_run {

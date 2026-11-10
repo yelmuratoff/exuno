@@ -1204,6 +1204,27 @@ fn a_disabled_plugin_leaves_hand_written_files_in_its_dests() {
 }
 
 #[test]
+fn recorded_cleanup_leaves_an_enabled_tools_outputs_below_its_dest() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    let core_rule = project.read(".claude/rules/core.md");
+    project.write(
+        ".ai/src/tools/aaa.yaml",
+        "name: \"A\"\nenabled: false\ntargets:\n  subagents:\n    dest: \".claude\"\n    cleanup: recorded\n",
+    );
+    project
+        .exuno()
+        .args(["sync", "--skip", "claude"])
+        .assert()
+        .success();
+    assert_eq!(project.read(".claude/rules/core.md"), core_rule);
+    assert!(project.exists(".claude/skills/exuno/SKILL.md"));
+    assert!(project.exists(".claude/settings.json"));
+    assert!(project.exists(".claude/hooks/agentsync-guard.sh"));
+}
+
+#[test]
 fn disabling_the_plugin_removes_only_what_it_wrote() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude", "plugin"]);

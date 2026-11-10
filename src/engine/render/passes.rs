@@ -386,7 +386,7 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
             continue;
         };
         for path in owned {
-            if !run.protected.contains(&path) && remove_recorded_outputs(s, &path) {
+            if !run.protected.contains(&path) && remove_recorded_outputs(s, &path, &run.protected) {
                 cleaned = true;
             }
         }
@@ -397,11 +397,12 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
     }
 }
 
-/// Removes the files at or below `path` the previous manifest records, then
-/// the directories that leaves empty; true when something went. A failed
-/// removal is not an error, as for `cleanup_path`.
-fn remove_recorded_outputs(s: &mut Session, path: &str) -> bool {
-    let Ok(removed) = file_ops::remove_recorded(s, path) else {
+/// Removes the files at or below `path` the previous manifest records, except
+/// those at or below a dest another tool claims, then the directories that
+/// leaves empty; true when something went. A failed removal is not an error,
+/// as for `cleanup_path`.
+fn remove_recorded_outputs(s: &mut Session, path: &str, protected: &[String]) -> bool {
+    let Ok(removed) = file_ops::remove_recorded_outside(s, path, protected) else {
         return false;
     };
     if removed == 0 {
