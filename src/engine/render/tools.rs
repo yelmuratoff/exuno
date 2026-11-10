@@ -170,6 +170,9 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
         {
             run.keyed_dests.insert(rel.clone());
         }
+        if tool.flag(&format!("targets.{key}.gitignore")) == Some(false) {
+            continue;
+        }
         if matches!(key, "rules" | "skills" | "commands" | "subagents") {
             rel.push('/');
         }
