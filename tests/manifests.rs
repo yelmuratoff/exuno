@@ -160,6 +160,56 @@ fn a_root_dest_lists_its_files_in_the_managed_gitignore_block() {
     );
 }
 
+fn local_outputs(project: &Project) {
+    let config = project.read(".ai/exuno.yaml");
+    project.write(
+        ".ai/exuno.yaml",
+        &config.replace("outputs: committed", "outputs: local"),
+    );
+}
+
+#[test]
+fn a_template_path_reaches_gitignore_as_a_literal() {
+    let project = demo(".", "");
+    local_outputs(&project);
+    project.write(".ai/src/tools/demo/manifests/!keep.json", "{}\n");
+    project.write(".env", "SECRET=1\n");
+    project.write(".gitignore", ".env\n");
+    project.exuno().arg("sync").assert().success();
+    let gitignore = project.read(".gitignore");
+    assert!(
+        gitignore.lines().any(|line| line == "\\!keep.json"),
+        "{gitignore}"
+    );
+    assert!(
+        !gitignore.lines().any(|line| line == "!keep.json"),
+        "{gitignore}"
+    );
+    assert!(common::is_ignored(&project, "!keep.json"));
+    assert!(common::is_ignored(&project, ".env"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_template_path_with_a_control_character_stops_the_sync() {
+    // Windows forbids a newline in a file name.
+    let project = demo(".", "");
+    local_outputs(&project);
+    project.write(".ai/src/tools/demo/manifests/x\n!.env", "{}\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "its path contains a control character",
+        ));
+    assert!(!project.exists("a.json"));
+    if project.exists(".gitignore") {
+        assert!(!project.read(".gitignore").contains("!.env"));
+    }
+}
+
 #[test]
 fn removing_an_override_template_leaves_its_output_in_place() {
     let project = demo("out", "");

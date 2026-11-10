@@ -511,6 +511,9 @@ pub(super) fn sync_manifests_step(s: &mut Session, tool: &Tool, dests: &Dests) -
         let template = format!("{dir}/{rel}");
         let bytes = s.ws.read(&template).map_err(|e| io(s, e))?;
         let filled = match String::from_utf8(bytes) {
+            _ if manifests::has_control_char(&rel) => {
+                Err("its path contains a control character".to_string())
+            }
             Ok(text) => manifests::fill(&text, rel.ends_with(".json"), &value)
                 .map_err(|reason| reason.to_string()),
             Err(_) => Err("it is not UTF-8".to_string()),

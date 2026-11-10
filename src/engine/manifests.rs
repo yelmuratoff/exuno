@@ -116,8 +116,15 @@ pub fn owned_paths(ws: &Workspace, tools_dir: &str, tool: &Tool, dest: &str) -> 
     };
     templates(ws, &dir)
         .into_iter()
+        .filter(|rel| !has_control_char(rel))
         .map(|rel| format!("{dest}/{rel}"))
         .collect()
+}
+
+/// A path the sync refuses to render: no `.gitignore` line or backup record
+/// can carry it.
+pub fn has_control_char(rel: &str) -> bool {
+    rel.chars().any(char::is_control)
 }
 
 #[cfg(test)]

@@ -79,6 +79,50 @@ pub fn update(path: &Path, paths: &[String], log: &mut Log) -> Result<(), Error>
     Ok(())
 }
 
+/// `path` as a `.gitignore` line that matches that one path and nothing else,
+/// or `None` when it holds a control character, which no line can carry.
+pub fn literal(path: &str) -> Option<String> {
+    if path.chars().any(char::is_control) {
+        return None;
+    }
+    let mut out = String::with_capacity(path.len() + 2);
+    if path.starts_with(['!', '#']) {
+        out.push('\\');
+    }
+    let body = path.trim_end_matches(' ');
+    for c in body.chars() {
+        if matches!(c, '\\' | '*' | '?' | '[') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    for _ in body.len()..path.len() {
+        out.push_str("\\ ");
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod literal_tests {
+    use super::literal;
+
+    #[test]
+    fn a_path_is_escaped_so_git_reads_it_literally() {
+        assert_eq!(
+            literal("plugin/plugin.json").as_deref(),
+            Some("plugin/plugin.json")
+        );
+        assert_eq!(literal("!.env").as_deref(), Some("\\!.env"));
+        assert_eq!(literal("#notes").as_deref(), Some("\\#notes"));
+        assert_eq!(literal("a/!b").as_deref(), Some("a/!b"));
+        assert_eq!(literal("*.json").as_deref(), Some("\\*.json"));
+        assert_eq!(literal("a?[b]\\c").as_deref(), Some("a\\?\\[b]\\\\c"));
+        assert_eq!(literal("trail  ").as_deref(), Some("trail\\ \\ "));
+        assert_eq!(literal("a\n!.env"), None);
+        assert_eq!(literal("tab\there"), None);
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

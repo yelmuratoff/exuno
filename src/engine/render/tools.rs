@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use super::{Run, TARGET_KEYS};
 use crate::config::tool::Tool;
 use crate::engine::file_ops;
+use crate::engine::gitignore;
 use crate::engine::manifests;
 use crate::engine::session::Session;
 use crate::{config::catalog, config::profiles, config::yaml_subset};
@@ -201,7 +202,8 @@ fn owned_paths(s: &Session, tool: &Tool, key: &str, abs: &str) -> Vec<String> {
     manifests::owned_paths(&s.ws, &s.tools_dir, tool, abs)
 }
 
-/// The repo-relative files a `manifests` target at `dest_rel` writes.
+/// The `.gitignore` lines for the files a `manifests` target at `dest_rel`
+/// writes, escaped so a template name can't add a pattern of its own.
 fn manifest_entries(s: &Session, tool: &Tool, dest_rel: &str) -> Vec<String> {
     let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, tool) else {
         return Vec::new();
@@ -214,5 +216,6 @@ fn manifest_entries(s: &Session, tool: &Tool, dest_rel: &str) -> Vec<String> {
             "." => rel,
             dest => format!("{dest}/{rel}"),
         })
+        .filter_map(|rel| gitignore::literal(&rel))
         .collect()
 }
