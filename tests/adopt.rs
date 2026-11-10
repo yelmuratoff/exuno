@@ -351,6 +351,35 @@ fn adopt_refuses_converted_opencode_subagent() {
 }
 
 #[test]
+fn adopt_refuses_a_frontmatter_filtered_skill_or_command() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["plugin"]);
+    let skill = "---\nname: demo\nargument-hint: <file>\ndescription: Demo\n---\nBody\n";
+    project.write(".ai/src/skills/demo/SKILL.md", skill);
+    project.write(
+        ".ai/src/commands/demo.md",
+        "---\ndescription: Demo\nmodel: haiku\n---\nBody\n",
+    );
+    project.exuno().arg("sync").assert().success();
+
+    for (output, source) in [
+        ("plugin/skills/demo/SKILL.md", ".ai/src/skills"),
+        ("plugin/commands/demo.md", ".ai/src/commands"),
+    ] {
+        project.append(output, "edit\n");
+        project
+            .exuno()
+            .args(["adopt", "--yes", output])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(format!(
+                "plugin filters frontmatter keys on sync. Adopting would drop the filtered keys from the source. Edit {source}/ instead."
+            )));
+    }
+    assert_eq!(project.read(".ai/src/skills/demo/SKILL.md"), skill);
+}
+
+#[test]
 fn adopt_refuses_unknown_destination() {
     let project = synced_project(&["claude"]);
     project.write("README.md", "hello\n");
