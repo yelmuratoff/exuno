@@ -498,6 +498,26 @@ impl Paths {
         Ok(())
     }
 
+    /// The first symlink between the project root and `path`, `path` itself
+    /// included, that resolves outside the safe roots, with where it resolves
+    /// (empty when it cannot be resolved). Links that stay inside are fine.
+    pub fn escaping_output_link(&self, path: &str) -> Option<(String, String)> {
+        let rel = path.strip_prefix(&format!("{}/", self.root))?;
+        let mut current = self.root.clone();
+        for segment in rel.split('/') {
+            current = format!("{current}/{segment}");
+            if is_symlink(&current) {
+                let target = link_target(&current).unwrap_or_default();
+                if target.is_empty() || !self.is_safe_source(&target) {
+                    return Some((current, target));
+                }
+            } else if !Path::new(&current).exists() {
+                break;
+            }
+        }
+        None
+    }
+
     /// `resolve_source_path_r`: the normalised path, or `None` after logging an
     /// unsafe root. A missing path is not an error; callers test existence.
     pub fn resolve_source(&self, raw: &str, label: &str, log: &mut Log) -> Option<String> {

@@ -16,8 +16,10 @@ pub fn cleanup_path(s: &mut Session, target: &str) -> bool {
     let shown = s.display(target);
     if s.dry_run {
         s.log.step(&format!("Would remove: {shown} (dry-run)"));
+    } else if let Err(error) = s.ws.remove(target) {
+        s.log.warning(&error.to_string());
+        return false;
     } else {
-        let _ = s.ws.remove(target);
         s.log.step(&format!("Removed: {shown}"));
     }
     true

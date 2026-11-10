@@ -19,6 +19,7 @@
    - Subagents are copied, renamed, or converted to the tool's format.
    - Settings, MCP, and hooks are resolved from your overrides and the shipped base.
    - A `post_sync` command runs only when `EXUNO_ALLOW_POST_SYNC=true` is set in the environment. The repository can't turn it on by itself.
+   - Exuno never writes, copies, or removes an output through a symlink that leads outside the project (or outside a trusted source root). Such a write stops the run, names the link and where it leads, and the backup is restored. Symlinks that stay inside the project are followed as usual.
 9. **Finish.** Exuno updates its block in `.gitignore` and writes `.ai/.sync-manifest`. Files of tools you turned off are removed. Old backups are pruned.
 
 Running `exuno sync` twice in a row gives the same files. `exuno check` relies on that: it renders everything in memory and compares the result with what's on disk.

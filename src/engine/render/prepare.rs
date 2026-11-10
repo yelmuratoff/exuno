@@ -253,6 +253,7 @@ fn register_explicit_sources(s: &mut Session, env: &Env, config: Option<&str>) -
         }
     }
     s.paths.register_explicit_roots(explicit);
+    s.ws.guard_writes(&s.paths);
     Ok(())
 }
 

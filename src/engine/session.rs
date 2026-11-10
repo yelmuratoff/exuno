@@ -28,7 +28,8 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(ws: Workspace, paths: Paths) -> Self {
+    pub fn new(mut ws: Workspace, paths: Paths) -> Self {
+        ws.guard_writes(&paths);
         Self {
             ws,
             tools_dir: format!("{}/.ai/src/tools", paths.root),

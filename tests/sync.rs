@@ -1277,3 +1277,45 @@ fn a_tool_based_on_plugin_renders_the_plugin_templates_with_its_own_vars() {
     );
     project.exuno().arg("check").assert().success();
 }
+
+// ── Engine safety ────────────────────────────────────────────────────────
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_to_write_through_a_symlink_that_leaves_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("notes.txt");
+    std::fs::write(&secret, "keep me\n").unwrap();
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    std::fs::create_dir_all(project.join(".cursor/rules")).unwrap();
+    std::os::unix::fs::symlink(&secret, project.join(".cursor/rules/core.mdc")).unwrap();
+    project.enable_tools(&["cursor"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Refusing to write .cursor/rules/core.mdc: .cursor/rules/core.mdc is a symlink to",
+        ))
+        .stderr(predicate::str::contains("outside the project"));
+    assert_eq!(std::fs::read_to_string(&secret).unwrap(), "keep me\n");
+    assert!(project.exists("CLAUDE.md"));
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_follows_a_symlink_that_stays_inside_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    std::fs::create_dir_all(project.join("store/claude")).unwrap();
+    std::os::unix::fs::symlink("store/claude", project.join(".claude")).unwrap();
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists("store/claude/rules/core.md"));
+    assert!(project.exists("store/claude/skills/exuno/SKILL.md"));
+    project.exuno().arg("sync").assert().success();
+}

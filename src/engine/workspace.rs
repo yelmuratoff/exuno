@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::paths::{self, ENGINE_ROOT};
+use crate::paths::{self, ENGINE_ROOT, Paths};
 use crate::{Error, config::catalog};
 
 #[derive(Clone, Debug)]
@@ -33,6 +33,7 @@ pub struct Workspace {
     root: String,
     on_disk: bool,
     entries: BTreeMap<String, Entry>,
+    guard: Option<Paths>,
 }
 
 impl Workspace {
@@ -42,6 +43,7 @@ impl Workspace {
             root: root.to_string(),
             on_disk: false,
             entries: BTreeMap::new(),
+            guard: None,
         };
         ws.mkdir_entries(root);
         for (rel, bytes) in catalog::engine_files() {
@@ -61,6 +63,35 @@ impl Workspace {
 
     pub fn root(&self) -> &str {
         &self.root
+    }
+
+    /// Every later disk write, copy, or removal is refused when a symlink on
+    /// its way leaves the roots `paths` treats as safe.
+    pub fn guard_writes(&mut self, paths: &Paths) {
+        self.guard = Some(paths.clone());
+    }
+
+    fn refuse_escape(&self, path: &str) -> Result<(), Error> {
+        let Some(guard) = self.guard.as_ref().filter(|_| self.writes_disk(path)) else {
+            return Ok(());
+        };
+        let Some((link, target)) = guard.escaping_output_link(path) else {
+            return Ok(());
+        };
+        let shown = |abs: &str| {
+            guard
+                .to_repo_relative(abs)
+                .unwrap_or_else(|| abs.to_string())
+        };
+        Err(Error::EscapingOutput {
+            path: shown(path),
+            link: shown(&link),
+            target: if target.is_empty() {
+                "a path that cannot be resolved".to_string()
+            } else {
+                target
+            },
+        })
     }
 
     fn indexed(&self, path: &str) -> bool {
@@ -143,6 +174,7 @@ impl Workspace {
 
     /// `mkdir -p`.
     pub fn create_dir_all(&mut self, path: &str) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return std::fs::create_dir_all(path).map_err(|e| Error::io(path, e));
         }
@@ -243,6 +275,7 @@ impl Workspace {
 
     /// `>`: the parent directory must exist.
     pub fn write(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return std::fs::write(path, bytes).map_err(|e| Error::io(path, e));
         }
@@ -255,6 +288,7 @@ impl Workspace {
     }
 
     pub fn replace_atomically(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return crate::engine::staging::write_beside(Path::new(path), &bytes);
         }
@@ -263,6 +297,7 @@ impl Workspace {
 
     /// `>>`: creates the file when missing, the parent directory must exist.
     pub fn append(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return std::fs::OpenOptions::new()
                 .create(true)
@@ -282,6 +317,7 @@ impl Workspace {
 
     /// `rm -rf`.
     pub fn remove(&mut self, path: &str) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             let removed = match std::fs::symlink_metadata(path) {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -308,6 +344,7 @@ impl Workspace {
     /// `chmod +x` as the default umask applies it; the in-memory tree has no modes.
     #[cfg(unix)]
     pub fn make_executable(&mut self, path: &str) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             use std::os::unix::fs::PermissionsExt;
             let mut permissions = std::fs::metadata(path)
@@ -327,6 +364,7 @@ impl Workspace {
     /// `cp -r src dst` onto a missing `dst`: a file, or a whole tree with its
     /// empty directories.
     pub fn copy(&mut self, src: &str, dst: &str) -> Result<(), Error> {
+        self.refuse_escape(dst)?;
         if self.is_file(src) {
             let content = self.content_of(src)?;
             if self.writes_disk(dst) {
