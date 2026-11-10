@@ -608,3 +608,35 @@ fn commands_frontmatter_keys_strips_unlisted_keys() {
     );
     project.exuno().arg("check").assert().success();
 }
+
+#[test]
+fn frontmatter_keys_warns_and_copies_frontmatter_it_cannot_parse() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    frontmatter_keys: [name, description]\n",
+    );
+    let quoted = "---\nname: quoted\n\"model\": x\n---\nBody\n";
+    project.write(".ai/src/skills/quoted/SKILL.md", quoted);
+    let latin1: &[u8] = b"---\nname: latin1\nmodel: caf\xe9\n---\nBody\n";
+    std::fs::create_dir_all(project.join(".ai/src/skills/latin1")).unwrap();
+    std::fs::write(project.join(".ai/src/skills/latin1/SKILL.md"), latin1).unwrap();
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Could not filter frontmatter in .claude/skills/quoted/SKILL.md (line 3 is not a `key:` line); copied it unfiltered",
+        ))
+        .stderr(predicate::str::contains(
+            "[WARNING] Could not filter frontmatter in .claude/skills/latin1/SKILL.md (not UTF-8); copied it unfiltered",
+        ));
+    assert_eq!(project.read(".claude/skills/quoted/SKILL.md"), quoted);
+    assert_eq!(
+        std::fs::read(project.join(".claude/skills/latin1/SKILL.md")).unwrap(),
+        latin1
+    );
+}

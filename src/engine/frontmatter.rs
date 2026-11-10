@@ -13,17 +13,45 @@ pub fn key(line: &[u8]) -> Option<&[u8]> {
     (line[end] == b':').then_some(&line[..end])
 }
 
+/// Frontmatter `retain_keys` cannot filter safely; the text is the reason the
+/// user sees.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum Unparsed {
+    #[error("a byte-order mark precedes the opening ---")]
+    ByteOrderMark,
+    #[error("the opening --- has trailing whitespace")]
+    FenceWhitespace,
+    #[error("no closing --- line")]
+    Unclosed,
+    #[error("line {0} is not a `key:` line")]
+    NotAKey(usize),
+}
+
 /// `text` with only the `keep` keys left in its frontmatter, and the keys it
 /// dropped in source order. Text without frontmatter comes back unchanged.
-pub fn retain_keys(text: &str, keep: &[String]) -> (String, Vec<String>) {
+pub fn retain_keys(text: &str, keep: &[String]) -> Result<(String, Vec<String>), Unparsed> {
     let lines: Vec<&str> = text.split_inclusive('\n').collect();
     let is_fence = |line: &str| content(line) == "---";
-    if !lines.first().is_some_and(|line| is_fence(line)) {
-        return (text.to_string(), Vec::new());
-    }
-    let Some(close) = lines.iter().skip(1).position(|line| is_fence(line)) else {
-        return (text.to_string(), Vec::new());
+    let Some(first) = lines.first().map(|line| content(line)) else {
+        return Ok((text.to_string(), Vec::new()));
     };
+    if first
+        .strip_prefix('\u{feff}')
+        .is_some_and(|rest| rest.trim_end() == "---")
+    {
+        return Err(Unparsed::ByteOrderMark);
+    }
+    if first != "---" {
+        if first.trim_end() == "---" {
+            return Err(Unparsed::FenceWhitespace);
+        }
+        return Ok((text.to_string(), Vec::new()));
+    }
+    let close = lines
+        .iter()
+        .skip(1)
+        .position(|line| is_fence(line))
+        .ok_or(Unparsed::Unclosed)?;
     let body = &lines[1..=close];
 
     let mut out = String::with_capacity(text.len());
@@ -31,24 +59,24 @@ pub fn retain_keys(text: &str, keep: &[String]) -> (String, Vec<String>) {
     let mut dropped: Vec<String> = Vec::new();
     let mut kept = true;
     for (index, line) in body.iter().enumerate() {
-        let bytes = content(line).as_bytes();
-        if let Some(name) = key(bytes) {
+        let line_text = content(line);
+        if let Some(name) = key(line_text.as_bytes()) {
             let name = String::from_utf8_lossy(name).into_owned();
             kept = keep.contains(&name);
             if !kept && !dropped.contains(&name) {
                 dropped.push(name);
             }
-        } else if bytes.is_empty() {
+        } else if line_text.is_empty() {
             let continues = body[index + 1..]
                 .iter()
                 .map(|next| content(next))
-                .find(|next| !next.is_empty())
+                .find(|next| !next.is_empty() && !comment(next))
                 .is_some_and(continuation);
             if !continues {
                 kept = true;
             }
-        } else if !continuation(content(line)) {
-            kept = true;
+        } else if !continuation(line_text) && !comment(line_text) {
+            return Err(Unparsed::NotAKey(index + 2));
         }
         if kept {
             out.push_str(line);
@@ -57,12 +85,16 @@ pub fn retain_keys(text: &str, keep: &[String]) -> (String, Vec<String>) {
     for line in &lines[close + 1..] {
         out.push_str(line);
     }
-    (out, dropped)
+    Ok((out, dropped))
 }
 
 fn content(line: &str) -> &str {
     let line = line.strip_suffix('\n').unwrap_or(line);
     line.strip_suffix('\r').unwrap_or(line)
+}
+
+fn comment(line: &str) -> bool {
+    line.starts_with('#')
 }
 
 /// An indented line, or a `- item` at column 0: YAML lets a block sequence
@@ -73,16 +105,20 @@ fn continuation(line: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::retain_keys;
+    use super::{Unparsed, retain_keys};
 
     fn keep(keys: &[&str]) -> Vec<String> {
         keys.iter().map(|key| key.to_string()).collect()
     }
 
+    fn filtered(text: &str, keys: &[&str]) -> (String, Vec<String>) {
+        retain_keys(text, &keep(keys)).unwrap()
+    }
+
     #[test]
     fn keeps_listed_keys_byte_for_byte() {
         let text = "---\nname: a\ndescription: \"Quoted: yes\"  # note\nargument-hint: <file>\n---\nBody\n\n---\nnot: frontmatter\n";
-        let (out, dropped) = retain_keys(text, &keep(&["name", "description"]));
+        let (out, dropped) = filtered(text, &["name", "description"]);
         assert_eq!(
             out,
             "---\nname: a\ndescription: \"Quoted: yes\"  # note\n---\nBody\n\n---\nnot: frontmatter\n"
@@ -94,11 +130,11 @@ mod tests {
     fn drops_a_block_scalar_with_its_continuation_lines() {
         let text =
             "---\nname: a\ndescription: >-\n  line one\n\n  line two\nlicense: MIT\n---\nBody\n";
-        let (out, dropped) = retain_keys(text, &keep(&["name", "license"]));
+        let (out, dropped) = filtered(text, &["name", "license"]);
         assert_eq!(out, "---\nname: a\nlicense: MIT\n---\nBody\n");
         assert_eq!(dropped, ["description"]);
 
-        let (out, dropped) = retain_keys(text, &keep(&["description"]));
+        let (out, dropped) = filtered(text, &["description"]);
         assert_eq!(
             out,
             "---\ndescription: >-\n  line one\n\n  line two\n---\nBody\n"
@@ -109,20 +145,15 @@ mod tests {
     #[test]
     fn drops_a_nested_map() {
         let text = "---\nname: a\nhooks:\n  PreToolUse:\n    - matcher: x\nallowed-tools:\n- Bash\n- Read\nmetadata:\n  version: 1\n---\n";
-        let (out, dropped) = retain_keys(text, &keep(&["name", "metadata"]));
+        let (out, dropped) = filtered(text, &["name", "metadata"]);
         assert_eq!(out, "---\nname: a\nmetadata:\n  version: 1\n---\n");
         assert_eq!(dropped, ["hooks", "allowed-tools"]);
     }
 
     #[test]
     fn leaves_text_without_frontmatter_unchanged() {
-        for text in [
-            "# Title\nname: x\n",
-            "---\nname: a\nmodel: x\n",
-            "",
-            "--- \nmodel: x\n---\n",
-        ] {
-            let (out, dropped) = retain_keys(text, &keep(&["name"]));
+        for text in ["# Title\nname: x\n", "", "Body\n---\nname: x\n---\n"] {
+            let (out, dropped) = filtered(text, &["name"]);
             assert_eq!(out, text);
             assert!(dropped.is_empty(), "{text:?}");
         }
@@ -131,7 +162,7 @@ mod tests {
     #[test]
     fn preserves_crlf_line_endings() {
         let text = "---\r\nname: a\r\nmodel: x\r\ndescription: >\r\n  folded\r\n---\r\nBody\r\n";
-        let (out, dropped) = retain_keys(text, &keep(&["name", "description"]));
+        let (out, dropped) = filtered(text, &["name", "description"]);
         assert_eq!(
             out,
             "---\r\nname: a\r\ndescription: >\r\n  folded\r\n---\r\nBody\r\n"
@@ -142,11 +173,38 @@ mod tests {
     #[test]
     fn returns_dropped_keys_in_source_order() {
         let text = "---\nz-key: 1\nname: a\nargument-hint: h\n# a comment\n\ndisable-model-invocation: true\n---\n";
-        let (out, dropped) = retain_keys(text, &keep(&["name"]));
-        assert_eq!(out, "---\nname: a\n# a comment\n\n---\n");
+        let (out, dropped) = filtered(text, &["name"]);
+        assert_eq!(out, "---\nname: a\n\n---\n");
         assert_eq!(
             dropped,
             ["z-key", "argument-hint", "disable-model-invocation"]
+        );
+    }
+
+    #[test]
+    fn a_comment_goes_with_the_block_it_sits_in() {
+        let text = "---\nname: a\nhooks:\n# pre\n  PreToolUse:\n    - matcher: x\n\n# also hooks\n  Stop: []\ndescription: d\n# about d\n---\n";
+        let (out, dropped) = filtered(text, &["name", "description"]);
+        assert_eq!(out, "---\nname: a\ndescription: d\n# about d\n---\n");
+        assert_eq!(dropped, ["hooks"]);
+    }
+
+    #[test]
+    fn reports_frontmatter_it_cannot_parse() {
+        for (text, reason) in [
+            ("\u{feff}---\nname: a\n---\n", Unparsed::ByteOrderMark),
+            ("--- \nname: a\n---\n", Unparsed::FenceWhitespace),
+            ("---\nname: a\nmodel: x\n", Unparsed::Unclosed),
+            ("---\nname: a\n--- \n", Unparsed::Unclosed),
+            ("---\nname: a\n\"model\": x\n---\n", Unparsed::NotAKey(3)),
+            ("---\nmy key: x\n---\n", Unparsed::NotAKey(2)),
+            ("---\nname: a\na.b: x\n---\n", Unparsed::NotAKey(3)),
+        ] {
+            assert_eq!(retain_keys(text, &keep(&["name"])), Err(reason), "{text:?}");
+        }
+        assert_eq!(
+            Unparsed::NotAKey(3).to_string(),
+            "line 3 is not a `key:` line"
         );
     }
 }

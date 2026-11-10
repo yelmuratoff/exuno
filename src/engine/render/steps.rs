@@ -402,14 +402,23 @@ fn retain_frontmatter_keys(s: &mut Session, tool: &Tool, target: &str, files: &[
             continue;
         }
         let bytes = s.ws.read(path).map_err(|e| io(s, e))?;
-        let Ok(text) = String::from_utf8(bytes) else {
-            continue;
+        let result = match String::from_utf8(bytes) {
+            Ok(text) => frontmatter::retain_keys(&text, &keep).map_err(|e| e.to_string()),
+            Err(_) => Err("not UTF-8".to_string()),
         };
-        let (filtered, dropped) = frontmatter::retain_keys(&text, &keep);
+        let shown = s.display(path);
+        let (filtered, dropped) = match result {
+            Ok(done) => done,
+            Err(reason) => {
+                s.log.warning(&format!(
+                    "Could not filter frontmatter in {shown} ({reason}); copied it unfiltered"
+                ));
+                continue;
+            }
+        };
         if dropped.is_empty() {
             continue;
         }
-        let shown = s.display(path);
         for key in dropped {
             s.log
                 .warning(&format!("Dropped frontmatter key '{key}' from {shown}"));
