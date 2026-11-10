@@ -12,12 +12,12 @@ use crate::engine::session::Session;
 use crate::engine::workspace::Workspace;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
-use crate::paths::Paths;
+use crate::paths::{DiskText, Paths};
 use crate::project::Project;
 use crate::transaction::manifest::Manifest;
 use crate::{
-    Error, config::project_config, config::version, config::yaml_subset, engine::overlay,
-    engine_version, paths,
+    Error, config::catalog, config::profiles, config::project_config, config::tool::Tool,
+    config::version, config::yaml_subset, engine::overlay, engine_version, paths,
 };
 
 const MANIFEST_REL: &str = ".ai/.sync-manifest";
@@ -118,10 +118,10 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     let rendered = render_in_memory(
         root,
         &manifest,
-        config_path.as_deref(),
-        config.as_deref(),
+        (config_path.as_deref(), config.as_deref()),
         env,
         Selection::default(),
+        Purpose::Check,
     )?;
     let (session, run) = match rendered {
         InMemory::Rendered(session, run) => (session, run),
@@ -131,7 +131,7 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
             report.status = 1;
             return Ok(report);
         }
-        InMemory::RenderFailed(session) => {
+        InMemory::RenderFailed(session, _) => {
             report.out("✗ Sync script failed during check");
             report.out("Sync output (last 40 lines):");
             for line in session.log.tail(40) {
@@ -219,20 +219,29 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
 pub(crate) enum InMemory {
     Rendered(Box<Session>, Box<Run>),
     SeedFailed(String),
-    RenderFailed(Box<Session>),
+    RenderFailed(Box<Session>, u8),
+}
+
+/// Who renders in memory: `check` runs every refusal itself; a sync's
+/// preflight has already passed them on the disk.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Purpose {
+    Check,
+    Preflight,
 }
 
 /// Renders the sync of `root` for `selection` into a workspace seeded from
-/// `.ai/` and the recorded outputs, as `sync --force` would write it, with no
-/// post-sync hook and no disk write.
+/// `.ai/`, the recorded outputs, and the other in-project inputs, as
+/// `sync --force` would write it, with no post-sync hook and no disk write.
 pub(crate) fn render_in_memory(
     root: &str,
     manifest: &[String],
-    config_path: Option<&str>,
-    config: Option<&str>,
+    config: (Option<&str>, Option<&str>),
     env: &Env,
     selection: Selection,
+    purpose: Purpose,
 ) -> Result<InMemory, Error> {
+    let (config_path, config) = config;
     let ws = match seed_workspace(root, manifest, config_path, config) {
         Ok(ws) => ws,
         Err(detail) => return Ok(InMemory::SeedFailed(detail)),
@@ -248,12 +257,14 @@ pub(crate) fn render_in_memory(
             .unwrap_or_default(),
     );
     merge_shared_parent(&mut session.ws, root, config)?;
-    Ok(
-        match render::render_selected(&mut session, env, selection) {
-            Ok(run) => InMemory::Rendered(Box::new(session), Box::new(run)),
-            Err(_) => InMemory::RenderFailed(Box::new(session)),
-        },
-    )
+    let rendered = match purpose {
+        Purpose::Check => render::render_selected(&mut session, env, selection),
+        Purpose::Preflight => render::render_for_preflight(&mut session, env, selection),
+    };
+    Ok(match rendered {
+        Ok(run) => InMemory::Rendered(Box::new(session), Box::new(run)),
+        Err(stop) => InMemory::RenderFailed(Box::new(session), stop.0),
+    })
 }
 
 /// What stops a real sync before it writes anything.
@@ -484,7 +495,63 @@ fn seed_workspace(
                 .map_err(|e| e.to_string())?;
         }
     }
+    for abs in inputs_outside_ai(root, config_text) {
+        if !ws.exists(&abs) && Path::new(&abs).exists() {
+            ws.seed_from_disk(&abs, Path::new(&abs), &is_git)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     Ok(ws)
+}
+
+/// The other inputs a sync reads from the project outside `.ai/`: profile
+/// overlays and every tool's `targets.<key>.source`.
+fn inputs_outside_ai(root: &str, config_text: Option<&str>) -> Vec<String> {
+    let absolute = |raw: &str| {
+        if crate::paths::is_absolute(raw) {
+            paths::normalize(raw)
+        } else {
+            paths::normalize(&format!("{root}/{raw}"))
+        }
+    };
+    let mut raw_paths: Vec<String> = Vec::new();
+    if let Some(text) = config_text {
+        raw_paths.extend(
+            profiles::names(text)
+                .iter()
+                .map(|name| profiles::overlay_dir(text, name)),
+        );
+    }
+    let tools_dir = config_text
+        .map(|text| yaml_subset::value(text, "source.tools"))
+        .filter(|raw| !raw.is_empty())
+        .unwrap_or_else(|| ".ai/src/tools".to_string());
+    let tools_dir = absolute(&tools_dir);
+    let mut slugs: BTreeSet<String> = catalog::base_tools().into_iter().collect();
+    if let Ok(entries) = std::fs::read_dir(&tools_dir) {
+        slugs.extend(entries.filter_map(|entry| {
+            let name = entry.ok()?.file_name().disk_text();
+            Some(name.strip_suffix(".yaml")?.to_string())
+        }));
+    }
+    for slug in slugs {
+        let user = std::fs::read_to_string(format!("{tools_dir}/{slug}.yaml")).ok();
+        let tool = Tool::new(&slug, user);
+        for key in render::TARGET_KEYS {
+            let raw = tool.value(&format!("targets.{key}.source"));
+            if !raw.is_empty() {
+                raw_paths.push(raw);
+            }
+        }
+    }
+    let ai = format!("{root}/.ai/");
+    raw_paths
+        .iter()
+        .map(|raw| absolute(raw))
+        .filter(|abs| abs.starts_with(&format!("{root}/")) && !abs.starts_with(&ai) && !is_git(abs))
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect()
 }
 
 fn is_git(rel: &str) -> bool {

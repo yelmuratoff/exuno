@@ -135,6 +135,16 @@ pub fn render_selected(s: &mut Session, env: &Env, selection: Selection) -> Resu
     Ok(run)
 }
 
+/// [`render_selected`] without the refusals a sync has already passed on the
+/// disk before it renders in memory to check what it would write.
+pub fn render_for_preflight(s: &mut Session, env: &Env, selection: Selection) -> Result<Run, Stop> {
+    let mut run = prepare(s, env, selection)?;
+    setup_overlays(s, &mut run, false)?;
+    build_catalog(s, &mut run);
+    run_passes(s, &mut run)?;
+    Ok(run)
+}
+
 /// Where a trapped signal ends the run: Bash's trap fires once the command in
 /// progress returns.
 pub fn checkpoint(s: &Session) -> Step {

@@ -1516,6 +1516,61 @@ fn force_overwrites_an_unrecorded_file() {
 }
 
 #[test]
+fn an_overwrite_from_a_profile_overlay_outside_ai_is_refused() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "claude"])
+        .assert()
+        .success();
+    let config = project
+        .read(".ai/exuno.yaml")
+        .replace("overlay: \".ai/profiles/hub\"", "overlay: \"profiles/hub\"");
+    project.write(".ai/exuno.yaml", &config);
+    project.write("profiles/hub/src/rules/hub.md", "# Hub\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".claude-hub/rules/hub.md"), "# Hub\n");
+
+    project.write("profiles/hub/src/rules/extra.md", "# Extra\n");
+    project.write(".claude-hub/rules/extra.md", "mine\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Sync would overwrite 1 file(s) it did not write:\n      .claude-hub/rules/extra.md\n",
+        ));
+    assert_eq!(project.read(".claude-hub/rules/extra.md"), "mine\n");
+}
+
+#[test]
+fn a_preflight_that_cannot_render_stops_the_sync() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write(
+        ".ai/src/tools/demo.yaml",
+        "name: \"Demo\"\nenabled: true\ntargets:\n  manifests:\n    dest: \"out\"\n",
+    );
+    project.write(
+        ".ai/src/tools/demo/manifests/a.json",
+        "{\"n\": \"${name}\"}\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Could not render this sync in memory to check it before writing:",
+        ))
+        .stderr(predicate::str::contains("no value for ${name}"))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+}
+
+#[test]
 fn a_refused_overwrite_runs_no_post_sync_hook() {
     let project = Project::seeded(&[]);
     project.write(

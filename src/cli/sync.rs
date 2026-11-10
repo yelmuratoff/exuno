@@ -558,14 +558,37 @@ fn preflight(
     let rendered = check::render_in_memory(
         &root,
         &manifest,
-        run.config_path.as_deref(),
-        run.config.as_deref(),
+        (run.config_path.as_deref(), run.config.as_deref()),
         &memory_env,
         selection,
+        check::Purpose::Preflight,
     )
     .map_err(|e| io(s, e))?;
-    let check::InMemory::Rendered(memory, memory_run) = rendered else {
-        return Ok(());
+    let headline = "Could not render this sync in memory to check it before writing:";
+    let (memory, memory_run) = match rendered {
+        check::InMemory::Rendered(memory, run) => (memory, run),
+        check::InMemory::SeedFailed(detail) => {
+            s.log.error(headline);
+            s.log.err(format!("  {detail}"));
+            return Err(Stop(1));
+        }
+        check::InMemory::RenderFailed(memory, status) => {
+            s.log.error(headline);
+            let lines: Vec<String> = memory
+                .log
+                .lines()
+                .iter()
+                .map(|(_, line)| line.clone())
+                .collect();
+            let start = lines
+                .iter()
+                .position(|line| line.starts_with("[ERROR]"))
+                .unwrap_or(lines.len().saturating_sub(20));
+            for line in &lines[start..] {
+                s.log.err(line.clone());
+            }
+            return Err(Stop(status));
+        }
     };
     let found = check::hazards(&memory, &memory_run, &root, previous);
     if found.is_empty() {
