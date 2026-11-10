@@ -8,7 +8,7 @@
 //! project itself, as `sync.sh` does, and keeps only the virtual roots in memory.
 
 use crate::paths::DiskText;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -34,6 +34,16 @@ pub struct Workspace {
     on_disk: bool,
     entries: BTreeMap<String, Entry>,
     guard: Option<Paths>,
+    originals: Option<Originals>,
+}
+
+/// The bytes each disk file held before this run first changed it, for the
+/// files outside `skip`.
+#[derive(Debug, Default)]
+struct Originals {
+    skip: BTreeSet<String>,
+    seen: BTreeSet<String>,
+    bytes: BTreeMap<String, Vec<u8>>,
 }
 
 impl Workspace {
@@ -44,6 +54,7 @@ impl Workspace {
             on_disk: false,
             entries: BTreeMap::new(),
             guard: None,
+            originals: None,
         };
         ws.mkdir_entries(root);
         for (rel, bytes) in catalog::engine_files() {
@@ -69,6 +80,58 @@ impl Workspace {
     /// its way leaves the roots `paths` treats as safe.
     pub fn guard_writes(&mut self, paths: &Paths) {
         self.guard = Some(paths.clone());
+    }
+
+    /// From now on, keep what every existing disk file outside `skip` held
+    /// before this run first changes or removes it.
+    pub fn track_originals(&mut self, skip: BTreeSet<String>) {
+        self.originals = Some(Originals {
+            skip,
+            ..Originals::default()
+        });
+    }
+
+    /// The tracked files whose content now differs from what they held before
+    /// this run changed them, removed ones included.
+    pub fn changed_originals(&self) -> Vec<String> {
+        let Some(originals) = &self.originals else {
+            return Vec::new();
+        };
+        originals
+            .bytes
+            .iter()
+            .filter(|(path, before)| std::fs::read(path).ok().as_ref() != Some(before))
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+
+    fn remember(&mut self, path: &str) -> Result<(), Error> {
+        if !self.writes_disk(path)
+            || self
+                .originals
+                .as_ref()
+                .is_none_or(|originals| originals.seen.contains(path))
+        {
+            return Ok(());
+        }
+        let files = if Path::new(path).is_dir() {
+            self.files_under(path)
+        } else {
+            vec![path.to_string()]
+        };
+        let Some(originals) = self.originals.as_mut() else {
+            return Ok(());
+        };
+        originals.seen.insert(path.to_string());
+        for file in files {
+            let first_touch = file == path || originals.seen.insert(file.clone());
+            if !first_touch || originals.skip.contains(&file) || !Path::new(&file).is_file() {
+                continue;
+            }
+            let bytes = std::fs::read(&file).map_err(|e| Error::io(&file, e))?;
+            originals.bytes.insert(file, bytes);
+        }
+        Ok(())
     }
 
     fn refuse_escape(&self, path: &str) -> Result<(), Error> {
@@ -276,6 +339,7 @@ impl Workspace {
     /// `>`: the parent directory must exist.
     pub fn write(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), Error> {
         self.refuse_escape(path)?;
+        self.remember(path)?;
         if self.writes_disk(path) {
             return std::fs::write(path, bytes).map_err(|e| Error::io(path, e));
         }
@@ -289,6 +353,7 @@ impl Workspace {
 
     pub fn replace_atomically(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), Error> {
         self.refuse_escape(path)?;
+        self.remember(path)?;
         if self.writes_disk(path) {
             return crate::engine::staging::write_beside(Path::new(path), &bytes);
         }
@@ -298,6 +363,7 @@ impl Workspace {
     /// `>>`: creates the file when missing, the parent directory must exist.
     pub fn append(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         self.refuse_escape(path)?;
+        self.remember(path)?;
         if self.writes_disk(path) {
             return std::fs::OpenOptions::new()
                 .create(true)
@@ -318,6 +384,7 @@ impl Workspace {
     /// `rm -rf`.
     pub fn remove(&mut self, path: &str) -> Result<(), Error> {
         self.refuse_escape(path)?;
+        self.remember(path)?;
         if self.writes_disk(path) {
             let removed = match std::fs::symlink_metadata(path) {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -365,6 +432,7 @@ impl Workspace {
     /// empty directories.
     pub fn copy(&mut self, src: &str, dst: &str) -> Result<(), Error> {
         self.refuse_escape(dst)?;
+        self.remember(dst)?;
         if self.is_file(src) {
             let content = self.content_of(src)?;
             if self.writes_disk(dst) {

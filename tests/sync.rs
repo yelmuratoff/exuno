@@ -1319,3 +1319,58 @@ fn sync_follows_a_symlink_that_stays_inside_the_project() {
     assert!(project.exists("store/claude/skills/exuno/SKILL.md"));
     project.exuno().arg("sync").assert().success();
 }
+
+/// A synced claude project, then a hand-written `.cursor/rules/core.mdc` that
+/// enabling cursor would overwrite.
+fn unrecorded_cursor_rule() -> Project {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".ai/.sync-manifest"));
+    project.write(".cursor/rules/core.mdc", "mine\n");
+    project.enable_tools(&["cursor"]);
+    project
+}
+
+#[test]
+fn sync_refuses_to_overwrite_an_unrecorded_file_that_differs() {
+    let project = unrecorded_cursor_rule();
+    let manifest = project.read(".ai/.sync-manifest");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Sync would overwrite 1 file(s) it did not write:\n      .cursor/rules/core.mdc\n",
+        ))
+        .stderr(predicate::str::contains("--force"));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+    assert!(!project.exists("AGENTS.md"));
+    assert_eq!(project.read(".ai/.sync-manifest"), manifest);
+}
+
+#[test]
+fn force_overwrites_an_unrecorded_file() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .args(["sync", "--force"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Overwriting 1 file(s) sync did not write (--force):\n      .cursor/rules/core.mdc\n",
+        ));
+    assert!(project.read(".cursor/rules/core.mdc").starts_with("---\n"));
+    project.exuno().arg("sync").assert().success();
+}
+
+#[test]
+fn a_first_sync_without_a_manifest_still_writes_over_existing_files() {
+    let project = Project::seeded(&[]);
+    assert!(!project.exists(".ai/.sync-manifest"));
+    project.write("CLAUDE.md", "mine\n");
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read("CLAUDE.md"), project.read(".ai/src/AGENTS.md"));
+}

@@ -288,6 +288,16 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     let root = s.paths.root.clone();
     let previous = Manifest::load(&root).map_err(|e| io(s, e))?;
     s.activate_manifest(previous.as_ref().map(Manifest::paths).unwrap_or_default());
+    if let Some(previous) = &previous
+        && !s.dry_run
+    {
+        let recorded = previous
+            .paths()
+            .into_iter()
+            .map(|rel| format!("{root}/{rel}"))
+            .collect();
+        s.ws.track_originals(recorded);
+    }
     render::collect_legacy_targets(s, &mut run);
     s.set_owned_before(
         previous
@@ -299,6 +309,7 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     check_drift(s, &run, previous.as_ref())?;
     start_transaction(s, &run, env, tx)?;
     render::run_passes(s, &mut run)?;
+    check_unowned_overwrites(s, &run)?;
     finalize(s, &run, previous.as_ref(), tx)?;
     if tx.backup.is_some() {
         prune(s, env, run.retention);
@@ -517,6 +528,50 @@ fn check_drift(s: &mut Session, run: &Run, previous: Option<&Manifest>) -> Resul
         "    • Move your edits into .ai/src/, then re-run sync".into(),
         format!("    • If a tool wrote here out of band, run {adopt} to pull it into .ai/src/"),
         "    • Re-run with --force to discard the edits and rewrite from source".into(),
+        String::new(),
+    ] {
+        s.log.err(line);
+    }
+    Err(Stop(1))
+}
+
+/// Stops when the run changed a file the previous manifest does not record:
+/// a file someone else put at an output path. The transaction then restores
+/// it; `--force` keeps the rendered content. Files owned by key merge by design.
+fn check_unowned_overwrites(s: &mut Session, run: &Run) -> Result<(), Stop> {
+    let overwritten: Vec<String> =
+        s.ws.changed_originals()
+            .iter()
+            .filter_map(|abs| s.paths.to_repo_relative(abs))
+            .filter(|rel| !run.keyed_dests.contains(rel))
+            .collect();
+    if overwritten.is_empty() {
+        return Ok(());
+    }
+    if s.force {
+        s.log.warning(&format!(
+            "Overwriting {} file(s) sync did not write (--force):",
+            overwritten.len()
+        ));
+        for rel in overwritten {
+            s.log.err(format!("      {rel}"));
+        }
+        return Ok(());
+    }
+    s.log.error(&format!(
+        "Sync would overwrite {} file(s) it did not write:",
+        overwritten.len()
+    ));
+    for rel in overwritten {
+        s.log.err(format!("      {rel}"));
+    }
+    for line in [
+        String::new(),
+        "  These files are not in .ai/.sync-manifest, and sync would change them. Choose one:"
+            .into(),
+        "    • Move their content into .ai/src/, then re-run sync".into(),
+        "    • Move or delete the files if you no longer need them".into(),
+        "    • Re-run with --force to replace them from source".into(),
         String::new(),
     ] {
         s.log.err(line);
