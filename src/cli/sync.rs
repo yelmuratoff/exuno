@@ -286,6 +286,7 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     render::setup_overlays(s, &mut run, true)?;
     render::build_catalog(s, &mut run);
 
+    lock_project(s, &run, env, tx)?;
     let root = s.paths.root.clone();
     let previous = Manifest::load(&root).map_err(|e| io(s, e))?;
     s.activate_manifest(previous.as_ref().map(Manifest::paths).unwrap_or_default());
@@ -595,19 +596,32 @@ fn preflight(
         return Ok(());
     }
     if s.dry_run {
-        for line in found.lines("A real sync would stop: ") {
+        let mut stops = found.clone();
+        if s.force {
+            stops.unowned.clear();
+        }
+        for line in stops.lines("A real sync would stop: ") {
             if line.starts_with("      ") {
                 s.log.err(line);
             } else {
                 s.log.warning(&line);
             }
         }
+        if s.force && !found.unowned.is_empty() {
+            s.log.warning(&format!(
+                "Would overwrite {} file(s) sync did not write (--force):",
+                found.unowned.len()
+            ));
+            for rel in &found.unowned {
+                s.log.err(format!("      {rel}"));
+            }
+        }
         return Ok(());
     }
-    for refusal in &found.unsafe_writes {
+    for refusal in &found.refusals {
         s.log.error(refusal);
     }
-    if !found.unsafe_writes.is_empty() {
+    if !found.refusals.is_empty() {
         return Err(Stop(1));
     }
     if s.force {
@@ -638,6 +652,28 @@ fn preflight(
     Err(Stop(1))
 }
 
+fn refuse_backup(s: &mut Session, e: Error) -> Stop {
+    report_backup_error(&mut s.log, &e);
+    s.log
+        .error("Could not back up sync targets; no files were changed.");
+    Stop(1)
+}
+
+/// Holds the project from before the manifest is read until the run ends, so
+/// the checks that read the disk see what the transaction then changes.
+fn lock_project(s: &mut Session, run: &Run, env: &Env, tx: &mut Transaction) -> Result<(), Stop> {
+    if s.dry_run || env.skip_backup {
+        return Ok(());
+    }
+    let (lock, recovered) =
+        Lock::acquire(&s.paths.root, "sync", run.retention).map_err(|e| refuse_backup(s, e))?;
+    if let Some(recovered) = recovered {
+        s.log.warning(&recovered.message());
+    }
+    tx.lock = Some(lock);
+    Ok(())
+}
+
 /// `_start_sync_transaction`.
 fn start_transaction(
     s: &mut Session,
@@ -651,26 +687,23 @@ fn start_transaction(
     let root = s.paths.root.clone();
     let mut targets = run.backup_targets.clone();
     if run.update_gitignore {
-        targets.push(format!("{root}/.gitignore"));
+        let link = format!("{root}/.gitignore");
+        if Path::new(&link).is_symlink()
+            && let Ok(target) = std::fs::canonicalize(&link)
+        {
+            targets.push(target.to_string_lossy().into_owned());
+        }
+        targets.push(link);
     }
     targets.push(format!("{root}/{}", manifest::REL));
     s.interrupt = Some(Interrupt::arm());
     tx.retention = run.retention;
-    let refused = |s: &mut Session, e: Error| {
-        report_backup_error(&mut s.log, &e);
-        s.log
-            .error("Could not back up sync targets; no files were changed.");
-        Stop(1)
+    let Some(lock) = tx.lock.as_ref() else {
+        return Ok(());
     };
-    let (lock, recovered) =
-        Lock::acquire(&root, "sync", run.retention).map_err(|e| refused(s, e))?;
-    if let Some(recovered) = recovered {
-        s.log.warning(&recovered.message());
-    }
-    let lock = tx.lock.insert(lock);
     let path = backup::create(&root, "sync", &targets, run.retention)
         .and_then(|path| lock.begin(&path).map(|()| path))
-        .map_err(|e| refused(s, e))?;
+        .map_err(|e| refuse_backup(s, e))?;
     tx.backup = Some(path);
     tx.active = true;
     Ok(())

@@ -268,23 +268,23 @@ pub(crate) fn render_in_memory(
 }
 
 /// What stops a real sync before it writes anything.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Hazards {
-    /// One refusal per output path sync may not write.
-    pub unsafe_writes: Vec<String>,
+    /// One refusal per link sync may not write or remove through.
+    pub refusals: Vec<String>,
     /// Existing files the previous manifest does not record that the render changes.
     pub unowned: Vec<String>,
 }
 
 impl Hazards {
     pub fn is_empty(&self) -> bool {
-        self.unsafe_writes.is_empty() && self.unowned.is_empty()
+        self.refusals.is_empty() && self.unowned.is_empty()
     }
 
     /// The report lines, each headline after `lead`.
     pub fn lines(&self, lead: &str) -> Vec<String> {
         let mut lines: Vec<String> = self
-            .unsafe_writes
+            .refusals
             .iter()
             .map(|refusal| format!("{lead}{refusal}"))
             .collect();
@@ -322,15 +322,40 @@ pub(crate) fn hazards(
                     .is_none()
             })
     };
-    let mut refused: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut refused: BTreeMap<(&'static str, String), Vec<String>> = BTreeMap::new();
     let mut found = Hazards::default();
+    if run.update_gitignore
+        && let Some(reason) = rendered
+            .paths
+            .unsafe_output(&format!("{root}/.gitignore"), true)
+    {
+        refused
+            .entry(("write", reason))
+            .or_default()
+            .push(".gitignore".to_string());
+    }
+    for rel in recorded.iter().flatten() {
+        let abs = format!("{root}/{rel}");
+        if rendered.ws.is_file(&abs) || !Path::new(&abs).is_file() || skipped_by_sync(&abs) {
+            continue;
+        }
+        if let Some(reason) = rendered.paths.unsafe_output(&abs, false) {
+            refused
+                .entry(("remove", reason))
+                .or_default()
+                .push(rel.clone());
+        }
+    }
     for rel in rendered.touched() {
         let abs = format!("{root}/{rel}");
         if skipped_by_sync(&abs) {
             continue;
         }
         if let Some(reason) = rendered.paths.unsafe_output(&abs, true) {
-            refused.entry(reason).or_default().push(rel.clone());
+            refused
+                .entry(("write", reason))
+                .or_default()
+                .push(rel.clone());
             continue;
         }
         let Some(recorded) = &recorded else {
@@ -346,17 +371,17 @@ pub(crate) fn hazards(
             found.unowned.push(rel.clone());
         }
     }
-    for (reason, rels) in refused {
+    for ((action, reason), rels) in refused {
         let path = match rels.len() {
             1 => rels[0].clone(),
             count => format!("{} and {} more file(s)", rels[0], count - 1),
         };
         let refusal = Error::UnsafeOutput {
-            action: "write",
+            action,
             path,
             reason,
         };
-        found.unsafe_writes.push(refusal.to_string());
+        found.refusals.push(refusal.to_string());
     }
     found
 }

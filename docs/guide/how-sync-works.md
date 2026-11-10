@@ -9,8 +9,8 @@
 3. **Refuse unsafe input.** A source symlink pointing outside the project, or a version pin that doesn't match the running binary, stops the run before anything is written. See [sources outside the project](configuration.md#sources-outside-the-project) and [version pinning](team-and-automation.md#pin-the-exuno-version).
 4. **Add inherited content.** If the project inherits from a parent (`shared:`, see [Workspaces](workspaces-and-profiles.md)), Exuno fills the gaps in your source with the parent's files. It also adds the built-in `exuno` skill (see [Skills](skills.md#the-built-in-exuno-skill)). Both happen in memory; nothing is written into `.ai/src/`.
 5. **Load every tool's config.** Each enabled tool's YAML is the shipped base with your override from `.ai/src/tools/` on top. See [where each setting comes from](#where-each-setting-comes-from) below.
-6. **Check for hand edits.** Exuno compares every generated file with the hash it recorded last time. If one was edited, the run stops. See [catching hand edits](#catching-hand-edits).
-7. **Lock and back up.** Exuno takes a project lock so a second run can't start, then copies everything it may change into `.ai/backups/`. See [Backups and rollback](backups-and-rollback.md).
+6. **Lock and check for hand edits.** Exuno takes a project lock so a second run can't start, and restores a run that was killed partway through. Then it compares every generated file with the hash it recorded last time. If one was edited, the run stops. See [catching hand edits](#catching-hand-edits).
+7. **Back up.** Exuno copies everything it may change into `.ai/backups/`, including the file a `.gitignore` link points to. See [Backups and rollback](backups-and-rollback.md).
 8. **Write each tool's files.** For every tool, in this order:
    - `AGENTS.md` is copied under the tool's name (`CLAUDE.md`, `GEMINI.md`, or `00-context.md` inside the rules folder for Amazon Q).
    - Rules are copied with the tool's extension and header, merged into one file, or listed as short references in the agents file.
@@ -66,7 +66,7 @@ After every successful sync Exuno writes `.ai/.sync-manifest`: a `# exuno <versi
 - unchanged since the last sync: rewritten quietly
 - deleted: rewritten quietly
 - edited: the sync stops, lists the edited files, and leaves them alone
-- not in the manifest at all, at a path sync is about to write (a file someone put there by hand, or that another program created): if sync would change it, the run stops before writing anything with `Sync would overwrite N file(s) it did not write` and lists them; `sync --dry-run` and `check` report the same. `--force` replaces them from source. The very first sync, before any manifest exists, writes over such files; `exuno init` offers to adopt them first.
+- not in the manifest at all, at a path sync is about to write (a file someone put there by hand, or that another program created): if sync would change it, the run stops before writing anything with `Sync would overwrite N file(s) it did not write` and lists them; `sync --dry-run` and `check` report the same. `--force` replaces them from source, and `sync --dry-run --force` lists them as files it would overwrite. The very first sync, before any manifest exists, writes over such files; `exuno init` offers to adopt them first.
 
 ```text
 [ERROR] Manual edits detected in 1 destination file(s) since last sync:

@@ -430,7 +430,9 @@ fn remove_recorded_outputs(s: &mut Session, path: &str, protected: &[String]) ->
     ));
     if !s.dry_run {
         let root = s.paths.root.clone();
-        let _ = file_ops::remove_empty_parents(s, path, &root);
+        if let Err(error) = file_ops::remove_empty_parents(s, path, &root) {
+            s.log.warning(&error.to_string());
+        }
     }
     true
 }

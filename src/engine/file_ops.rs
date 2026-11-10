@@ -34,7 +34,7 @@ pub fn copy_file_noted(s: &mut Session, src: &str, dest: &str, note: &str) -> Re
     if s.ws.is_dir(dest) {
         s.ws.copy(src, &format!("{dest}/{}", paths::leaf(src)))?;
     } else {
-        let _ = s.ws.remove(dest);
+        s.ws.remove(dest)?;
         s.ws.copy(src, dest)?;
     }
     s.record_write(dest);

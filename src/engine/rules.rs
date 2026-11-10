@@ -248,7 +248,7 @@ pub fn merge_rules_to_file(
         return Ok(());
     }
     s.ws.create_dir_all(&paths::parent(dest_file))?;
-    let _ = s.ws.remove(dest_file);
+    s.ws.remove(dest_file)?;
     if let Some(agents) = agents_file.filter(|a| s.ws.is_file(a)) {
         let mut preamble = read(s, agents)?;
         preamble.extend_from_slice(b"\n---\n\n");
@@ -453,7 +453,7 @@ pub fn sync_commands_as_skills(
             s.ws.remove(&policy)?;
             let agents_dir = format!("{skill_dir}/agents");
             if s.ws.list(&agents_dir).is_empty() {
-                let _ = s.ws.remove(&agents_dir);
+                s.ws.remove(&agents_dir)?;
             }
         }
     }

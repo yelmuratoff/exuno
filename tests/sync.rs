@@ -518,6 +518,31 @@ fn sync_zed_rules_gets_commands_inline_section_merge_to_file_fallback() {
     assert!(content.contains("- `/fix-issue` —"));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_merged_rules_file_that_cannot_be_removed_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["zed"]);
+    project.write(
+        ".ai/src/tools/zed.yaml",
+        "targets:\n  rules:\n    dest: \"docs/zed/rules.md\"\n",
+    );
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.exuno().arg("sync").assert().success();
+    let merged = project.read("docs/zed/rules.md");
+    project.write(".ai/src/rules/extra.md", "# Extra\n\nOne more rule.\n");
+    common::chmod(&project.join("docs/zed"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join("docs/zed"), 0o755);
+    synced
+        .failure()
+        .stderr(predicate::str::contains("docs/zed/rules.md"));
+    assert_eq!(project.read("docs/zed/rules.md"), merged);
+}
+
 #[test]
 fn sync_a_folded_command_description_reads_whole_in_the_index_and_the_generated_skill() {
     let project = synced_project();
@@ -1458,11 +1483,27 @@ fn cleanup_refuses_to_remove_through_a_symlink_that_leaves_the_project() {
         .success();
     project
         .exuno()
-        .arg("sync")
+        .args(["sync", "--dry-run"])
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "[WARNING] Refusing to remove .cursor/skills/demo/SKILL.md: .cursor/skills/demo is a symlink to",
+            "[WARNING] A real sync would stop: Refusing to remove .cursor/skills/demo/SKILL.md: .cursor/skills/demo is a symlink to",
+        ));
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "A real sync would stop: Refusing to remove .cursor/skills/demo/SKILL.md",
+        ));
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Refusing to remove .cursor/skills/demo/SKILL.md: .cursor/skills/demo is a symlink to",
         ));
     assert_eq!(
         std::fs::read_to_string(outside.path().join("SKILL.md")).unwrap(),
@@ -1610,6 +1651,56 @@ fn a_refused_overwrite_writes_nothing_without_a_backup() {
         .stderr(predicate::str::contains("Sync would overwrite 1 file(s)"));
     assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
     assert!(!project.exists("AGENTS.md"));
+}
+
+#[test]
+fn sync_restores_an_interrupted_run_before_it_checks_for_manual_edits() {
+    use exuno::transaction::backup::{self, Retention};
+    use exuno::transaction::lock::Lock;
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let generated = project.read(".cursor/rules/core.mdc");
+    let root = std::fs::canonicalize(project.path())
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let (lock, _) = Lock::acquire(&root, "sync", Retention::Bounded).unwrap();
+    let snapshot = backup::create(
+        &root,
+        "sync",
+        &[format!("{root}/.cursor/rules/core.mdc")],
+        Retention::Bounded,
+    )
+    .unwrap();
+    lock.begin(&snapshot).unwrap();
+    project.write(".cursor/rules/core.mdc", "half-written\n");
+    drop(lock);
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), generated);
+}
+
+#[test]
+fn a_forced_dry_run_reports_the_overwrite_it_would_make() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .args(["sync", "--dry-run", "--force"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Would overwrite 1 file(s) sync did not write (--force):\n      .cursor/rules/core.mdc\n",
+        ))
+        .stderr(predicate::str::contains("A real sync would stop").not());
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
 }
 
 #[test]
@@ -1824,12 +1915,29 @@ fn sync_refuses_a_gitignore_link_that_leaves_the_project() {
     std::os::unix::fs::symlink(&target, project.join(".gitignore")).unwrap();
     project
         .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Refusing to write .gitignore: .gitignore is a symlink to",
+        ));
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "A real sync would stop: Refusing to write .gitignore",
+        ));
+    project
+        .exuno()
         .arg("sync")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
             "Refusing to write .gitignore: .gitignore is a symlink to",
-        ));
+        ))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "outside\n");
 }
 
@@ -1848,4 +1956,18 @@ fn sync_writes_through_a_gitignore_link_inside_the_project() {
     let text = project.read("config/gitignore");
     assert!(text.starts_with("node_modules/\n"), "{text}");
     assert!(text.contains("AI SYNC GENERATED START"), "{text}");
+    assert!(text.contains(".claude/rules/"), "{text}");
+
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    gitignore: false\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    assert!(!project.read("config/gitignore").contains(".claude/skills/"));
+    project
+        .exuno()
+        .args(["rollback", "--yes"])
+        .assert()
+        .success();
+    assert!(project.read("config/gitignore").contains(".claude/skills/"));
 }
