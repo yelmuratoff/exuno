@@ -102,7 +102,11 @@ pub fn sync_skills_dir(
             s.log
                 .step(&format!("Would remove: {dest_disp}/{name} (extraneous)"));
         } else {
-            s.ws.remove(&item)?;
+            if s.ws.is_dir(&item) && !s.force {
+                remove_recorded(s, &item)?;
+            } else {
+                s.ws.remove(&item)?;
+            }
             s.log.step(&format!("Removed: {dest_disp}/{name}"));
         }
         cleaned += 1;
@@ -121,20 +125,13 @@ pub fn sync_skills_dir(
     Ok(())
 }
 
-/// Puts the skill at `source` at `target`. A folder an earlier sync recorded
-/// files in is updated in place: the recorded files the source no longer has
-/// go, and files nothing recorded (caches, `.DS_Store`) stay. Any other target
-/// is replaced whole. Only the files copied from `source` are recorded.
+/// Puts the skill at `source` at `target`. An existing folder is updated in
+/// place: the recorded files the source no longer has go, and files nothing
+/// recorded (caches, `.DS_Store`, a virtualenv) stay. Only the files copied
+/// from `source` are recorded.
 fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Error> {
-    let recorded = if s.ws.is_dir(target) {
-        recorded_under(s, target)
-    } else {
-        Vec::new()
-    };
-    if recorded.is_empty() {
-        let _ = s.ws.remove(target);
-    } else {
-        for file in recorded {
+    if s.ws.is_dir(target) {
+        for file in recorded_under(s, target) {
             let rel = &file[target.len() + 1..];
             if s.ws.is_file(&format!("{source}/{rel}")) || s.was_touched(&file) {
                 continue;
@@ -142,6 +139,8 @@ fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Erro
             s.ws.remove(&file)?;
             remove_empty_parents(s, &file, target)?;
         }
+    } else {
+        s.ws.remove(target)?;
     }
     s.ws.copy(source, target)?;
     if s.ws.is_dir(source) {

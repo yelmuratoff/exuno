@@ -1663,6 +1663,37 @@ fn a_synced_skill_folder_keeps_unrecorded_files_and_drops_what_the_source_lost()
 }
 
 #[test]
+fn an_unrecorded_skill_folder_matching_a_source_skill_keeps_its_extra_files() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    let skill = "---\nname: pdf\n---\nPDF.\n";
+    project.write(".claude/skills/pdf/SKILL.md", skill);
+    project.write(".claude/skills/pdf/.venv/lib.py", "venv\n");
+    project.write(".ai/src/skills/pdf/SKILL.md", skill);
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".claude/skills/pdf/.venv/lib.py"), "venv\n");
+    assert_eq!(project.read(".claude/skills/pdf/SKILL.md"), skill);
+    assert!(!project.read(".ai/.sync-manifest").contains(".venv"));
+}
+
+#[test]
+fn an_obsolete_skill_folder_keeps_an_unrecorded_cache_file() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/demo/__pycache__/x.pyc", "cache");
+    std::fs::remove_dir_all(project.join(".ai/src/skills/demo")).unwrap();
+    project.exuno().arg("sync").assert().success();
+    assert!(!project.exists(".claude/skills/demo/SKILL.md"));
+    assert_eq!(
+        project.read(".claude/skills/demo/__pycache__/x.pyc"),
+        "cache"
+    );
+}
+
+#[test]
 fn an_unrecorded_command_skill_folder_is_kept_and_a_recorded_obsolete_one_goes() {
     let project = Project::seeded(&[]);
     project.write(
