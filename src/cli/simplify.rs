@@ -31,7 +31,7 @@ pub const HELP: Help = Help {
     examples: &["simplify", "simplify cursor --apply", "simplify --apply -y"],
 };
 
-const KEYS: [&str; 31] = [
+const KEYS: [&str; 32] = [
     "name",
     "enabled",
     "targets.agents.dest",
@@ -62,6 +62,7 @@ const KEYS: [&str; 31] = [
     "targets.mcp.dest",
     "targets.hooks.source",
     "targets.hooks.dest",
+    "targets.manifests.dest",
     "post_sync",
 ];
 

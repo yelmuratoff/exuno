@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use super::{Run, TARGET_KEYS};
 use crate::config::tool::Tool;
 use crate::engine::file_ops;
+use crate::engine::manifests;
 use crate::engine::session::Session;
 use crate::{config::catalog, config::profiles, config::yaml_subset};
 
@@ -91,7 +92,7 @@ fn collect_protected_dests(s: &mut Session, run: &mut Run) {
                 }
                 let label = format!("targets.{key}.dest for {slug}");
                 if let Some(abs) = s.paths.clone().resolve_dest(&raw, &label, &mut s.log) {
-                    run.backup_targets.push(abs);
+                    run.backup_targets.extend(owned_paths(s, &tool, key, &abs));
                 }
             }
         }
@@ -157,8 +158,9 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
         let Some(abs) = s.paths.clone().resolve_dest(&raw, &label, &mut s.log) else {
             continue;
         };
-        run.protected.push(abs.clone());
-        collected.push(abs.clone());
+        let owned = owned_paths(s, tool, key, &abs);
+        run.protected.extend(owned.iter().cloned());
+        collected.extend(owned);
         let Some(mut rel) = s.paths.to_repo_relative(&abs) else {
             s.log
                 .error(&format!("Path is outside repository root: {abs}"));
@@ -173,14 +175,43 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
         if tool.flag(&format!("targets.{key}.gitignore")) == Some(false) {
             continue;
         }
-        if matches!(key, "rules" | "skills" | "commands" | "subagents") {
-            rel.push('/');
-        }
-        if profile && tool.flag(&format!("targets.{key}.profile_scoped")) != Some(false) {
-            run.gitignore_profile.push(rel);
+        let entries = if key == "manifests" && abs == s.paths.root {
+            root_manifest_entries(s, tool)
         } else {
-            run.gitignore_generated.push(rel);
+            if matches!(
+                key,
+                "rules" | "skills" | "commands" | "subagents" | "manifests"
+            ) {
+                rel.push('/');
+            }
+            vec![rel]
+        };
+        if profile && tool.flag(&format!("targets.{key}.profile_scoped")) != Some(false) {
+            run.gitignore_profile.extend(entries);
+        } else {
+            run.gitignore_generated.extend(entries);
         }
     }
     collected
+}
+
+/// What a target at `abs` claims: the dest itself, or for a `manifests`
+/// target at the project root only the files its templates map to.
+fn owned_paths(s: &Session, tool: &Tool, key: &str, abs: &str) -> Vec<String> {
+    if key != "manifests" {
+        return vec![abs.to_string()];
+    }
+    manifests::owned_paths(&s.ws, &s.tools_dir, &tool.slug, abs, &s.paths.root)
+}
+
+/// The repo-relative files a `manifests` target at the project root writes.
+fn root_manifest_entries(s: &Session, tool: &Tool) -> Vec<String> {
+    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, &tool.slug) else {
+        return Vec::new();
+    };
+    let filter = tool.target_filter("manifests");
+    manifests::templates(&s.ws, &dir)
+        .into_iter()
+        .filter(|rel| filter.accepts(rel))
+        .collect()
 }

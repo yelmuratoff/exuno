@@ -1,13 +1,16 @@
 //! The per-tool passes: the personal and profile loops, `sync_tool`, its post-sync hook, and `cleanup_tool`.
 
 use super::steps::{
-    sync_commands_step, sync_payloads_step, sync_rules_step, sync_skills_step, sync_subagents_step,
+    sync_commands_step, sync_manifests_step, sync_payloads_step, sync_rules_step, sync_skills_step,
+    sync_subagents_step,
 };
 use super::tools::{self, load_tool};
 use super::{Run, Step, Stop, TARGET_KEYS, checkpoint, io};
 use crate::config::tool::Tool;
 use crate::engine::session::Session;
-use crate::{config::payload, config::profiles, engine::file_ops, engine::overlay};
+use crate::{
+    config::payload, config::profiles, engine::file_ops, engine::manifests, engine::overlay,
+};
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -21,6 +24,7 @@ pub(super) struct Dests {
     pub(super) mcp: String,
     pub(super) hooks: String,
     pub(super) guard: String,
+    pub(super) manifests: String,
 }
 
 /// `_run_personal_pass` and `_run_profile_passes`.
@@ -210,6 +214,7 @@ fn resolve_dests(s: &mut Session, tool: &Tool, display: &str) -> Dests {
         mcp: resolve_one_dest(s, tool, "mcp", display),
         hooks: resolve_one_dest(s, tool, "hooks", display),
         guard: resolve_one_dest(s, tool, "guard", display),
+        manifests: resolve_one_dest(s, tool, "manifests", display),
     }
 }
 
@@ -264,6 +269,8 @@ fn sync_tool(s: &mut Session, run: &mut Run, slug: &str) -> Step {
     sync_commands_step(s, run, &tool, &dests, &display)?;
     checkpoint(s)?;
     sync_subagents_step(s, run, &tool, &dests, &display)?;
+    checkpoint(s)?;
+    sync_manifests_step(s, &tool, &dests)?;
     checkpoint(s)?;
     sync_payloads_step(s, run, &tool, &dests)?;
     checkpoint(s)?;
@@ -364,6 +371,26 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
                         "Kept {} (the app writes to it too)",
                         s.display(&abs)
                     ));
+                }
+            }
+            continue;
+        }
+        if key == "manifests" {
+            let root = s.paths.root.clone();
+            for owned in manifests::owned_paths(&s.ws, &s.tools_dir, &tool.slug, &abs, &root) {
+                if run.protected.contains(&owned) {
+                    continue;
+                }
+                let Ok(removed) = file_ops::remove_recorded(s, &owned) else {
+                    continue;
+                };
+                if removed > 0 {
+                    let verb = if s.dry_run { "Would remove" } else { "Removed" };
+                    s.log.step(&format!(
+                        "{verb} {removed} manifest output(s) at {}",
+                        s.display(&owned)
+                    ));
+                    cleaned = true;
                 }
             }
             continue;

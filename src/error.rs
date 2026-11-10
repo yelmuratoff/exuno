@@ -15,6 +15,8 @@ pub enum Error {
     ProjectRootNotFound(PathBuf),
     #[error("EXUNO_CONFIG_PATH is set but file not found: {}", .0.display())]
     ConfigPathNotFound(PathBuf),
+    #[error("Manifest template {template}: {reason}")]
+    Manifest { template: String, reason: String },
 }
 
 impl Error {

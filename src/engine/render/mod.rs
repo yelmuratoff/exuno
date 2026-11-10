@@ -21,7 +21,7 @@ use crate::Error;
 use crate::engine::session::Session;
 use crate::{config::profiles, engine::overlay};
 
-pub const TARGET_KEYS: [&str; 9] = [
+pub const TARGET_KEYS: [&str; 10] = [
     "agents",
     "rules",
     "skills",
@@ -31,6 +31,7 @@ pub const TARGET_KEYS: [&str; 9] = [
     "mcp",
     "hooks",
     "guard",
+    "manifests",
 ];
 
 /// A render stopped the way `sync.sh` exits: the status after its log lines.

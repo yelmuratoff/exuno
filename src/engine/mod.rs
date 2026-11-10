@@ -9,6 +9,7 @@ pub mod frontmatter;
 pub mod gitignore;
 pub mod json_keys;
 pub mod keyed;
+pub mod manifests;
 pub mod opencode_json;
 pub mod overlay;
 pub mod render;

@@ -45,7 +45,7 @@ pub const HELP: Help = Help {
     examples: &["show cursor", "show cursor --base", "show claude hooks"],
 };
 
-const KEYS: [&str; 30] = [
+const KEYS: [&str; 31] = [
     "name",
     "enabled",
     "targets.agents.dest",
@@ -75,6 +75,7 @@ const KEYS: [&str; 30] = [
     "targets.mcp.dest",
     "targets.hooks.source",
     "targets.hooks.dest",
+    "targets.manifests.dest",
     "post_sync",
 ];
 

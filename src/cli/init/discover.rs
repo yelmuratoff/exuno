@@ -7,7 +7,9 @@ use super::Run;
 use crate::Error;
 use crate::cli::files_below;
 use crate::config::tool::Tool;
+use crate::engine::manifests;
 use crate::engine::render::TARGET_KEYS;
+use crate::engine::workspace::Workspace;
 use crate::output::log::Log;
 use crate::paths::{DiskText, Paths};
 use crate::project::Project;
@@ -70,8 +72,21 @@ fn tool_dests(
         if raw.is_empty() {
             continue;
         }
-        if let Some(abs) = paths.resolve_dest(&raw, &format!("targets.{key}.dest for {slug}"), log)
-        {
+        let Some(abs) = paths.resolve_dest(&raw, &format!("targets.{key}.dest for {slug}"), log)
+        else {
+            continue;
+        };
+        if key == "manifests" {
+            let ws = Workspace::on_disk(&paths.root);
+            let tools_dir = project.user_tools_dir().disk_text();
+            dests.extend(manifests::owned_paths(
+                &ws,
+                &tools_dir,
+                slug,
+                &abs,
+                &paths.root,
+            ));
+        } else {
             dests.push(abs);
         }
     }

@@ -41,7 +41,7 @@ pub const HELP: Help = Help {
     examples: &["diff", "diff cursor", "diff cursor hooks"],
 };
 
-pub(crate) const KEYS: [&str; 26] = [
+pub(crate) const KEYS: [&str; 27] = [
     "name",
     "enabled",
     "targets.agents.dest",
@@ -67,6 +67,7 @@ pub(crate) const KEYS: [&str; 26] = [
     "targets.mcp.dest",
     "targets.hooks.source",
     "targets.hooks.dest",
+    "targets.manifests.dest",
     "post_sync",
 ];
 
