@@ -65,7 +65,7 @@ impl Session {
         self.manifest = Some(paths);
     }
 
-    /// `sync_may_prune`: a file the manifest records, or a directory it records
+    /// `sync_may_prune`: a project file the manifest records, or a directory it records
     /// a file below. Without a manifest nothing may go; `--force` lets every
     /// extraneous entry go, as its `Kept … --force to prune` hint promises.
     pub fn may_prune(&self, abs: &str) -> bool {
@@ -75,7 +75,7 @@ impl Session {
         let Some(manifest) = &self.manifest else {
             return false;
         };
-        self.paths.to_repo_relative(abs).is_none_or(|rel| {
+        self.paths.to_repo_relative(abs).is_some_and(|rel| {
             let below = format!("{rel}/");
             manifest.contains(&rel)
                 || (self.ws.is_dir(abs)
@@ -216,7 +216,7 @@ mod tests {
         assert!(s.may_prune("/proj/.claude/skills/old"));
         assert!(!s.may_prune("/proj/.claude/skills/mine"));
         assert!(!s.may_prune("/proj/.claude/skills/ol"));
-        assert!(s.may_prune("/elsewhere/mine.md"));
+        assert!(!s.may_prune("/elsewhere/mine.md"));
         s.force = true;
         assert!(s.may_prune("/proj/.claude/rules/mine.md"));
     }
