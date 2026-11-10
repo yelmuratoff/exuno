@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use super::check;
 use crate::engine::keyed;
 use crate::engine::render::{self, Run, Selection, Stop};
 use crate::engine::session::Session;
@@ -288,16 +289,6 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     let root = s.paths.root.clone();
     let previous = Manifest::load(&root).map_err(|e| io(s, e))?;
     s.activate_manifest(previous.as_ref().map(Manifest::paths).unwrap_or_default());
-    if let Some(previous) = &previous
-        && !s.dry_run
-    {
-        let recorded = previous
-            .paths()
-            .into_iter()
-            .map(|rel| format!("{root}/{rel}"))
-            .collect();
-        s.ws.track_originals(recorded);
-    }
     render::collect_legacy_targets(s, &mut run);
     s.set_owned_before(
         previous
@@ -307,9 +298,9 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     );
     warn_baseline_replacements(s, &run, previous.is_none());
     check_drift(s, &run, previous.as_ref())?;
+    preflight(s, args, env, &run, previous.as_ref())?;
     start_transaction(s, &run, env, tx)?;
     render::run_passes(s, &mut run)?;
-    check_unowned_overwrites(s, &run)?;
     finalize(s, &run, previous.as_ref(), tx)?;
     if tx.backup.is_some() {
         prune(s, env, run.retention);
@@ -539,34 +530,75 @@ fn check_drift(s: &mut Session, run: &Run, previous: Option<&Manifest>) -> Resul
     Err(Stop(1))
 }
 
-/// Stops when the run changed a file the previous manifest does not record:
-/// a file someone else put at an output path. The transaction then restores
-/// it; `--force` keeps the rendered content. Files owned by key merge by design.
-fn check_unowned_overwrites(s: &mut Session, run: &Run) -> Result<(), Stop> {
-    let overwritten: Vec<String> =
-        s.ws.changed_originals()
-            .iter()
-            .filter_map(|abs| s.paths.to_repo_relative(abs))
-            .filter(|rel| !run.keyed_dests.contains(rel))
-            .collect();
-    if overwritten.is_empty() {
+/// Renders the run in memory before anything is written, and stops when the
+/// render would write through a link it may not follow, or change a file the
+/// previous manifest does not record (`--force` replaces those). A dry run
+/// reports what a real sync would stop on. No post-sync hook runs here.
+fn preflight(
+    s: &mut Session,
+    args: &Args,
+    env: &Env,
+    run: &Run,
+    previous: Option<&Manifest>,
+) -> Result<(), Stop> {
+    let root = s.paths.root.clone();
+    let memory_env = render::Env {
+        config_path: env.render.config_path.clone(),
+        skip_post_sync: Some("true".to_string()),
+        allow_post_sync: None,
+        backup: None,
+        external_source_roots: env.render.external_source_roots.clone(),
+    };
+    let selection = Selection {
+        only: args.only.clone(),
+        skip: args.skip.clone(),
+        profile: args.profile.clone(),
+    };
+    let manifest = check::manifest_paths(&root).map_err(|e| io(s, e))?;
+    let rendered = check::render_in_memory(
+        &root,
+        &manifest,
+        run.config_path.as_deref(),
+        run.config.as_deref(),
+        &memory_env,
+        selection,
+    )
+    .map_err(|e| io(s, e))?;
+    let check::InMemory::Rendered(memory, memory_run) = rendered else {
         return Ok(());
+    };
+    let found = check::hazards(&memory, &memory_run, &root, previous);
+    if found.is_empty() {
+        return Ok(());
+    }
+    if s.dry_run {
+        for line in found.lines("A real sync would stop: ") {
+            if line.starts_with("      ") {
+                s.log.err(line);
+            } else {
+                s.log.warning(&line);
+            }
+        }
+        return Ok(());
+    }
+    for refusal in &found.unsafe_writes {
+        s.log.error(refusal);
+    }
+    if !found.unsafe_writes.is_empty() {
+        return Err(Stop(1));
     }
     if s.force {
         s.log.warning(&format!(
             "Overwriting {} file(s) sync did not write (--force):",
-            overwritten.len()
+            found.unowned.len()
         ));
-        for rel in overwritten {
+        for rel in &found.unowned {
             s.log.err(format!("      {rel}"));
         }
         return Ok(());
     }
-    s.log.error(&format!(
-        "Sync would overwrite {} file(s) it did not write:",
-        overwritten.len()
-    ));
-    for rel in overwritten {
+    s.log.error(&check::unowned_headline(found.unowned.len()));
+    for rel in &found.unowned {
         s.log.err(format!("      {rel}"));
     }
     for line in [

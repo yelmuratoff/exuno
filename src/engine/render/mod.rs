@@ -118,7 +118,13 @@ fn io(s: &mut Session, error: Error) -> Stop {
 /// What `check` needs: `sync.sh --force` without its transaction and without
 /// `shared:`, which `lib/check.sh` merged into the workspace beforehand.
 pub fn render(s: &mut Session, env: &Env) -> Result<Run, Stop> {
-    let mut run = prepare(s, env, Selection::default())?;
+    render_selected(s, env, Selection::default())
+}
+
+/// [`render`] limited to the tools `selection` picks, as a sync with
+/// `--only`, `--skip`, or `--profile` writes them.
+pub fn render_selected(s: &mut Session, env: &Env, selection: Selection) -> Result<Run, Stop> {
+    let mut run = prepare(s, env, selection)?;
     refuse_configless_cleanup(s, &run)?;
     refuse_escaping_source_links(s, &run)?;
     check_version_pin(s, &run)?;

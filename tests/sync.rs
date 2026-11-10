@@ -1372,7 +1372,7 @@ fn sync_refuses_to_write_through_a_symlink_into_ai_or_git() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "Refusing to write .claude/skills: .claude/skills is a symlink to",
+            "more file(s): .claude/skills is a symlink to",
         ))
         .stderr(predicate::str::contains(
             "inside .ai/, where the sources live",
@@ -1469,6 +1469,111 @@ fn force_overwrites_an_unrecorded_file() {
         ));
     assert!(project.read(".cursor/rules/core.mdc").starts_with("---\n"));
     project.exuno().arg("sync").assert().success();
+}
+
+#[test]
+fn a_refused_overwrite_runs_no_post_sync_hook() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "post_sync: \"echo ran >> hook.log\"\n",
+    );
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_ALLOW_POST_SYNC", "true")
+        .assert()
+        .success();
+    assert_eq!(project.read("hook.log"), "ran\n");
+    project.write(".cursor/rules/core.mdc", "mine\n");
+    project.enable_tools(&["cursor"]);
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_ALLOW_POST_SYNC", "true")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Sync would overwrite 1 file(s)"))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+    assert_eq!(project.read("hook.log"), "ran\n");
+}
+
+#[test]
+fn a_refused_overwrite_writes_nothing_without_a_backup() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_INTERNAL_SKIP_BACKUP", "true")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Sync would overwrite 1 file(s)"));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+    assert!(!project.exists("AGENTS.md"));
+}
+
+#[test]
+fn a_dry_run_reports_an_overwrite_a_real_sync_would_refuse() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Sync would overwrite 1 file(s) it did not write:\n      .cursor/rules/core.mdc\n",
+        ));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+}
+
+#[test]
+fn an_unrecorded_file_that_matches_the_final_render_is_taken_over() {
+    let reference = Project::seeded(&[]);
+    reference.enable_tools(&["claude", "codex"]);
+    reference.exuno().arg("sync").assert().success();
+    let agents = reference.read("AGENTS.md");
+    assert!(agents.contains("## Rules"), "codex appends to AGENTS.md");
+
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write("AGENTS.md", &agents);
+    project.enable_tools(&["codex"]);
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read("AGENTS.md"), agents);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dry_run_reports_a_write_a_real_sync_would_refuse() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("notes.txt");
+    std::fs::write(&secret, "keep me\n").unwrap();
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    std::fs::create_dir_all(project.join(".cursor/rules")).unwrap();
+    std::os::unix::fs::symlink(&secret, project.join(".cursor/rules/core.mdc")).unwrap();
+    project.enable_tools(&["cursor"]);
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Refusing to write .cursor/rules/core.mdc: .cursor/rules/core.mdc is a symlink to",
+        ));
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "A real sync would stop: Refusing to write .cursor/rules/core.mdc",
+        ));
+    assert_eq!(std::fs::read_to_string(&secret).unwrap(), "keep me\n");
 }
 
 #[test]
