@@ -210,6 +210,31 @@ fn a_template_path_with_a_control_character_stops_the_sync() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn a_template_symlink_that_leaves_the_project_stops_the_sync() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("secret.json");
+    std::fs::write(&secret, "{\"token\": \"x\"}\n").unwrap();
+    let project = demo(".", "");
+    std::os::unix::fs::symlink(
+        &secret,
+        project.join(".ai/src/tools/demo/manifests/leak.json"),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Source symlink .ai/src/tools/demo/manifests/leak.json resolves outside the project",
+        ));
+    assert!(!project.exists("leak.json"));
+    assert!(!project.exists("a.json"));
+}
+
 #[test]
 fn removing_an_override_template_leaves_its_output_in_place() {
     let project = demo("out", "");

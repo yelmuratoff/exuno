@@ -1099,9 +1099,12 @@ fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
     let project = synced_project();
     let skill = "---\nname: demo\nargument-hint: <file>\ndescription: Runs the demo\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody.\n";
     project.write(".ai/src/skills/demo/SKILL.md", skill);
+    let agent = "---\nname: reviewer\ndescription: Reviews a diff\nmodel: sonnet\ntools: [Read, Grep]\n---\n\nReview the diff.\n";
+    project.write(".ai/src/agents/reviewer.md", agent);
     let output = project.exuno().arg("sync").assert().success();
     let stderr = String::from_utf8(output.get_output().stderr.clone()).unwrap();
 
+    assert_eq!(project.read("plugin/agents/reviewer.md"), agent);
     assert_eq!(
         project.read("plugin/skills/demo/SKILL.md"),
         "---\nname: demo\ndescription: Runs the demo\n---\n\n# Demo\n\nBody.\n"
@@ -1129,7 +1132,6 @@ fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
         project.read("plugin/commands/explicit-only.md"),
         "---\ndescription: Explicit-only fixture command\n---\n\nBody.\n"
     );
-    assert!(project.join("plugin/agents").is_dir());
 
     for rel in PLUGIN_MANIFESTS {
         let manifest = json(&project, rel);
