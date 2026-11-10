@@ -105,17 +105,17 @@ pub fn templates(ws: &Workspace, dir: &str) -> Vec<String> {
     rels.into_iter().collect()
 }
 
-/// The files a `manifests` target at `dest` owns: the ones a template of any
-/// candidate set maps to. Nothing else below `dest`, which may be the project
-/// root or a directory other tools write to, is ever snapshotted, cleaned, or
-/// pruned as the target's; an output whose template was deleted outright is
-/// left for `check` to report.
+/// The files a `manifests` target at `dest` owns: one per template in the set
+/// `template_dir` selects, filtered out or not. Nothing else below `dest`,
+/// which may be the project root or a directory other tools write to, is ever
+/// snapshotted, cleaned, or pruned as the target's, so an output whose template
+/// left the selected set stays where it is, and neither sync nor check reports it.
 pub fn owned_paths(ws: &Workspace, tools_dir: &str, tool: &Tool, dest: &str) -> Vec<String> {
-    let rels: BTreeSet<String> = candidate_dirs(tools_dir, tool)
-        .iter()
-        .flat_map(|dir| templates(ws, dir))
-        .collect();
-    rels.into_iter()
+    let Some(dir) = template_dir(ws, tools_dir, tool) else {
+        return Vec::new();
+    };
+    templates(ws, &dir)
+        .into_iter()
         .map(|rel| format!("{dest}/{rel}"))
         .collect()
 }

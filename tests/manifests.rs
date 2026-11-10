@@ -173,6 +173,32 @@ fn removing_an_override_template_leaves_its_output_in_place() {
 }
 
 #[test]
+fn deleting_an_override_template_the_shipped_set_also_has_leaves_its_output() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["plugin"]);
+    let shipped =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("lib/templates/manifests/plugin");
+    for rel in [
+        "plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
+        ".agents/plugins/marketplace.json",
+    ] {
+        let text = std::fs::read_to_string(shipped.join(rel)).unwrap();
+        project.write(&format!(".ai/src/tools/plugin/manifests/{rel}"), &text);
+    }
+    project.exuno().arg("sync").assert().success();
+    let codex = project.read(".agents/plugins/marketplace.json");
+
+    std::fs::remove_file(
+        project.join(".ai/src/tools/plugin/manifests/.agents/plugins/marketplace.json"),
+    )
+    .unwrap();
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".agents/plugins/marketplace.json"), codex);
+    assert!(project.exists(".claude-plugin/marketplace.json"));
+}
+
+#[test]
 fn second_sync_is_a_no_op() {
     let project = demo(".", "");
     project.exuno().arg("sync").assert().success();
