@@ -5,7 +5,7 @@
 ## One run, step by step
 
 1. **Read the project.** Exuno reads `.ai/exuno.yaml` for the enabled tools, the source paths, and the outputs mode. It accepts two source layouts: the structured one `init` creates (`.ai/src/AGENTS.md`, `.ai/src/rules/`, ...) and an older flat one (`.ai/AGENTS.md`, `.ai/rules/`, ...), which it detects on its own.
-2. **Skip if nothing changed.** With `--if-stale`, Exuno compares the source files with the time of the last sync and exits at once when nothing is newer. The shell and git hooks use this.
+2. **Skip if nothing changed.** With `--if-stale`, Exuno compares the source files with the time of the last sync and exits at once when nothing is newer. It syncs anyway when the manifest was written by a different Exuno version (or by one older than the version header), so an upgrade reaches your files. The shell and git hooks use this.
 3. **Refuse unsafe input.** A source symlink pointing outside the project, or a version pin that doesn't match the running binary, stops the run before anything is written. See [sources outside the project](configuration.md#sources-outside-the-project) and [version pinning](team-and-automation.md#pin-the-exuno-version).
 4. **Add inherited content.** If the project inherits from a parent (`shared:`, see [Workspaces](workspaces-and-profiles.md)), Exuno fills the gaps in your source with the parent's files. It also adds the built-in `exuno` skill (see [Skills](skills.md#the-built-in-exuno-skill)). Both happen in memory; nothing is written into `.ai/src/`.
 5. **Load every tool's config.** Each enabled tool's YAML is the shipped base with your override from `.ai/src/tools/` on top. See [where each setting comes from](#where-each-setting-comes-from) below.
@@ -61,7 +61,7 @@ What this means in practice:
 
 ## Catching hand edits
 
-After every successful sync Exuno writes `.ai/.sync-manifest`, with one line per generated file and its SHA-256 hash. On the next sync it checks each file:
+After every successful sync Exuno writes `.ai/.sync-manifest`: a `# exuno <version>` header line, then one line per generated file and its SHA-256 hash. The header changes only when you upgrade Exuno. On the next sync it checks each file:
 
 - unchanged since the last sync: rewritten quietly
 - deleted: rewritten quietly

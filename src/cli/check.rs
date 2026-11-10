@@ -265,7 +265,7 @@ fn manifest_paths(root: &str) -> Result<Vec<String>, Error> {
         .into_iter()
         .map(|line| line.trim_start_matches('\t'))
         .map(|line| line.split('\t').next().unwrap_or(""))
-        .filter(|rel| !rel.is_empty())
+        .filter(|rel| !rel.is_empty() && !rel.starts_with('#'))
         .map(str::to_string)
         .collect())
 }

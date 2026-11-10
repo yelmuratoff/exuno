@@ -1,5 +1,6 @@
 //! `.ai/.sync-manifest` as `lib/helpers/manifest.sh` reads and writes it: one
-//! `<rel>\t<sha256>` line per output, `LC_ALL=C sort -u`, no header. A file
+//! `<rel>\t<sha256>` line per output, `LC_ALL=C sort -u`, after a
+//! `# exuno <version>` header naming the engine that wrote them. A file
 //! sync owns only some keys of adds a third column, the owned-key record, and
 //! its hash covers those keys alone.
 
@@ -13,6 +14,24 @@ use crate::output::log::Log;
 use crate::{Error, engine::staging};
 
 pub const REL: &str = ".ai/.sync-manifest";
+
+/// The header line's lead. Every reader skips `#` lines, so a manifest with a
+/// header still reads in a binary that predates it.
+const VERSION_PREFIX: &str = "# exuno ";
+
+fn version_header(version: &str) -> String {
+    format!("{VERSION_PREFIX}{version}")
+}
+
+/// The engine version the manifest at `root` was written by; `None` when the
+/// manifest is missing or predates the header.
+pub fn recorded_version(root: &str) -> Option<String> {
+    let bytes = std::fs::read(Path::new(root).join(REL)).ok()?;
+    String::from_utf8_lossy(&bytes)
+        .lines()
+        .find_map(|line| line.strip_prefix(VERSION_PREFIX))
+        .map(|version| version.trim().to_string())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -185,9 +204,14 @@ pub fn update_entry(root: &str, rel: &str, hash: &str, owned: Option<&Owned>) ->
     let ai = Path::new(root).join(".ai");
     std::fs::create_dir_all(&ai).map_err(|e| Error::io(&ai, e))?;
     let mut lines = BTreeSet::new();
+    let mut header = None;
     if path.is_file() {
         let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
         for line in String::from_utf8_lossy(&bytes).split('\n') {
+            if line.starts_with(VERSION_PREFIX) {
+                header.get_or_insert_with(|| line.to_string());
+                continue;
+            }
             let line = line.trim_matches('\t');
             let (existing, existing_hash) = match line.find('\t') {
                 Some(tab) => (&line[..tab], line[tab..].trim_start_matches('\t')),
@@ -205,7 +229,8 @@ pub fn update_entry(root: &str, rel: &str, hash: &str, owned: Option<&Owned>) ->
         owned: owned.cloned(),
     };
     lines.insert(entry.line());
-    let mut text = lines.into_iter().collect::<Vec<_>>().join("\n");
+    let mut text: String = header.map(|line| format!("{line}\n")).unwrap_or_default();
+    text.push_str(&lines.into_iter().collect::<Vec<_>>().join("\n"));
     text.push('\n');
     staging::write_beside(&path, text.as_bytes())
 }
@@ -284,11 +309,11 @@ pub fn write(
     }
     let ai = Path::new(root).join(".ai");
     std::fs::create_dir_all(&ai).map_err(|e| Error::io(&ai, e))?;
-    let mut text = lines
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .join("\n");
+    let mut text = version_header(crate::engine_version());
+    for line in &lines {
+        text.push('\n');
+        text.push_str(line);
+    }
     text.push('\n');
     staging::write_beside(&path, text.as_bytes())?;
     if previous.is_none() {
@@ -425,6 +450,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn update_entry_keeps_the_version_header_and_readers_skip_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().disk_text();
+        std::fs::create_dir_all(dir.path().join(".ai")).unwrap();
+        std::fs::write(dir.path().join(REL), "# exuno 0.0.1\nb.md\th1\n").unwrap();
+        update_entry(&root, "a.md", "h2", None).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(REL)).unwrap(),
+            "# exuno 0.0.1\na.md\th2\nb.md\th1\n"
+        );
+        assert_eq!(recorded_version(&root).as_deref(), Some("0.0.1"));
+        let loaded = Manifest::load(&root).unwrap().unwrap();
+        assert_eq!(
+            loaded.paths(),
+            BTreeSet::from(["a.md".into(), "b.md".into()])
+        );
+
+        std::fs::write(dir.path().join(REL), "b.md\th1\n").unwrap();
+        assert_eq!(recorded_version(&root), None);
+    }
+
     #[cfg(unix)]
     #[test]
     fn writing_keeps_untouched_entries_hashes_touched_files_and_sorts_bytewise() {
@@ -442,10 +489,15 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.path().join(REL)).unwrap(),
             format!(
-                ".claude/x.md\t{}\nCLAUDE.md\t{}\nskipped.md\told\n",
+                "# exuno {}\n.claude/x.md\t{}\nCLAUDE.md\t{}\nskipped.md\told\n",
+                crate::engine_version(),
                 sha256_hex(b""),
                 sha256_hex(b"hello\n")
             )
+        );
+        assert_eq!(
+            recorded_version(&root).as_deref(),
+            Some(crate::engine_version())
         );
         assert!(log.lines().is_empty());
 

@@ -359,7 +359,8 @@ fn json_summary(s: &Session, run: &Run, tx: &Transaction) -> String {
     )
 }
 
-/// `_sync_is_stale`: no manifest, or any source input modified after it.
+/// `_sync_is_stale`: no manifest, one another engine version wrote (or that
+/// predates the version header), or any source input modified after it.
 fn is_stale(root: &str, run: &Run, tools_dir: &str) -> bool {
     let manifest = Path::new(root).join(manifest::REL);
     let Some(since) = std::fs::metadata(&manifest)
@@ -369,6 +370,9 @@ fn is_stale(root: &str, run: &Run, tools_dir: &str) -> bool {
     else {
         return true;
     };
+    if manifest::recorded_version(root).as_deref() != Some(crate::engine_version()) {
+        return true;
+    }
     let src = format!("{root}/.ai/src");
     let mut roots: Vec<String> = Vec::new();
     if Path::new(&src).is_dir() {
