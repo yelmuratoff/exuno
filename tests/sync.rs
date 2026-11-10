@@ -1208,9 +1208,20 @@ fn a_disabled_plugin_leaves_hand_written_files_in_its_dests() {
 #[test]
 fn disabling_a_tool_leaves_another_tools_files_under_its_dest() {
     let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/agents/helper.md",
+        "---\nname: helper\n---\nHelp.\n",
+    );
+    project.write(
+        ".ai/src/tools/aaa.yaml",
+        "name: \"A\"\nenabled: true\ntargets:\n  subagents:\n    dest: \".claude\"\n",
+    );
     project.enable_tools(&["claude"]);
     project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".claude/helper.md"));
     let core_rule = project.read(".claude/rules/core.md");
+    project.write(".claude/notes.md", "mine\n");
+
     project.write(
         ".ai/src/tools/aaa.yaml",
         "name: \"A\"\nenabled: false\ntargets:\n  subagents:\n    dest: \".claude\"\n",
@@ -1219,7 +1230,10 @@ fn disabling_a_tool_leaves_another_tools_files_under_its_dest() {
         .exuno()
         .args(["sync", "--skip", "claude"])
         .assert()
-        .success();
+        .success()
+        .stderr(predicate::str::contains("Cleaned up A (disabled)"));
+    assert!(!project.exists(".claude/helper.md"));
+    assert_eq!(project.read(".claude/notes.md"), "mine\n");
     assert_eq!(project.read(".claude/rules/core.md"), core_rule);
     assert!(project.exists(".claude/skills/exuno/SKILL.md"));
     assert!(project.exists(".claude/settings.json"));
@@ -1591,6 +1605,10 @@ fn a_first_sync_without_a_manifest_still_writes_over_existing_files() {
 fn a_first_sync_prunes_nothing_unrecorded() {
     let project = Project::seeded(&[]);
     assert!(!project.exists(".ai/.sync-manifest"));
+    project.write(
+        ".ai/src/agents/helper.md",
+        "---\nname: helper\n---\nHelp.\n",
+    );
     project.write(".claude/rules/mine.md", "# Mine\n");
     project.write(".claude/skills/mine/SKILL.md", "---\nname: mine\n---\n");
     project.write(".claude/agents/mine.md", "mine\n");
@@ -1600,11 +1618,14 @@ fn a_first_sync_prunes_nothing_unrecorded() {
         .arg("sync")
         .assert()
         .success()
-        .stderr(predicate::str::contains("Kept .claude/rules/mine.md"));
+        .stderr(predicate::str::contains("Kept .claude/rules/mine.md"))
+        .stderr(predicate::str::contains("Kept .claude/skills/mine"))
+        .stderr(predicate::str::contains("Kept .claude/agents/mine.md"));
     assert_eq!(project.read(".claude/rules/mine.md"), "# Mine\n");
     assert!(project.exists(".claude/skills/mine/SKILL.md"));
     assert_eq!(project.read(".claude/agents/mine.md"), "mine\n");
     assert!(project.exists(".claude/rules/core.md"));
+    assert!(project.exists(".claude/agents/helper.md"));
 }
 
 #[test]
