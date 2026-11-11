@@ -1908,6 +1908,109 @@ fn an_obsolete_skill_folder_keeps_an_unrecorded_cache_file() {
     );
 }
 
+fn set_readonly(project: &Project, rel: &str, readonly: bool) {
+    let path = project.join(rel);
+    let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(readonly);
+    std::fs::set_permissions(&path, permissions).unwrap();
+}
+
+#[test]
+fn a_read_only_source_skill_syncs_twice() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    set_readonly(&project, ".ai/src/skills/demo/SKILL.md", true);
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\n"
+    );
+    set_readonly(&project, ".ai/src/skills/demo/SKILL.md", false);
+}
+
+#[test]
+fn a_read_only_recorded_skill_file_is_replaced() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.exuno().arg("sync").assert().success();
+    set_readonly(&project, ".claude/skills/demo/SKILL.md", true);
+    project.write(
+        ".ai/src/skills/demo/SKILL.md",
+        "---\nname: demo\n---\nNew.\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\nNew.\n"
+    );
+}
+
+#[test]
+fn an_unrecorded_file_in_the_way_of_a_skill_folder_stops_the_sync() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/demo", "mine\n");
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Sync would overwrite 1 file(s) it did not write:\n      .claude/skills/demo\n",
+        ))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+    assert_eq!(project.read(".claude/skills/demo"), "mine\n");
+    project.exuno().args(["sync", "--force"]).assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\n"
+    );
+}
+
+#[test]
+fn an_unrecorded_folder_in_the_way_of_a_skill_file_stops_the_sync() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/notes.md/mine.md", "mine\n");
+    project.write(".ai/src/skills/notes.md", "Notes.\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Sync would overwrite 1 file(s) it did not write:\n      .claude/skills/notes.md\n",
+        ));
+    assert_eq!(project.read(".claude/skills/notes.md/mine.md"), "mine\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_file_sync_would_overwrite_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = unrecorded_cursor_rule();
+    common::chmod(&project.join(".cursor/rules/core.mdc"), 0o000);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".cursor/rules/core.mdc"), 0o644);
+    synced
+        .failure()
+        .stderr(predicate::str::contains(
+            "Could not read .cursor/rules/core.mdc",
+        ))
+        .stderr(predicate::str::contains("Syncing Cursor").not());
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+}
+
 #[test]
 fn an_unrecorded_command_skill_folder_is_kept_and_a_recorded_obsolete_one_goes() {
     let project = Project::seeded(&[]);

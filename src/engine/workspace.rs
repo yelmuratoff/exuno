@@ -327,7 +327,7 @@ impl Workspace {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(e) => Err(e),
                 Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-                Ok(_) => std::fs::remove_file(path),
+                Ok(meta) => remove_file(path, meta),
             };
             return removed.map_err(|e| Error::io(path, e));
         }
@@ -401,6 +401,20 @@ impl Workspace {
         }
         self.content(path).cloned().ok_or_else(|| not_found(path))
     }
+}
+
+/// Windows refuses to delete a read-only file, which `rm -f` removes.
+fn remove_file(path: &str, meta: std::fs::Metadata) -> std::io::Result<()> {
+    #[cfg(windows)]
+    if meta.permissions().readonly() {
+        let mut writable = meta.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        writable.set_readonly(false);
+        std::fs::set_permissions(path, writable)?;
+    }
+    #[cfg(not(windows))]
+    let _ = meta;
+    std::fs::remove_file(path)
 }
 
 fn not_found(path: &str) -> Error {

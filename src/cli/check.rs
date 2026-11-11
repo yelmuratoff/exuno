@@ -358,14 +358,30 @@ pub(crate) fn hazards(
                 .push(rel.clone());
             continue;
         }
+        if let Some(blocker) = blocker(root, &abs) {
+            let blocker_rel = blocker[root.len() + 1..].to_string();
+            if !written_by_sync(&blocker, root, recorded.as_ref())
+                && !found.unowned.contains(&blocker_rel)
+            {
+                found.unowned.push(blocker_rel);
+            }
+            continue;
+        }
         let Some(recorded) = &recorded else {
             continue;
         };
         if recorded.contains(rel) || run.keyed_dests.contains(rel) {
             continue;
         }
-        let Ok(on_disk) = std::fs::read(&abs) else {
-            continue;
+        let on_disk = match std::fs::read(&abs) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                found
+                    .refusals
+                    .push(format!("Could not read {rel} to compare it: {e}"));
+                continue;
+            }
         };
         if rendered.ws.read(&abs).ok() != Some(on_disk) {
             found.unowned.push(rel.clone());
@@ -384,6 +400,48 @@ pub(crate) fn hazards(
         found.refusals.push(refusal.to_string());
     }
     found
+}
+
+/// The entry on disk that stands where the render puts the file `abs`: a
+/// folder at `abs`, or a file where the render needs one of its folders.
+fn blocker(root: &str, abs: &str) -> Option<String> {
+    if std::fs::symlink_metadata(abs).is_ok_and(|meta| meta.is_dir()) {
+        return Some(abs.to_string());
+    }
+    let mut dir = paths::parent(abs);
+    while dir != root && paths::is_within(&dir, root) {
+        match std::fs::symlink_metadata(&dir) {
+            Ok(meta) if meta.is_file() => return Some(dir),
+            Ok(_) => return None,
+            Err(_) => dir = paths::parent(&dir),
+        }
+    }
+    None
+}
+
+/// Whether the previous manifest records `path`, or every file below it.
+fn written_by_sync(path: &str, root: &str, recorded: Option<&BTreeSet<String>>) -> bool {
+    let Some(recorded) = recorded else {
+        return false;
+    };
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return true;
+    };
+    if !meta.is_dir() {
+        return recorded.contains(&path[root.len() + 1..]);
+    }
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+    entries.into_iter().all(|entry| {
+        entry.is_ok_and(|entry| {
+            written_by_sync(
+                &format!("{path}/{}", entry.file_name().to_string_lossy()),
+                root,
+                Some(recorded),
+            )
+        })
+    })
 }
 
 fn read_config(path: &str) -> Result<String, Error> {

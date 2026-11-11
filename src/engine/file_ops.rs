@@ -127,9 +127,17 @@ pub fn sync_skills_dir(
 
 /// Puts the skill at `source` at `target`. An existing folder is updated in
 /// place: the recorded files the source no longer has go, and files nothing
-/// recorded (caches, `.DS_Store`, a virtualenv) stay. Only the files copied
-/// from `source` are recorded.
+/// recorded (caches, `.DS_Store`, a virtualenv) stay. Each copied file
+/// replaces the file at its path; a file where the source has a folder, or a
+/// folder where it has a file, goes only when sync wrote it or under
+/// `--force`. Only the files copied from `source` are recorded.
 fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Error> {
+    if !s.ws.is_dir(source) {
+        return replace_file(s, source, target);
+    }
+    if s.ws.exists(target) && !s.ws.is_dir(target) {
+        clear_the_way(s, target)?;
+    }
     if s.ws.is_dir(target) {
         for file in recorded_under(s, target) {
             let rel = &file[target.len() + 1..];
@@ -139,18 +147,51 @@ fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Erro
             s.ws.remove(&file)?;
             remove_empty_parents(s, &file, target)?;
         }
-    } else {
-        s.ws.remove(target)?;
     }
-    s.ws.copy(source, target)?;
-    if s.ws.is_dir(source) {
-        for file in s.ws.files_under(source) {
-            s.record_write(&format!("{target}{}", &file[source.len()..]));
+    s.ws.create_dir_all(target)?;
+    for file in s.ws.files_under(source) {
+        let dest = format!("{target}{}", &file[source.len()..]);
+        let mut dir = paths::parent(&dest);
+        while dir != target && paths::is_within(&dir, target) {
+            if s.ws.exists(&dir) && !s.ws.is_dir(&dir) {
+                clear_the_way(s, &dir)?;
+                break;
+            }
+            dir = paths::parent(&dir);
         }
-    } else {
-        s.record_write(target);
+        s.ws.create_dir_all(&paths::parent(&dest))?;
+        replace_file(s, &file, &dest)?;
     }
     Ok(())
+}
+
+fn replace_file(s: &mut Session, source: &str, dest: &str) -> Result<(), Error> {
+    if s.ws.is_dir(dest) {
+        clear_the_way(s, dest)?;
+    } else {
+        s.ws.remove(dest)?;
+    }
+    s.ws.copy(source, dest)?;
+    s.record_write(dest);
+    Ok(())
+}
+
+/// Removes `path`, which stands where the source has the other kind of
+/// entry, when sync wrote everything in it or under `--force`.
+fn clear_the_way(s: &mut Session, path: &str) -> Result<(), Error> {
+    let (files, kind) = if s.ws.is_dir(path) {
+        (s.ws.files_under(path), "a folder")
+    } else {
+        (vec![path.to_string()], "a file")
+    };
+    if s.force || files.iter().all(|f| s.recorded(f) || s.was_touched(f)) {
+        return s.ws.remove(path);
+    }
+    Err(Error::UnsafeOutput {
+        action: "replace",
+        path: s.display(path),
+        reason: format!("{kind} sync did not write is in the way"),
+    })
 }
 
 /// Removes `path`, or every file below it, that the previous manifest records
@@ -392,6 +433,30 @@ mod tests {
         assert!(!s.ws.exists("/proj/.windsurf/rules/core.md"));
         assert_eq!(s.ws.read("/proj/.windsurf/rules/mine.md").unwrap(), b"m");
         assert_eq!(remove_recorded(&mut s, "/proj/.nope").unwrap(), 0);
+    }
+
+    #[test]
+    fn a_skill_replaces_an_entry_of_the_other_kind_only_when_sync_wrote_it() {
+        let mut s = test_session();
+        file(&mut s, "/proj/.ai/src/skills/a/SKILL.md", "a");
+        file(&mut s, "/proj/.ai/src/skills/b/SKILL.md", "b");
+        file(&mut s, "/proj/.claude/skills/a", "mine");
+        file(&mut s, "/proj/.claude/skills/b", "old");
+        s.activate_manifest(BTreeSet::from([".claude/skills/b".to_string()]));
+        let skills = "/proj/.ai/src/skills";
+        let dest = "/proj/.claude/skills";
+        assert_eq!(
+            replace_skill(&mut s, &format!("{skills}/a"), &format!("{dest}/a"))
+                .unwrap_err()
+                .to_string(),
+            "Refusing to replace .claude/skills/a: a file sync did not write is in the way"
+        );
+        assert_eq!(s.ws.read("/proj/.claude/skills/a").unwrap(), b"mine");
+        replace_skill(&mut s, &format!("{skills}/b"), &format!("{dest}/b")).unwrap();
+        assert_eq!(s.ws.read("/proj/.claude/skills/b/SKILL.md").unwrap(), b"b");
+        s.force = true;
+        replace_skill(&mut s, &format!("{skills}/a"), &format!("{dest}/a")).unwrap();
+        assert_eq!(s.ws.read("/proj/.claude/skills/a/SKILL.md").unwrap(), b"a");
     }
 
     #[test]

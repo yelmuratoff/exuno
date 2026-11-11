@@ -66,7 +66,7 @@ After every successful sync Exuno writes `.ai/.sync-manifest`: a `# exuno <versi
 - unchanged since the last sync: rewritten quietly
 - deleted: rewritten quietly
 - edited: the sync stops, lists the edited files, and leaves them alone
-- not in the manifest at all, at a path sync is about to write (a file someone put there by hand, or that another program created): if sync would change it, the run stops before writing anything with `Sync would overwrite N file(s) it did not write` and lists them; `sync --dry-run` and `check` report the same. `--force` replaces them from source, and `sync --dry-run --force` lists them as files it would overwrite. The very first sync, before any manifest exists, writes over such files; `exuno init` offers to adopt them first.
+- not in the manifest at all, at a path sync is about to write (a file someone put there by hand, or that another program created): if sync would change it, the run stops before writing anything with `Sync would overwrite N file(s) it did not write` and lists them; `sync --dry-run` and `check` report the same. `--force` replaces them from source, and `sync --dry-run --force` lists them as files it would overwrite. The very first sync, before any manifest exists, writes over such files; `exuno init` offers to adopt them first. A file standing where sync needs a folder, or a folder where it needs a file, stops the run the same way, first sync included, unless sync wrote everything in it.
 
 ```text
 [ERROR] Manual edits detected in 1 destination file(s) since last sync:
