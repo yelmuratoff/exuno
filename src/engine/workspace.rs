@@ -365,10 +365,28 @@ impl Workspace {
         Ok(())
     }
 
+    /// Whether `a` and `b` name the same file on disk, through a link or not.
+    pub fn same_disk_file(&self, a: &str, b: &str) -> bool {
+        if self.indexed(a) || self.indexed(b) {
+            return false;
+        }
+        match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
+
     /// `cp -r src dst` onto a missing `dst`: a file, or a whole tree with its
     /// empty directories.
     pub fn copy(&mut self, src: &str, dst: &str) -> Result<(), Error> {
         self.refuse_escape(dst)?;
+        if self.is_file(src) && self.same_disk_file(src, dst) {
+            return Err(Error::UnsafeOutput {
+                action: "write",
+                path: dst.to_string(),
+                reason: format!("it is the source file {src} itself"),
+            });
+        }
         if self.is_file(src) {
             let content = self.content_of(src)?;
             if self.writes_disk(dst) {
@@ -497,6 +515,33 @@ mod tests {
             .unwrap();
         assert_eq!(ws.read("/proj/.ai/src/rules/core.md").unwrap(), b"c");
         assert!(!ws.exists("/proj/.ai/backups"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_onto_its_own_source_through_a_link_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap().disk_text();
+        std::fs::create_dir_all(dir.path().join("vendor")).unwrap();
+        std::fs::write(dir.path().join("vendor/SKILL.md"), "s").unwrap();
+        std::os::unix::fs::symlink("vendor/SKILL.md", dir.path().join("SKILL.md")).unwrap();
+        let mut ws = Workspace::on_disk(&root);
+        let (src, dst) = (
+            format!("{root}/vendor/SKILL.md"),
+            format!("{root}/SKILL.md"),
+        );
+        assert!(ws.same_disk_file(&src, &dst));
+        assert!(!ws.same_disk_file(&src, &format!("{root}/vendor")));
+        assert!(
+            ws.copy(&src, &dst)
+                .unwrap_err()
+                .to_string()
+                .ends_with("vendor/SKILL.md itself")
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("vendor/SKILL.md")).unwrap(),
+            b"s"
+        );
     }
 
     #[cfg(unix)]

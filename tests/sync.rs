@@ -1464,6 +1464,36 @@ fn sync_refuses_to_write_through_a_symlink_into_an_in_project_source() {
 
 #[cfg(unix)]
 #[test]
+fn sync_refuses_to_write_through_a_symlink_into_a_tool_target_source() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    source: \"vendor/skills\"\n",
+    );
+    let skill = "---\nname: pdf\n---\nPDF.\n";
+    project.write("vendor/skills/pdf/SKILL.md", skill);
+    std::fs::create_dir_all(project.join(".claude/skills")).unwrap();
+    std::os::unix::fs::symlink(
+        "../../vendor/skills/pdf",
+        project.join(".claude/skills/pdf"),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            ".claude/skills/pdf is a symlink to",
+        ))
+        .stderr(predicate::str::contains("inside a source directory"));
+    assert_eq!(project.read("vendor/skills/pdf/SKILL.md"), skill);
+}
+
+#[cfg(unix)]
+#[test]
 fn cleanup_refuses_to_remove_through_a_symlink_that_leaves_the_project() {
     // Creating a symlink on Windows needs Developer Mode or admin rights.
     let outside = tempfile::tempdir().unwrap();

@@ -844,10 +844,12 @@ Appended one line at a time as they are found, with the phase:
 - After Phase 7: sync refuses to write, copy, or remove an output through a
   symlink that resolves outside the project, into `.ai/` or `.git/`, or into a
   source directory (a `source.*` directory other than `agents`, the tools
-  directory, or a profile overlay, inside or outside the project), and a
-  `.gitignore` link that leaves the project. Bash
+  directory, a profile overlay, or an enabled or profile tool's
+  `targets.<key>.source` other than `agents`, inside or outside the
+  project), and a `.gitignore` link that leaves the project. Bash
   followed every link. A link that stays among the outputs is still followed,
-  and removing a link removes only the link.
+  removing a link removes only the link, and a copy onto its own source
+  file is refused.
 - After Phase 7: with a manifest present, sync renders in memory first and
   stops before writing anything when it would change an existing file the
   manifest does not record; `--force` replaces such files, and `check` and

@@ -21,7 +21,28 @@ pub fn build_catalog(s: &mut Session, run: &mut Run) {
             .collect(),
     };
     load_tools(s, run);
+    register_tool_sources(s, run);
     collect_protected_dests(s, run);
+}
+
+/// Every `targets.<key>.source` an enabled or profile tool reads, except the
+/// agents file an output may share, is a place no output link may lead.
+fn register_tool_sources(s: &mut Session, run: &Run) {
+    let slugs: BTreeSet<&String> = run.enabled.iter().chain(&run.profile_tools).collect();
+    let mut roots = Vec::new();
+    for slug in slugs {
+        let tool = load_tool(s, slug);
+        for key in TARGET_KEYS.iter().filter(|key| **key != "agents") {
+            let raw = tool.value(&format!("targets.{key}.source"));
+            if raw.is_empty() {
+                continue;
+            }
+            let abs = s.paths.absolute(&raw);
+            roots.extend(s.paths.canonicalize_with_existing_ancestor(&abs));
+        }
+    }
+    s.paths.add_unwritable_roots(roots);
+    s.ws.guard_writes(&s.paths);
 }
 
 /// `list_all_tools`, plus the enabled and profile-tool sets `warm_*_cache` build.

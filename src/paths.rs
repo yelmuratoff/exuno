@@ -459,6 +459,16 @@ impl Paths {
         self.unwritable = roots;
     }
 
+    /// [`Self::register_unwritable_roots`] for roots known only once the
+    /// tools load, kept with those registered before.
+    pub fn add_unwritable_roots(&mut self, roots: Vec<String>) {
+        for root in roots {
+            if !self.unwritable.contains(&root) {
+                self.unwritable.push(root);
+            }
+        }
+    }
+
     /// `refuse_escaping_source_links`: every symlink at or below `roots`, and
     /// below each safe directory a link reaches, must resolve to a safe source
     /// or a trusted external root. `Err` is the message to log.

@@ -34,6 +34,7 @@ pub fn copy_file_noted(s: &mut Session, src: &str, dest: &str, note: &str) -> Re
     if s.ws.is_dir(dest) {
         s.ws.copy(src, &format!("{dest}/{}", paths::leaf(src)))?;
     } else {
+        refuse_copy_onto_itself(s, src, dest)?;
         s.ws.remove(dest)?;
         s.ws.copy(src, dest)?;
     }
@@ -169,11 +170,25 @@ fn replace_file(s: &mut Session, source: &str, dest: &str) -> Result<(), Error> 
     if s.ws.is_dir(dest) {
         clear_the_way(s, dest)?;
     } else {
+        refuse_copy_onto_itself(s, source, dest)?;
         s.ws.remove(dest)?;
     }
     s.ws.copy(source, dest)?;
     s.record_write(dest);
     Ok(())
+}
+
+/// A dest that a link makes the source file itself would be deleted by the
+/// removal before its copy.
+fn refuse_copy_onto_itself(s: &Session, src: &str, dest: &str) -> Result<(), Error> {
+    if !s.ws.same_disk_file(src, dest) {
+        return Ok(());
+    }
+    Err(Error::UnsafeOutput {
+        action: "write",
+        path: s.display(dest),
+        reason: format!("it is the source file {} itself", s.display(src)),
+    })
 }
 
 /// Removes `path`, which stands where the source has the other kind of
