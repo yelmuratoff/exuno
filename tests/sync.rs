@@ -2132,6 +2132,18 @@ fn set_readonly(project: &Project, rel: &str, readonly: bool) {
 }
 
 #[test]
+fn a_skill_folder_keeps_the_empty_folders_of_its_source() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    std::fs::create_dir_all(project.join(".ai/src/skills/demo/cache/empty")).unwrap();
+    project.exuno().arg("sync").assert().success();
+    assert!(project.join(".claude/skills/demo/cache/empty").is_dir());
+    project.exuno().arg("sync").assert().success();
+    assert!(project.join(".claude/skills/demo/cache/empty").is_dir());
+}
+
+#[test]
 fn a_read_only_source_skill_syncs_twice() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);

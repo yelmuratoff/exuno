@@ -294,8 +294,15 @@ impl Workspace {
     /// Regular files below `dir` at any depth, as `find "$dir" -type f` lists them.
     pub fn files_under(&self, dir: &str) -> Vec<String> {
         let mut found = Vec::new();
-        self.collect_files(dir, &mut Vec::new(), &mut found);
+        self.collect_files(dir, &mut Vec::new(), &mut found, &mut Vec::new());
         found
+    }
+
+    /// Directories below `dir` at any depth, parents before their children.
+    pub fn dirs_under(&self, dir: &str) -> Vec<String> {
+        let mut dirs = Vec::new();
+        self.collect_files(dir, &mut Vec::new(), &mut Vec::new(), &mut dirs);
+        dirs
     }
 
     /// A link back to a directory on the walk's own path is not descended,
@@ -305,6 +312,7 @@ impl Workspace {
         dir: &str,
         walked: &mut Vec<std::path::PathBuf>,
         found: &mut Vec<String>,
+        dirs: &mut Vec<String>,
     ) {
         let canonical = (!self.indexed(dir))
             .then(|| std::fs::canonicalize(dir).ok())
@@ -318,7 +326,8 @@ impl Workspace {
         for name in self.list(dir) {
             let child = format!("{dir}/{name}");
             if self.is_dir(&child) {
-                self.collect_files(&child, walked, found);
+                dirs.push(child.clone());
+                self.collect_files(&child, walked, found, dirs);
             } else if self.is_file(&child) {
                 found.push(child);
             }

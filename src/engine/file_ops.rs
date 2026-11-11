@@ -150,17 +150,15 @@ fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Erro
         }
     }
     s.ws.create_dir_all(target)?;
+    for dir in s.ws.dirs_under(source) {
+        let dest = format!("{target}{}", &dir[source.len()..]);
+        if s.ws.exists(&dest) && !s.ws.is_dir(&dest) {
+            clear_the_way(s, &dest)?;
+        }
+        s.ws.create_dir_all(&dest)?;
+    }
     for file in s.ws.files_under(source) {
         let dest = format!("{target}{}", &file[source.len()..]);
-        let mut dir = paths::parent(&dest);
-        while dir != target && paths::is_within(&dir, target) {
-            if s.ws.exists(&dir) && !s.ws.is_dir(&dir) {
-                clear_the_way(s, &dir)?;
-                break;
-            }
-            dir = paths::parent(&dir);
-        }
-        s.ws.create_dir_all(&paths::parent(&dest))?;
         replace_file(s, &file, &dest)?;
     }
     Ok(())
