@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.48.0
+
+### Breaking
+
+- **Files sync didn't write:** when sync would change a file at an output path that `.ai/.sync-manifest` doesn't record, it stops before writing anything and lists the files; `--force` replaces them. A file where a skill needs a folder, or the reverse, stops it the same way. The first sync of a project works as before.
+- **Interrupted runs:** when sync finds a run that was killed partway through, it restores it and stops; run it again.
+- **Disabled tools:** a cleanup removal that fails now stops the sync instead of warning.
+
+### Added
+
+- **Publishing plugin:** a new `plugin` tool writes your skills, commands, and subagents to `plugin/` with the marketplace files claude.ai, ChatGPT, and Codex install from (`.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json`, `plugin/plugin.json`). Commit and push it, then add the repository as a marketplace; [Publishing](docs/guide/publishing.md) has the steps.
+- **`frontmatter_keys`:** a skills or commands target keeps only the frontmatter keys it lists, with one warning per target naming the keys it dropped.
+- **`manifests` target:** writes template files with `${key}` values from `targets.manifests.vars`; a missing or invalid key stops the sync, and a `.json` result must parse.
+- **`gitignore: false`:** on any target, keeps its files out of the managed `.gitignore` block.
+
+### Changed
+
+- **Turning a tool off:** the next sync removes only the files earlier syncs recorded for it, then the folders that leaves empty. Hand-written files and other tools' outputs stay.
+- **Skill folders:** updated in place, so caches, `.DS_Store`, and other files sync never wrote stay, while recorded files the source dropped go. A render without a manifest prunes nothing.
+- **`check` and `sync --dry-run`:** report every refusal a real sync would hit.
+- **Profiles:** a variant picks up your `.ai/src/tools/<base>.yaml` settings too, except its name, `enabled`, `post_sync`, and each target's paths and `ownership`.
+- **`--if-stale`:** syncs after an Exuno upgrade even when no source changed; `.ai/.sync-manifest` gains a `# exuno <version>` header line.
+- **`adopt`:** refuses a skill or command whose frontmatter sync filters.
+
+### Fixed
+
+- **Symlinks:** sync no longer writes, copies, or removes an output through a link that leaves the project or points into `.ai/`, `.git/`, or a source directory, and never copies a file onto itself. A `.gitignore` link inside the project is written through and backed up.
+- **Read-only files:** in a source or among the outputs, they no longer break a later sync.
+- **Link cycles and unreadable folders** in a source no longer break `check` or `sync`.
+- **Failed restores:** if the automatic restore after a failed sync also fails, the next run restores the backup first.
+- **Lock:** a run releases the project lock when it ends, even while a child process it started still runs. The commands that edit `exuno.yaml` or `.ai/src/` (`enable`, `disable`, `customize`, `add`, `simplify --apply`, `resolve`, `profile add`/`remove`, `adopt`, `dedupe`, `migrate --legacy --apply`, `upgrade-config`, `refresh`) take it too.
+- **Recovery:** a malformed `backup.retention` no longer blocks restoring a killed run, and a killed `customize` no longer leaves a truncated override.
+- **`.pending` output:** its fields are escaped before they reach the terminal.
+
 ## 0.47.0
 
 ### Added
