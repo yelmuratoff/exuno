@@ -546,6 +546,41 @@ fn a_disabled_tool_output_that_cannot_be_removed_stops_the_sync() {
 
 #[cfg(unix)]
 #[test]
+fn a_failed_automatic_restore_is_left_for_the_next_run() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let rule = project.read(".cursor/rules/comments.mdc");
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    common::chmod(&project.join(".cursor/rules"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".cursor/rules"), 0o755);
+    synced
+        .failure()
+        .stderr(predicate::str::contains("Automatic restore failed"));
+    assert!(project.exists(".ai/backups/.pending"));
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ));
+    assert_eq!(project.read(".cursor/rules/comments.mdc"), rule);
+    assert!(!project.exists(".ai/backups/.pending"));
+}
+
+#[cfg(unix)]
+#[test]
 fn a_merged_rules_file_that_cannot_be_removed_stops_the_sync() {
     if !common::unreadable_dirs_are_possible() {
         return;

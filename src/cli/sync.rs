@@ -197,14 +197,21 @@ struct Transaction {
     active: bool,
     retention: backup::Retention,
     lock: Option<Lock>,
+    restore_failed: bool,
 }
 
 impl Transaction {
-    /// Ends the run's hold on the project once it has sealed or restored.
+    /// Ends the run's hold on the project once it has sealed or restored. A
+    /// failed restore keeps its `.pending` record, so the next run restores
+    /// the snapshot before anything else.
     fn release(&mut self, s: &mut Session) {
-        if let Some(lock) = self.lock.take()
-            && let Err(e) = lock.finish()
-        {
+        let Some(lock) = self.lock.take() else {
+            return;
+        };
+        if self.restore_failed {
+            return;
+        }
+        if let Err(e) = lock.finish() {
             report_backup_error(&mut s.log, &e);
         }
     }
@@ -232,8 +239,9 @@ impl Transaction {
             Err(e) => {
                 report_backup_error(&mut s.log, &e);
                 s.log.error(&format!(
-                    "Automatic restore failed. Backup retained at {shown}"
+                    "Automatic restore failed. Backup retained at {shown}; the next exuno run restores it first."
                 ));
+                self.restore_failed = true;
             }
         }
     }
