@@ -198,12 +198,15 @@ targets:
 | `format` | Converts the file. `toml` for Gemini commands and Codex subagents, `amazonq_json` for Amazon Q agents, `opencode_md` and `kiro_md` for OpenCode and Kiro agents, `opencode_json` and `codex_toml` for MCP |
 | `source` (settings, MCP, hooks) | A declared source path. The canonical `.ai/src/tools/<tool>/<resource>.<ext>` beats it automatically. |
 | `enabled` (on a target) | `false` turns off one output category while the rest keep syncing |
+| `gitignore: false` | On any target: keeps its dest out of the managed `.gitignore` block, for output a host reads from the repository (`plugin`) |
+| `frontmatter_keys` (skills, commands) | Keeps only the listed top-level frontmatter keys in each synced `SKILL.md` or command, and prints one warning per target that lists the dropped keys and how many files lost one (`plugin`) |
+| `manifests` (target) | Writes each template under `.ai/src/tools/<tool>/manifests/` (or the tool's shipped set) to the same path under `dest`, filling `${key}` from `vars.<key>`. Values in a `.json` template are JSON-escaped and the result must parse. `include` / `exclude` filter template paths. The target owns only the paths the templates of the set in use map to, so `dest: "."` is safe. An output whose template leaves that set (deleted from the override folder, or missing from an override that replaces the shipped set) stays, and neither sync nor check notices it; remove it by hand (`plugin`) |
 | `legacy_dest` | Where an earlier config wrote the target. Once the target moves, sync removes the files there that the manifest recorded (Windsurf, Cline) |
 | `guard` | Copies the tool's write-guard script to `dest` and makes it executable. Override it at `.ai/src/tools/<tool>/guard.sh` and register it from the tool's settings (Claude). |
 | `profile_scoped: false` | On any target: `exuno profile add` keeps the base `dest` instead of moving it into the profile's config home |
 | `profile_supported: false` | Refuses config-home profiles for a tool that reads only project files |
 | `adoptable: false` (agents) | Refuses `adopt` when the agents file can't be copied back into its source safely |
-| `base` | Makes this tool a variant of another one that inherits everything else (used by profiles) |
+| `base` | Makes this tool a variant of another one that inherits everything else (used by profiles): your `.ai/src/tools/<base>.yaml` first, then the shipped base. A variant never inherits `name`, `base`, `profile_home`, `enabled`, `post_sync`, or a target's `dest`, `legacy_dest`, `source`, `user_dirs`, and `ownership` from your override |
 
 [`lib/templates/tools/_TEMPLATE.yaml`](../../lib/templates/tools/_TEMPLATE.yaml) documents every option, including ones this table leaves out.
 
@@ -223,6 +226,8 @@ enabled: false
 ```
 
 To skip a tool for one run, use `exuno sync --skip cursor`.
+
+On the next sync after you turn a tool off (with `defaults.cleanup: true`, the default), Exuno removes the files its earlier syncs recorded in `.ai/.sync-manifest` for that tool, then the folders that leaves empty. It never removes a file nothing recorded, such as one you added by hand, or a file under another enabled tool's destination. A folder that still holds files sync did not write stays, and that sync says so once with `Left <path> in place`.
 
 To keep a tool on but drop one kind of output, set that target's `enabled` to `false`. Everything else keeps syncing:
 

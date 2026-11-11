@@ -5,6 +5,8 @@ use std::collections::BTreeSet;
 use super::{Run, TARGET_KEYS};
 use crate::config::tool::Tool;
 use crate::engine::file_ops;
+use crate::engine::gitignore;
+use crate::engine::manifests;
 use crate::engine::session::Session;
 use crate::{config::catalog, config::profiles, config::yaml_subset};
 
@@ -19,7 +21,28 @@ pub fn build_catalog(s: &mut Session, run: &mut Run) {
             .collect(),
     };
     load_tools(s, run);
+    register_tool_sources(s, run);
     collect_protected_dests(s, run);
+}
+
+/// Every `targets.<key>.source` an enabled or profile tool reads, except the
+/// agents file an output may share, is a place no output link may lead.
+fn register_tool_sources(s: &mut Session, run: &Run) {
+    let slugs: BTreeSet<&String> = run.enabled.iter().chain(&run.profile_tools).collect();
+    let mut roots = Vec::new();
+    for slug in slugs {
+        let tool = load_tool(s, slug);
+        for key in TARGET_KEYS.iter().filter(|key| **key != "agents") {
+            let raw = tool.value(&format!("targets.{key}.source"));
+            if raw.is_empty() {
+                continue;
+            }
+            let abs = s.paths.absolute(&raw);
+            roots.extend(s.paths.canonicalize_with_existing_ancestor(&abs));
+        }
+    }
+    s.paths.add_unwritable_roots(roots);
+    s.ws.guard_writes(&s.paths);
 }
 
 /// `list_all_tools`, plus the enabled and profile-tool sets `warm_*_cache` build.
@@ -51,14 +74,20 @@ pub(super) fn user_tool_slugs(s: &Session) -> Vec<String> {
         .collect()
 }
 
-/// The layered tool with its `<tools dir>/<slug>.yaml` read from the workspace.
+/// The layered tool with its `<tools dir>/<slug>.yaml`, and its `base:` tool's,
+/// read from the workspace.
 pub(super) fn load_tool(s: &Session, slug: &str) -> Tool {
-    let path = format!("{}/{slug}.yaml", s.tools_dir);
-    let user_yaml =
-        s.ws.read(&path)
+    let read = |slug: &str| {
+        s.ws.read(&format!("{}/{slug}.yaml", s.tools_dir))
             .ok()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
-    Tool::new(slug, user_yaml)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+    };
+    let tool = Tool::new(slug, read(slug));
+    let base = tool.base_name();
+    if base.is_empty() || base == slug {
+        return tool;
+    }
+    tool.with_base_override(read(&base))
 }
 
 /// `_collect_protected_dests`: cleanup never removes what an enabled tool or
@@ -91,7 +120,7 @@ fn collect_protected_dests(s: &mut Session, run: &mut Run) {
                 }
                 let label = format!("targets.{key}.dest for {slug}");
                 if let Some(abs) = s.paths.clone().resolve_dest(&raw, &label, &mut s.log) {
-                    run.backup_targets.push(abs);
+                    run.backup_targets.extend(owned_paths(s, &tool, key, &abs));
                 }
             }
         }
@@ -157,8 +186,9 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
         let Some(abs) = s.paths.clone().resolve_dest(&raw, &label, &mut s.log) else {
             continue;
         };
-        run.protected.push(abs.clone());
-        collected.push(abs.clone());
+        let owned = owned_paths(s, tool, key, &abs);
+        run.protected.extend(owned.iter().cloned());
+        collected.extend(owned);
         let Some(mut rel) = s.paths.to_repo_relative(&abs) else {
             s.log
                 .error(&format!("Path is outside repository root: {abs}"));
@@ -170,14 +200,49 @@ fn collect_tool_dests(s: &mut Session, run: &mut Run, tool: &Tool, profile: bool
         {
             run.keyed_dests.insert(rel.clone());
         }
-        if matches!(key, "rules" | "skills" | "commands" | "subagents") {
-            rel.push('/');
+        if tool.flag(&format!("targets.{key}.gitignore")) == Some(false) {
+            continue;
         }
-        if profile && tool.flag(&format!("targets.{key}.profile_scoped")) != Some(false) {
-            run.gitignore_profile.push(rel);
+        let entries = if key == "manifests" {
+            manifest_entries(s, tool, &rel)
         } else {
-            run.gitignore_generated.push(rel);
+            if matches!(key, "rules" | "skills" | "commands" | "subagents") {
+                rel.push('/');
+            }
+            vec![rel]
+        };
+        if profile && tool.flag(&format!("targets.{key}.profile_scoped")) != Some(false) {
+            run.gitignore_profile.extend(entries);
+        } else {
+            run.gitignore_generated.extend(entries);
         }
     }
     collected
+}
+
+/// What a target at `abs` claims: the dest itself, or for a `manifests`
+/// target only the files its templates map to.
+fn owned_paths(s: &Session, tool: &Tool, key: &str, abs: &str) -> Vec<String> {
+    if key != "manifests" {
+        return vec![abs.to_string()];
+    }
+    manifests::owned_paths(&s.ws, &s.tools_dir, tool, abs)
+}
+
+/// The `.gitignore` lines for the files a `manifests` target at `dest_rel`
+/// writes, escaped so a template name can't add a pattern of its own.
+fn manifest_entries(s: &Session, tool: &Tool, dest_rel: &str) -> Vec<String> {
+    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, tool) else {
+        return Vec::new();
+    };
+    let filter = tool.target_filter("manifests");
+    manifests::templates(&s.ws, &dir)
+        .into_iter()
+        .filter(|rel| filter.accepts(rel))
+        .map(|rel| match dest_rel {
+            "." => rel,
+            dest => format!("{dest}/{rel}"),
+        })
+        .filter_map(|rel| gitignore::literal(&rel))
+        .collect()
 }

@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use super::check;
 use crate::engine::keyed;
 use crate::engine::render::{self, Run, Selection, Stop};
 use crate::engine::session::Session;
@@ -196,14 +197,21 @@ struct Transaction {
     active: bool,
     retention: backup::Retention,
     lock: Option<Lock>,
+    restore_failed: bool,
 }
 
 impl Transaction {
-    /// Ends the run's hold on the project once it has sealed or restored.
+    /// Ends the run's hold on the project once it has sealed or restored. A
+    /// failed restore keeps its `.pending` record, so the next run restores
+    /// the snapshot before anything else.
     fn release(&mut self, s: &mut Session) {
-        if let Some(lock) = self.lock.take()
-            && let Err(e) = lock.finish()
-        {
+        let Some(lock) = self.lock.take() else {
+            return;
+        };
+        if self.restore_failed {
+            return;
+        }
+        if let Err(e) = lock.finish() {
             report_backup_error(&mut s.log, &e);
         }
     }
@@ -231,8 +239,9 @@ impl Transaction {
             Err(e) => {
                 report_backup_error(&mut s.log, &e);
                 s.log.error(&format!(
-                    "Automatic restore failed. Backup retained at {shown}"
+                    "Automatic restore failed. Backup retained at {shown}; the next exuno run restores it first."
                 ));
+                self.restore_failed = true;
             }
         }
     }
@@ -285,6 +294,7 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     render::setup_overlays(s, &mut run, true)?;
     render::build_catalog(s, &mut run);
 
+    lock_project(s, &run, env, tx)?;
     let root = s.paths.root.clone();
     let previous = Manifest::load(&root).map_err(|e| io(s, e))?;
     s.activate_manifest(previous.as_ref().map(Manifest::paths).unwrap_or_default());
@@ -297,6 +307,7 @@ fn sync(s: &mut Session, args: &Args, env: &Env, tx: &mut Transaction) -> Result
     );
     warn_baseline_replacements(s, &run, previous.is_none());
     check_drift(s, &run, previous.as_ref())?;
+    preflight(s, args, env, &run, previous.as_ref())?;
     start_transaction(s, &run, env, tx)?;
     render::run_passes(s, &mut run)?;
     finalize(s, &run, previous.as_ref(), tx)?;
@@ -348,7 +359,8 @@ fn json_summary(s: &Session, run: &Run, tx: &Transaction) -> String {
     )
 }
 
-/// `_sync_is_stale`: no manifest, or any source input modified after it.
+/// `_sync_is_stale`: no manifest, one another engine version wrote (or that
+/// predates the version header), or any source input modified after it.
 fn is_stale(root: &str, run: &Run, tools_dir: &str) -> bool {
     let manifest = Path::new(root).join(manifest::REL);
     let Some(since) = std::fs::metadata(&manifest)
@@ -358,6 +370,9 @@ fn is_stale(root: &str, run: &Run, tools_dir: &str) -> bool {
     else {
         return true;
     };
+    if manifest::recorded_version(root).as_deref() != Some(crate::engine_version()) {
+        return true;
+    }
     let src = format!("{root}/.ai/src");
     let mut roots: Vec<String> = Vec::new();
     if Path::new(&src).is_dir() {
@@ -524,6 +539,151 @@ fn check_drift(s: &mut Session, run: &Run, previous: Option<&Manifest>) -> Resul
     Err(Stop(1))
 }
 
+/// Renders the run in memory before anything is written, and stops when the
+/// render would write through a link it may not follow, or change a file the
+/// previous manifest does not record (`--force` replaces those). A dry run
+/// reports what a real sync would stop on. No post-sync hook runs here.
+fn preflight(
+    s: &mut Session,
+    args: &Args,
+    env: &Env,
+    run: &Run,
+    previous: Option<&Manifest>,
+) -> Result<(), Stop> {
+    let root = s.paths.root.clone();
+    let memory_env = render::Env {
+        config_path: env.render.config_path.clone(),
+        skip_post_sync: Some("true".to_string()),
+        allow_post_sync: None,
+        backup: None,
+        external_source_roots: env.render.external_source_roots.clone(),
+    };
+    let selection = Selection {
+        only: args.only.clone(),
+        skip: args.skip.clone(),
+        profile: args.profile.clone(),
+    };
+    let manifest = check::manifest_paths(&root).map_err(|e| io(s, e))?;
+    let rendered = check::render_in_memory(
+        &root,
+        &manifest,
+        (run.config_path.as_deref(), run.config.as_deref()),
+        &memory_env,
+        selection,
+        check::Purpose::Preflight,
+    )
+    .map_err(|e| io(s, e))?;
+    let headline = "Could not render this sync in memory to check it before writing:";
+    let (memory, memory_run) = match rendered {
+        check::InMemory::Rendered(memory, run) => (memory, run),
+        check::InMemory::SeedFailed(detail) => {
+            s.log.error(headline);
+            s.log.err(format!("  {detail}"));
+            return Err(Stop(1));
+        }
+        check::InMemory::RenderFailed(memory, status) => {
+            s.log.error(headline);
+            let lines: Vec<String> = memory
+                .log
+                .lines()
+                .iter()
+                .map(|(_, line)| line.clone())
+                .collect();
+            let start = lines
+                .iter()
+                .position(|line| line.starts_with("[ERROR]"))
+                .unwrap_or(lines.len().saturating_sub(20));
+            for line in &lines[start..] {
+                s.log.err(line.clone());
+            }
+            return Err(Stop(status));
+        }
+    };
+    let found = check::hazards(&memory, &memory_run, &root, previous);
+    if found.is_empty() {
+        return Ok(());
+    }
+    if s.dry_run {
+        let mut stops = found.clone();
+        if s.force {
+            stops.unowned.clear();
+        }
+        for line in stops.lines("A real sync would stop: ") {
+            if line.starts_with("      ") {
+                s.log.err(line);
+            } else {
+                s.log.warning(&line);
+            }
+        }
+        if s.force && !found.unowned.is_empty() {
+            s.log.warning(&format!(
+                "Would overwrite {} file(s) sync did not write (--force):",
+                found.unowned.len()
+            ));
+            for rel in &found.unowned {
+                s.log.err(format!("      {rel}"));
+            }
+        }
+        return Ok(());
+    }
+    for refusal in &found.refusals {
+        s.log.error(refusal);
+    }
+    if !found.refusals.is_empty() {
+        return Err(Stop(1));
+    }
+    if s.force {
+        s.log.warning(&format!(
+            "Overwriting {} file(s) sync did not write (--force):",
+            found.unowned.len()
+        ));
+        for rel in &found.unowned {
+            s.log.err(format!("      {rel}"));
+        }
+        return Ok(());
+    }
+    s.log.error(&check::unowned_headline(found.unowned.len()));
+    for rel in &found.unowned {
+        s.log.err(format!("      {rel}"));
+    }
+    for line in [
+        String::new(),
+        "  These files are not in .ai/.sync-manifest, and sync would change them. Choose one:"
+            .into(),
+        "    • Move their content into .ai/src/, then re-run sync".into(),
+        "    • Move or delete the files if you no longer need them".into(),
+        "    • Re-run with --force to replace them from source".into(),
+        String::new(),
+    ] {
+        s.log.err(line);
+    }
+    Err(Stop(1))
+}
+
+fn refuse_backup(s: &mut Session, e: Error) -> Stop {
+    report_backup_error(&mut s.log, &e);
+    s.log
+        .error("Could not back up sync targets; no files were changed.");
+    Stop(1)
+}
+
+/// Holds the project from before the manifest is read until the run ends, so
+/// the checks that read the disk see what the transaction then changes.
+fn lock_project(s: &mut Session, run: &Run, env: &Env, tx: &mut Transaction) -> Result<(), Stop> {
+    if s.dry_run || env.skip_backup {
+        return Ok(());
+    }
+    let (lock, recovered) =
+        Lock::acquire(&s.paths.root, "sync", run.retention).map_err(|e| refuse_backup(s, e))?;
+    tx.lock = Some(lock);
+    if let Some(recovered) = recovered {
+        s.log.warning(&recovered.message());
+        s.log.error("exuno sync changed nothing; run it again.");
+        return Err(Stop(1));
+    }
+    Ok(())
+}
+
 /// `_start_sync_transaction`.
 fn start_transaction(
     s: &mut Session,
@@ -537,26 +697,23 @@ fn start_transaction(
     let root = s.paths.root.clone();
     let mut targets = run.backup_targets.clone();
     if run.update_gitignore {
-        targets.push(format!("{root}/.gitignore"));
+        let link = format!("{root}/.gitignore");
+        if Path::new(&link).is_symlink()
+            && let Ok(target) = std::fs::canonicalize(&link)
+        {
+            targets.push(crate::paths::from_disk(&target));
+        }
+        targets.push(link);
     }
     targets.push(format!("{root}/{}", manifest::REL));
     s.interrupt = Some(Interrupt::arm());
     tx.retention = run.retention;
-    let refused = |s: &mut Session, e: Error| {
-        report_backup_error(&mut s.log, &e);
-        s.log
-            .error("Could not back up sync targets; no files were changed.");
-        Stop(1)
+    let Some(lock) = tx.lock.as_ref() else {
+        return Ok(());
     };
-    let (lock, recovered) =
-        Lock::acquire(&root, "sync", run.retention).map_err(|e| refused(s, e))?;
-    if let Some(recovered) = recovered {
-        s.log.warning(&recovered.message());
-    }
-    let lock = tx.lock.insert(lock);
     let path = backup::create(&root, "sync", &targets, run.retention)
         .and_then(|path| lock.begin(&path).map(|()| path))
-        .map_err(|e| refused(s, e))?;
+        .map_err(|e| refuse_backup(s, e))?;
     tx.backup = Some(path);
     tx.active = true;
     Ok(())
@@ -577,7 +734,19 @@ fn finalize(
             ignored.extend(run.gitignore_generated.iter().cloned());
             ignored.push(manifest::REL.to_string());
         }
-        let path = Path::new(&root).join(".gitignore");
+        if let Some(reason) = s.paths.unsafe_output(&format!("{root}/.gitignore"), true) {
+            let refusal = Error::UnsafeOutput {
+                action: "write",
+                path: ".gitignore".to_string(),
+                reason,
+            };
+            s.log.error(&refusal.to_string());
+            return Err(Stop(1));
+        }
+        // A rename would replace a `.gitignore` link with a plain file, so an
+        // in-project link is written at the file it points to.
+        let link = Path::new(&root).join(".gitignore");
+        let path = std::fs::canonicalize(&link).unwrap_or(link);
         if !ignored.is_empty() || gitignore::has_managed_block(&path) {
             s.log.info("Updating .gitignore");
             gitignore::update(&path, &ignored, &mut s.log).map_err(|e| io(s, e))?;

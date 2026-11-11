@@ -1,16 +1,20 @@
 //! The per-target steps of one tool: rules, skills, commands, subagents, payloads, and the OpenCode composition.
 
+use std::collections::BTreeSet;
+
 use super::passes::{Dests, source_path, tool_source};
 use super::{Run, Step, Stop, io, tools};
 use crate::config::skill_metadata;
 use crate::config::tool::Tool;
 use crate::engine::filters::Filter;
+use crate::engine::frontmatter;
 use crate::engine::keyed;
+use crate::engine::manifests;
 use crate::engine::rules::{self, Conversion, RuleOptions};
 use crate::engine::session::Session;
 use crate::engine::skill_tree;
 use crate::{
-    config::payload, engine::codex_toml, engine::file_ops, engine::json_keys,
+    Error, config::payload, engine::codex_toml, engine::file_ops, engine::json_keys,
     engine::opencode_json, paths, project,
 };
 
@@ -273,8 +277,15 @@ pub(super) fn sync_skills_step(
         refuse_hidden_skill_names(s, &src_skills, &filter, &hidden_skills(run))?;
         refuse_skill_collisions(s, &src_skills, &filter)?;
         let effective = filter.excluding("command-*");
-        return file_ops::sync_skills_dir(s, &src_skills, &dests.skills, &effective)
-            .map_err(|e| io(s, e));
+        file_ops::sync_skills_dir(s, &src_skills, &dests.skills, &effective)
+            .map_err(|e| io(s, e))?;
+        let written: Vec<String> = skill_tree::discover(&s.ws, &src_skills)
+            .skills
+            .into_iter()
+            .filter(|skill| effective.accepts_skill(skill))
+            .map(|skill| format!("{}/{}/SKILL.md", dests.skills, skill.name))
+            .collect();
+        return retain_frontmatter_keys(s, tool, "skills", &written);
     }
     if tool.value("targets.skills.inline_into_agents") == "true" && s.ws.is_dir(&src_skills) {
         refuse_hidden_skill_names(s, &src_skills, &filter, &hidden_skills(run))?;
@@ -314,19 +325,40 @@ pub(super) fn sync_commands_step(
     }
 
     if !dests.commands.is_empty() {
-        let result = if tool.value("targets.commands.format") == "toml" {
-            rules::sync_converted(s, &src, &dests.commands, Conversion::CommandToml, &filter)
-        } else {
-            let extension = tool.value("targets.commands.extension");
-            let opts = RuleOptions {
-                extension: &extension,
-                header: "",
-                scoped_header: "",
-                filter: &filter,
-            };
-            rules::sync_rules(s, &src, &dests.commands, &opts)
+        if tool.value("targets.commands.format") == "toml" {
+            return rules::sync_converted(
+                s,
+                &src,
+                &dests.commands,
+                Conversion::CommandToml,
+                &filter,
+            )
+            .map_err(|e| io(s, e));
+        }
+        let extension = tool.value("targets.commands.extension");
+        let opts = RuleOptions {
+            extension: &extension,
+            header: "",
+            scoped_header: "",
+            filter: &filter,
         };
-        return result.map_err(|e| io(s, e));
+        rules::sync_rules(s, &src, &dests.commands, &opts).map_err(|e| io(s, e))?;
+        let written: Vec<String> =
+            s.ws.glob(&src)
+                .into_iter()
+                .filter(|name| {
+                    name.ends_with(".md")
+                        && filter.accepts(name)
+                        && s.ws.is_file(&format!("{src}/{name}"))
+                })
+                .map(|name| match name.strip_suffix(".md") {
+                    Some(stem) if !extension.is_empty() => {
+                        format!("{}/{stem}{extension}", dests.commands)
+                    }
+                    _ => format!("{}/{name}", dests.commands),
+                })
+                .collect();
+        return retain_frontmatter_keys(s, tool, "commands", &written);
     }
     if tool.value("targets.commands.as_skills") == "true" && !dests.skills.is_empty() {
         s.log
@@ -353,6 +385,70 @@ pub(super) fn sync_commands_step(
             rules::inline_commands_to_file(s, &src, &target, &filter).map_err(|e| io(s, e))?;
         }
     }
+    Ok(())
+}
+
+/// `targets.<target>.frontmatter_keys`: each written file keeps only the
+/// listed top-level frontmatter keys; one warning per target names the keys
+/// dropped and how many files lost any.
+fn retain_frontmatter_keys(s: &mut Session, tool: &Tool, target: &str, files: &[String]) -> Step {
+    let keep: Vec<String> = tool
+        .filter(&format!("targets.{target}.frontmatter_keys"))
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    if keep.is_empty() || s.dry_run {
+        return Ok(());
+    }
+    let mut dropped_keys: BTreeSet<String> = BTreeSet::new();
+    let mut filtered_files = 0usize;
+    for path in files {
+        if !s.ws.is_file(path) {
+            continue;
+        }
+        let bytes = s.ws.read(path).map_err(|e| io(s, e))?;
+        let result = match String::from_utf8(bytes) {
+            Ok(text) => frontmatter::retain_keys(&text, &keep).map_err(|e| e.to_string()),
+            Err(_) => Err("not UTF-8".to_string()),
+        };
+        let shown = s.display(path);
+        let (filtered, dropped) = match result {
+            Ok(done) => done,
+            Err(reason) => {
+                s.log.warning(&format!(
+                    "Could not filter frontmatter in {shown} ({reason}); copied it unfiltered"
+                ));
+                continue;
+            }
+        };
+        if dropped.is_empty() {
+            continue;
+        }
+        dropped_keys.extend(dropped);
+        filtered_files += 1;
+        s.ws.write(path, filtered.into_bytes())
+            .map_err(|e| io(s, e))?;
+        s.record_write(path);
+    }
+    if filtered_files == 0 {
+        return Ok(());
+    }
+    let key_noun = if dropped_keys.len() == 1 {
+        "key"
+    } else {
+        "keys"
+    };
+    let singular = target.strip_suffix('s').unwrap_or(target);
+    let file_noun = if filtered_files == 1 {
+        singular
+    } else {
+        target
+    };
+    let keys = dropped_keys.into_iter().collect::<Vec<_>>().join(", ");
+    s.log.warning(&format!(
+        "{}: dropped frontmatter {key_noun} {keys} (allowlist targets.{target}.frontmatter_keys) from {filtered_files} {file_noun}",
+        tool.display_name()
+    ));
     Ok(())
 }
 
@@ -392,6 +488,81 @@ pub(super) fn sync_subagents_step(
         }
     };
     result.map_err(|e| io(s, e))
+}
+
+/// Every template the filter accepts, filled and written below the dest; then
+/// the outputs an earlier run recorded there that this run no longer writes go.
+pub(super) fn sync_manifests_step(s: &mut Session, tool: &Tool, dests: &Dests) -> Step {
+    if dests.manifests.is_empty() {
+        return Ok(());
+    }
+    let Some(dir) = manifests::template_dir(&s.ws, &s.tools_dir, tool) else {
+        return Ok(());
+    };
+    let filter = tool.target_filter("manifests");
+    let value = |key: &str| {
+        Some(tool.value(&format!("targets.manifests.vars.{key}"))).filter(|v| !v.is_empty())
+    };
+    let mut rendered = Vec::new();
+    for rel in manifests::templates(&s.ws, &dir) {
+        if !filter.accepts(&rel) {
+            continue;
+        }
+        let template = format!("{dir}/{rel}");
+        let bytes = s.ws.read(&template).map_err(|e| io(s, e))?;
+        let filled = match String::from_utf8(bytes) {
+            _ if manifests::has_control_char(&rel) => {
+                Err("its path contains a control character".to_string())
+            }
+            Ok(text) => manifests::fill(&text, rel.ends_with(".json"), &value)
+                .map_err(|reason| reason.to_string()),
+            Err(_) => Err("it is not UTF-8".to_string()),
+        };
+        match filled {
+            Ok(text) => rendered.push((format!("{}/{rel}", dests.manifests), text)),
+            Err(reason) => {
+                let error = Error::Manifest {
+                    template: s.display(&template),
+                    reason,
+                };
+                s.log.error(&error.to_string());
+                return Err(Stop(1));
+            }
+        }
+    }
+
+    if !s.dry_run {
+        for (path, text) in &rendered {
+            s.ws.create_dir_all(&paths::parent(path))
+                .map_err(|e| io(s, e))?;
+            s.ws.write(path, text.clone().into_bytes())
+                .map_err(|e| io(s, e))?;
+            s.record_write(path);
+        }
+    }
+    let mut removed = 0;
+    for owned in manifests::owned_paths(&s.ws, &s.tools_dir, tool, &dests.manifests) {
+        if s.dry_run {
+            removed += file_ops::recorded_under(s, &owned)
+                .iter()
+                .filter(|file| !rendered.iter().any(|(path, _)| path == *file))
+                .count();
+            continue;
+        }
+        let went = file_ops::remove_recorded(s, &owned).map_err(|e| io(s, e))?;
+        if went > 0 {
+            file_ops::remove_empty_parents(s, &owned, &dests.manifests).map_err(|e| io(s, e))?;
+        }
+        removed += went;
+    }
+    let suffix = if s.dry_run { " (dry-run)" } else { "" };
+    s.log.step(&format!(
+        "{}/ → {}/ {}{suffix}",
+        s.display(&dir),
+        s.display(&dests.manifests),
+        file_ops::counts(rendered.len(), removed)
+    ));
+    Ok(())
 }
 
 /// The settings and MCP sources a tool's payload pass reads, whether each

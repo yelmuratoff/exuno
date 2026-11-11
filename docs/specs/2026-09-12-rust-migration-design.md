@@ -841,6 +841,36 @@ Appended one line at a time as they are found, with the phase:
   TOML commands directory too, as `_TEMPLATE.yaml` documents. Bash passed
   empty filters there and applied them only to generated command skills and
   the inlined command index.
+- After Phase 7: sync refuses to write, copy, or remove an output through a
+  symlink that resolves outside the project, into `.ai/` or `.git/`, or into a
+  source directory (a `source.*` directory other than `agents`, the tools
+  directory, a profile overlay, or an enabled or profile tool's
+  `targets.<key>.source` other than `agents`, inside or outside the
+  project), and a `.gitignore` link that leaves the project. Bash
+  followed every link. A link that stays among the outputs is still followed,
+  removing a link removes only the link, and a copy onto its own source
+  file is refused.
+- After Phase 7: with a manifest present, sync renders in memory first and
+  stops before writing anything when it would change an existing file the
+  manifest does not record; `--force` replaces such files, and `check` and
+  `sync --dry-run` report it. Bash overwrote them.
+- After Phase 7: cleaning up a disabled tool removes only the files earlier
+  syncs recorded under its dests, never one below another enabled tool's
+  dest. Bash removed each dest whole.
+- After Phase 7: a directory prune with no manifest removes nothing, and an
+  unrecorded `command-*` skill folder is kept with the usual `Kept` warning.
+  Bash pruned every extraneous entry when no manifest existed and removed
+  obsolete command skills unconditionally.
+- After Phase 7: a synced skill folder that holds recorded files is updated in
+  place: recorded files its source dropped go, files sync never wrote stay.
+  Bash replaced the folder whole.
+- After Phase 7: `.ai/.sync-manifest` starts with a `# exuno <version>` line,
+  and `sync --if-stale` syncs when it names another version or is missing.
+  Bash wrote no header and judged staleness by file times alone.
+- After Phase 7: a `base:` variant inherits the project's override of its base
+  tool, except `name`, `base`, `profile_home`, `enabled`, `post_sync`, and each
+  target's `dest`, `legacy_dest`, `source`, `user_dirs`, and `ownership`. Bash
+  read only the shipped base.
 
 ## Risks
 

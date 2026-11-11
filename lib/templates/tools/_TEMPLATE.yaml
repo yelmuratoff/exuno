@@ -13,7 +13,10 @@ enabled: false
 
 # Optional: profile variant. A thin variant tool (e.g. claude-hub.yaml) declares
 # `base:` to inherit every field it does not set from the base tool, so it only
-# needs to override the config-home dests below. `profile_home` records the
+# needs to override the config-home dests below. It inherits the project's
+# .ai/src/tools/<base>.yaml as well, except name, base, profile_home, enabled,
+# post_sync, and each target's dest, legacy_dest, source, user_dirs, and
+# ownership. `profile_home` records the
 # config-home directory the variant writes into. Both are managed by
 # `exuno profile add` — you rarely write them by hand.
 # base: claude
@@ -105,6 +108,13 @@ targets:
     # from. `exuno doctor` advises when a project skill shares a name with one.
     # user_dirs: ".tool/skills"
 
+    # Optional, skills and commands: keep only these top-level frontmatter keys
+    # in each synced SKILL.md (or command file). A dropped key goes with its
+    # whole value, continuation lines included; sync prints one warning per
+    # target listing the keys it dropped. A file whose frontmatter it can't
+    # read is copied unfiltered, with a warning naming the file.
+    # frontmatter_keys: [name, description]
+
   # Custom slash commands (optional)
   # commands:
   #   dest: ".tool/commands"
@@ -171,9 +181,32 @@ targets:
   #   dest: ".tool/hooks/agentsync-guard.sh"
   #   profile_scoped: false   # config-home profiles share one copy at this path
 
+  # Manifest files rendered from templates (optional). Each file below
+  # .ai/src/tools/<tool>/manifests/ (or the tool's shipped set when that
+  # directory is missing) is written to the same relative path below `dest`,
+  # with every ${key} filled from vars.<key>. In a .json template each value
+  # is JSON-escaped and the result must parse. A missing value stops the sync.
+  # The target owns only the paths the templates of the set in use map to, so
+  # `dest: "."` or a directory another tool writes to is safe. An output whose
+  # template leaves that set (deleted from the override directory, or missing
+  # from an override that replaces the shipped set) stays; neither sync nor
+  # check notices it, so remove that file by hand.
+  # manifests:
+  #   dest: "."
+  #   vars:
+  #     name: "my-skills"
+  #   # exclude: ".agents/*"     # Optional: filter template paths
+
   # `profile_scoped: false` works on any target: `exuno profile add` keeps
   # the base dest instead of rewriting it into the profile's config home, for
   # project-level content every home shares.
+
+  # `gitignore: false` works on any target: the dest stays out of the managed
+  # .gitignore block, for output a host reads from the repository.
+
+  # Once a tool is disabled, sync removes only the files its earlier syncs
+  # recorded under each dest (never a hand-written file, never another tool's
+  # output), then the folders that leaves empty.
 
 # Optional: Command to run after sync (e.g. linter or formatter)
 # post_sync: "npx prettier --write .tool/rules/*.mdc"

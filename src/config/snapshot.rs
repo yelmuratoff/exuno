@@ -9,7 +9,7 @@ use crate::config::yaml_subset;
 const PENDING: &str = ".ai/.pending-resolutions.yaml";
 
 /// `_snapshot_keys`, in order.
-pub const KEYS: [&str; 26] = [
+pub const KEYS: [&str; 27] = [
     "name",
     "enabled",
     "targets.agents.dest",
@@ -35,6 +35,7 @@ pub const KEYS: [&str; 26] = [
     "targets.mcp.dest",
     "targets.hooks.source",
     "targets.hooks.dest",
+    "targets.manifests.dest",
     "post_sync",
 ];
 

@@ -1,13 +1,16 @@
 //! The per-tool passes: the personal and profile loops, `sync_tool`, its post-sync hook, and `cleanup_tool`.
 
 use super::steps::{
-    sync_commands_step, sync_payloads_step, sync_rules_step, sync_skills_step, sync_subagents_step,
+    sync_commands_step, sync_manifests_step, sync_payloads_step, sync_rules_step, sync_skills_step,
+    sync_subagents_step,
 };
 use super::tools::{self, load_tool};
 use super::{Run, Step, Stop, TARGET_KEYS, checkpoint, io};
 use crate::config::tool::Tool;
 use crate::engine::session::Session;
-use crate::{config::payload, config::profiles, engine::file_ops, engine::overlay};
+use crate::{
+    config::payload, config::profiles, engine::file_ops, engine::manifests, engine::overlay,
+};
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -21,6 +24,7 @@ pub(super) struct Dests {
     pub(super) mcp: String,
     pub(super) hooks: String,
     pub(super) guard: String,
+    pub(super) manifests: String,
 }
 
 /// `_run_personal_pass` and `_run_profile_passes`.
@@ -49,7 +53,7 @@ pub fn run_passes(s: &mut Session, run: &mut Run) -> Step {
         if run.enabled.contains(slug) {
             sync_tool(s, run, slug)?;
         } else {
-            cleanup_tool(s, run, slug);
+            cleanup_tool(s, run, slug)?;
         }
         if run.printed {
             s.log.blank();
@@ -210,6 +214,7 @@ fn resolve_dests(s: &mut Session, tool: &Tool, display: &str) -> Dests {
         mcp: resolve_one_dest(s, tool, "mcp", display),
         hooks: resolve_one_dest(s, tool, "hooks", display),
         guard: resolve_one_dest(s, tool, "guard", display),
+        manifests: resolve_one_dest(s, tool, "manifests", display),
     }
 }
 
@@ -264,6 +269,8 @@ fn sync_tool(s: &mut Session, run: &mut Run, slug: &str) -> Step {
     sync_commands_step(s, run, &tool, &dests, &display)?;
     checkpoint(s)?;
     sync_subagents_step(s, run, &tool, &dests, &display)?;
+    checkpoint(s)?;
+    sync_manifests_step(s, &tool, &dests)?;
     checkpoint(s)?;
     sync_payloads_step(s, run, &tool, &dests)?;
     checkpoint(s)?;
@@ -336,17 +343,18 @@ fn remove_legacy_outputs(s: &mut Session, tool: &Tool) -> Step {
     Ok(())
 }
 
-/// `cleanup_tool`: remove a disabled tool's unprotected outputs.
-fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
+/// `cleanup_tool`: remove the outputs a disabled tool's earlier syncs recorded,
+/// never a file nothing recorded or one below another tool's dest.
+fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) -> Step {
     let tool = load_tool(s, slug);
     let display = tool.display_name();
     run.skipped_names.push(display.clone());
     run.skipped += 1;
     run.printed = false;
     if run.cleanup != "true" {
-        return;
+        return Ok(());
     }
-    let mut cleaned = false;
+    let mut owned_paths: Vec<String> = Vec::new();
     for key in TARGET_KEYS {
         let raw = tool.value(&format!("targets.{key}.dest"));
         if raw.is_empty() {
@@ -368,14 +376,62 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
             }
             continue;
         }
-        if !run.protected.contains(&abs) && file_ops::cleanup_path(s, &abs) {
+        if key == "manifests" {
+            owned_paths.extend(manifests::owned_paths(&s.ws, &s.tools_dir, &tool, &abs));
+        } else {
+            owned_paths.push(abs);
+        }
+    }
+    owned_paths.retain(|path| !run.protected.contains(path));
+    let has_history = owned_paths
+        .iter()
+        .any(|path| !file_ops::recorded_under(s, path).is_empty());
+    if !has_history {
+        return Ok(());
+    }
+    let mut cleaned = false;
+    for path in owned_paths {
+        if remove_recorded_outputs(s, &path, &run.protected).map_err(|e| io(s, e))? {
             cleaned = true;
+        }
+        if !s.dry_run && s.ws.exists(&path) && s.ws.is_dir(&path) {
+            s.log.info(&format!(
+                "Left {} in place: it holds files sync did not write",
+                s.display(&path)
+            ));
+            run.printed = true;
         }
     }
     if cleaned {
         s.log.info(&format!("Cleaned up {display} (disabled)"));
         run.printed = true;
     }
+    Ok(())
+}
+
+/// Removes the files at or below `path` the previous manifest records, except
+/// those at or below a dest another tool claims, then the directories that
+/// leaves empty; true when something went. A removal that fails, a refused
+/// one through a link included, stops the sync as it does for an enabled tool.
+fn remove_recorded_outputs(
+    s: &mut Session,
+    path: &str,
+    protected: &[String],
+) -> Result<bool, crate::Error> {
+    let removed = file_ops::remove_recorded_outside(s, path, protected)?;
+    if removed == 0 {
+        return Ok(false);
+    }
+    let verb = if s.dry_run { "Would remove" } else { "Removed" };
+    s.log.step(&format!(
+        "{verb} {removed} recorded output(s) at {}",
+        s.display(path)
+    ));
+    if !s.dry_run {
+        let root = s.paths.root.clone();
+        file_ops::remove_empty_parents(s, path, &root)?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -413,8 +469,11 @@ mod tests {
             "tools:\n  enabled: [cursor]\n",
         );
         file(&mut s, "/proj/.codex/agents/x.toml", "x");
+        file(&mut s, "/proj/.codex/agents/mine.toml", "mine");
+        s.activate_manifest([".codex/agents/x.toml".to_string()].into());
         render(&mut s, &Env::default()).unwrap();
-        assert!(!s.ws.exists("/proj/.codex/agents"));
+        assert!(!s.ws.exists("/proj/.codex/agents/x.toml"));
+        assert_eq!(text_of(&s, "/proj/.codex/agents/mine.toml"), "mine");
         assert!(s.ws.is_file("/proj/AGENTS.md"));
         assert!(
             s.log

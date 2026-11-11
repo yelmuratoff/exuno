@@ -5,12 +5,12 @@
 ## One run, step by step
 
 1. **Read the project.** Exuno reads `.ai/exuno.yaml` for the enabled tools, the source paths, and the outputs mode. It accepts two source layouts: the structured one `init` creates (`.ai/src/AGENTS.md`, `.ai/src/rules/`, ...) and an older flat one (`.ai/AGENTS.md`, `.ai/rules/`, ...), which it detects on its own.
-2. **Skip if nothing changed.** With `--if-stale`, Exuno compares the source files with the time of the last sync and exits at once when nothing is newer. The shell and git hooks use this.
+2. **Skip if nothing changed.** With `--if-stale`, Exuno compares the source files with the time of the last sync and exits at once when nothing is newer. It syncs anyway when the manifest was written by a different Exuno version (or by one older than the version header), so an upgrade reaches your files. The shell and git hooks use this.
 3. **Refuse unsafe input.** A source symlink pointing outside the project, or a version pin that doesn't match the running binary, stops the run before anything is written. See [sources outside the project](configuration.md#sources-outside-the-project) and [version pinning](team-and-automation.md#pin-the-exuno-version).
 4. **Add inherited content.** If the project inherits from a parent (`shared:`, see [Workspaces](workspaces-and-profiles.md)), Exuno fills the gaps in your source with the parent's files. It also adds the built-in `exuno` skill (see [Skills](skills.md#the-built-in-exuno-skill)). Both happen in memory; nothing is written into `.ai/src/`.
 5. **Load every tool's config.** Each enabled tool's YAML is the shipped base with your override from `.ai/src/tools/` on top. See [where each setting comes from](#where-each-setting-comes-from) below.
-6. **Check for hand edits.** Exuno compares every generated file with the hash it recorded last time. If one was edited, the run stops. See [catching hand edits](#catching-hand-edits).
-7. **Lock and back up.** Exuno takes a project lock so a second run can't start, then copies everything it may change into `.ai/backups/`. See [Backups and rollback](backups-and-rollback.md).
+6. **Lock and check for hand edits.** Exuno takes a project lock so a second run can't start. If an earlier run was killed partway through, Exuno restores its backup and stops; run sync again. Otherwise it compares every generated file with the hash it recorded last time. If one was edited, the run stops. See [catching hand edits](#catching-hand-edits).
+7. **Back up.** Exuno copies everything it may change into `.ai/backups/`, including the file a `.gitignore` link points to. See [Backups and rollback](backups-and-rollback.md).
 8. **Write each tool's files.** For every tool, in this order:
    - `AGENTS.md` is copied under the tool's name (`CLAUDE.md`, `GEMINI.md`, or `00-context.md` inside the rules folder for Amazon Q).
    - Rules are copied with the tool's extension and header, merged into one file, or listed as short references in the agents file.
@@ -19,7 +19,8 @@
    - Subagents are copied, renamed, or converted to the tool's format.
    - Settings, MCP, and hooks are resolved from your overrides and the shipped base.
    - A `post_sync` command runs only when `EXUNO_ALLOW_POST_SYNC=true` is set in the environment. The repository can't turn it on by itself.
-9. **Finish.** Exuno updates its block in `.gitignore` and writes `.ai/.sync-manifest`. Files of tools you turned off are removed. Old backups are pruned.
+   - Exuno never writes, copies, or removes an output through a symlink that leads outside the project, into `.ai/` or `.git/`, or into a source directory, and the same goes for a symlinked `.gitignore`. Such a write stops the run before anything is written and names the link and where it leads; `sync --dry-run` and `check` report it. Symlinks that stay among the outputs are followed as usual, and removing a link removes only the link.
+9. **Finish.** Exuno updates its block in `.gitignore` and writes `.ai/.sync-manifest`. Files that earlier syncs recorded for tools you turned off are removed; files nothing recorded stay. Old backups are pruned.
 
 Running `exuno sync` twice in a row gives the same files. `exuno check` relies on that: it renders everything in memory and compares the result with what's on disk.
 
@@ -60,11 +61,12 @@ What this means in practice:
 
 ## Catching hand edits
 
-After every successful sync Exuno writes `.ai/.sync-manifest`, with one line per generated file and its SHA-256 hash. On the next sync it checks each file:
+After every successful sync Exuno writes `.ai/.sync-manifest`: a `# exuno <version>` header line, then one line per generated file and its SHA-256 hash. The header changes only when you upgrade Exuno. On the next sync it checks each file:
 
 - unchanged since the last sync: rewritten quietly
 - deleted: rewritten quietly
 - edited: the sync stops, lists the edited files, and leaves them alone
+- not in the manifest at all, at a path sync is about to write (a file someone put there by hand, or that another program created): if sync would change it, the run stops before writing anything with `Sync would overwrite N file(s) it did not write` and lists them; `sync --dry-run` and `check` report the same. `--force` replaces them from source, and `sync --dry-run --force` lists them as files it would overwrite. The very first sync, before any manifest exists, writes over such files; `exuno init` offers to adopt them first. A file standing where sync needs a folder, or a folder where it needs a file, stops the run the same way, first sync included, unless sync wrote everything in it.
 
 ```text
 [ERROR] Manual edits detected in 1 destination file(s) since last sync:
@@ -82,14 +84,14 @@ The manifest is tracked by git exactly like the files it describes: committed wi
 
 ## What a sync replaces
 
-Generated folders belong to Exuno. Anything there that isn't in `.ai/src/` gets replaced or removed:
+Exuno manages the files it wrote, which `.ai/.sync-manifest` records. A file in a generated folder that it never wrote stays: sync warns `Kept <path> (not from .ai/src/ …)` and leaves it, and `--force` is the only way to have sync remove it. Before the first sync there is no manifest, so nothing extra is removed.
 
 | Target | What happens |
 | --- | --- |
-| Rules folders (`.claude/rules/`, `.cursor/rules/`, ...) | Files with the synced extension are managed. Ones without a source are removed. |
+| Rules folders (`.claude/rules/`, `.cursor/rules/`, ...) | Files with the synced extension are managed. A recorded file whose source is gone is removed. |
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, ... | Replaced from `.ai/src/AGENTS.md` on every sync. |
 | `settings.json`, `.mcp.json`, `hooks.json` | Replaced from their source, except the shared settings files described above. |
-| Skills, commands, and agents folders | Replaced from the source. Extra files are removed. |
+| Skills, commands, and agents folders | Updated from the source. A recorded file or folder whose source is gone is removed; a file sync never wrote, such as a cache or `.DS_Store` inside a skill folder, stays. |
 | `.gitignore` | Only the block between `AI SYNC GENERATED START` and `END` is managed. |
 
 If you already have tool config, `exuno init` adopts it into `.ai/src/` first. To move files by hand, see [Migrating existing tool configs](migrating.md#existing-tool-configs).

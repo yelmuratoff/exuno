@@ -131,9 +131,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_catalog_lists_the_fifteen_shipped_tools_without_the_template() {
+    fn the_catalog_lists_the_sixteen_shipped_tools_without_the_template() {
         let slugs = base_tools();
-        assert_eq!(slugs.len(), 15);
+        assert_eq!(slugs.len(), 16);
         assert_eq!(slugs.first().map(String::as_str), Some("amazonq"));
         assert_eq!(slugs.last().map(String::as_str), Some("zed"));
         assert!(!slugs.iter().any(|s| s.starts_with('_')));

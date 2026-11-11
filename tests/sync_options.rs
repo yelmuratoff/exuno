@@ -103,6 +103,45 @@ fn sync_only_and_skip_filter_kiro() {
 }
 
 #[test]
+fn sync_only_and_skip_filter_plugin() {
+    let project = seeded();
+    project.enable_tools(&["claude", "plugin"]);
+    project
+        .exuno()
+        .args(["sync", "--only", "plugin"])
+        .assert()
+        .success();
+    assert!(project.exists("plugin/skills/exuno/SKILL.md"));
+    assert!(project.exists(".claude-plugin/marketplace.json"));
+    assert!(!project.exists("CLAUDE.md"));
+
+    let skipped = seeded();
+    skipped.enable_tools(&["claude", "plugin"]);
+    skipped
+        .exuno()
+        .args(["sync", "--skip", "plugin"])
+        .assert()
+        .success();
+    assert!(skipped.exists("CLAUDE.md"));
+    assert!(!skipped.exists("plugin"));
+    assert!(!skipped.exists(".claude-plugin"));
+
+    skipped
+        .exuno()
+        .args(["sync", "--only", "plugin"])
+        .assert()
+        .success();
+    skipped
+        .exuno()
+        .args(["sync", "--skip", "plugin"])
+        .assert()
+        .success();
+    assert!(skipped.exists("CLAUDE.md"));
+    assert!(skipped.exists("plugin/plugin.json"));
+    assert!(skipped.exists(".agents/plugins/marketplace.json"));
+}
+
+#[test]
 fn sync_only_and_skip_filter_minimax() {
     let project = seeded();
     project.enable_tools(&["claude", "minimax"]);
@@ -338,10 +377,13 @@ fn sync_restores_a_run_killed_mid_write_before_it_starts() {
         .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains(format!(
             "Restored the state from before an interrupted exuno sync (backup {killed}); undo with exuno rollback "
-        )));
+        )))
+        .stderr(predicate::str::contains(
+            "exuno sync changed nothing; run it again.",
+        ));
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
     let undo = stderr
         .split("undo with exuno rollback ")
@@ -354,6 +396,12 @@ fn sync_restores_a_run_killed_mid_write_before_it_starts() {
     );
     assert!(project.exists(&format!(".ai/backups/{killed}/after.tsv")));
     assert!(!project.exists(".ai/backups/.pending"));
+    assert_eq!(project.read("CLAUDE.md"), "before-sync\n");
+    project
+        .exuno()
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .success();
 }
 
 #[test]
@@ -545,4 +593,117 @@ fn sync_json_on_a_dry_run_reports_no_writes_and_no_backup() {
             "\"written\":[],\"preserved\":0,\"backup\":null}\n",
         ))
         .stdout(predicate::str::starts_with("{\"dry_run\":true,"));
+}
+
+// ── frontmatter_keys keeps only the listed frontmatter keys ─────────────
+
+#[test]
+fn skills_frontmatter_keys_strips_unlisted_keys_and_warns() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    frontmatter_keys: [name, description]\n",
+    );
+    project.write(
+        ".ai/src/skills/demo/SKILL.md",
+        "---\nname: demo\nargument-hint: <file>\ndescription: >-\n  Does the demo\n  in two lines\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody: kept.\n",
+    );
+    project.write(
+        ".ai/src/skills/other/SKILL.md",
+        "---\nname: other\nmodel: haiku\nargument-hint: <x>\ndescription: Other\n---\n",
+    );
+    project.write(
+        ".ai/src/skills/clean/SKILL.md",
+        "---\nname: clean\ndescription: Clean\n---\n",
+    );
+    let output = project.exuno().arg("sync").assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\ndescription: >-\n  Does the demo\n  in two lines\n---\n\n# Demo\n\nBody: kept.\n"
+    );
+    assert!(
+        stderr.contains(
+            "[WARNING] Claude Code: dropped frontmatter keys argument-hint, disable-model-invocation, model (allowlist targets.skills.frontmatter_keys) from 2 skills\n"
+        ),
+        "{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("dropped frontmatter key").count(),
+        1,
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Dropped frontmatter key"), "{stderr}");
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn commands_frontmatter_keys_strips_unlisted_keys() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  commands:\n    frontmatter_keys: [description]\n",
+    );
+    project.write(
+        ".ai/src/commands/review.md",
+        "---\ndescription: Review a file\nargument-hint: <file>\nmodel: haiku\n---\nReview $ARGUMENTS.\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Claude Code: dropped frontmatter keys argument-hint, model (allowlist targets.commands.frontmatter_keys) from 2 commands\n",
+        ));
+    assert_eq!(
+        project.read(".claude/commands/review.md"),
+        "---\ndescription: Review a file\n---\nReview $ARGUMENTS.\n"
+    );
+    project.exuno().arg("check").assert().success();
+
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  commands:\n    frontmatter_keys: [description, argument-hint, model]\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("dropped frontmatter key").not());
+}
+
+#[test]
+fn frontmatter_keys_warns_and_copies_frontmatter_it_cannot_parse() {
+    let project = seeded();
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    frontmatter_keys: [name, description]\n",
+    );
+    let quoted = "---\nname: quoted\n\"model\": x\n---\nBody\n";
+    project.write(".ai/src/skills/quoted/SKILL.md", quoted);
+    let latin1: &[u8] = b"---\nname: latin1\nmodel: caf\xe9\n---\nBody\n";
+    std::fs::create_dir_all(project.join(".ai/src/skills/latin1")).unwrap();
+    std::fs::write(project.join(".ai/src/skills/latin1/SKILL.md"), latin1).unwrap();
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Could not filter frontmatter in .claude/skills/quoted/SKILL.md (line 3 is not a `key:` line); copied it unfiltered",
+        ))
+        .stderr(predicate::str::contains(
+            "[WARNING] Could not filter frontmatter in .claude/skills/latin1/SKILL.md (not UTF-8); copied it unfiltered",
+        ));
+    assert_eq!(project.read(".claude/skills/quoted/SKILL.md"), quoted);
+    assert_eq!(
+        std::fs::read(project.join(".claude/skills/latin1/SKILL.md")).unwrap(),
+        latin1
+    );
 }

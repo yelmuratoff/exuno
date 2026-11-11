@@ -2,22 +2,22 @@
 //! managed output with the project, with the messages and exit codes of
 //! `lib/check.sh`. Nothing is copied and nothing is written.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::Path;
 
 use super::stale_targets;
-use crate::engine::render::{self, Env};
+use crate::engine::render::{self, Env, Run, Selection};
 use crate::engine::session::Session;
 use crate::engine::workspace::Workspace;
 use crate::output::help::{Help, Section};
 use crate::output::style::Style;
-use crate::paths::Paths;
+use crate::paths::{DiskText, Paths};
 use crate::project::Project;
 use crate::transaction::manifest::Manifest;
 use crate::{
-    Error, config::project_config, config::version, config::yaml_subset, engine::overlay,
-    engine_version, paths,
+    Error, config::profiles, config::project_config, config::tool::Tool, config::version,
+    config::yaml_subset, engine::overlay, engine_version, paths,
 };
 
 const MANIFEST_REL: &str = ".ai/.sync-manifest";
@@ -114,35 +114,37 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     report.out("Checking Exuno configuration synchronization...");
 
     let manifest = manifest_paths(root)?;
-    let ws = match seed_workspace(root, &manifest, config_path.as_deref(), config.as_deref()) {
-        Ok(ws) => ws,
-        Err(detail) => {
+    let previous = Manifest::load(root)?;
+    let rendered = render_in_memory(
+        root,
+        &manifest,
+        (config_path.as_deref(), config.as_deref()),
+        env,
+        Selection::default(),
+        Purpose::Check,
+    )?;
+    let (session, run) = match rendered {
+        InMemory::Rendered(session, run) => (session, run),
+        InMemory::SeedFailed(detail) => {
             report.out("✗ Failed to prepare temporary workspace for check");
             report.err(&detail);
             report.status = 1;
             return Ok(report);
         }
-    };
-
-    let previous = Manifest::load(root)?;
-    let mut session = Session::new(ws, Paths::for_disk_root(root));
-    session.force = true;
-    session.set_owned_before(
-        previous
-            .as_ref()
-            .map(Manifest::owned_records)
-            .unwrap_or_default(),
-    );
-    merge_shared_parent(&mut session.ws, root, config.as_deref())?;
-    let Ok(run) = render::render(&mut session, env) else {
-        report.out("✗ Sync script failed during check");
-        report.out("Sync output (last 40 lines):");
-        for line in session.log.tail(40) {
-            report.out(line);
+        InMemory::RenderFailed(session, _) => {
+            report.out("✗ Sync script failed during check");
+            report.out("Sync output (last 40 lines):");
+            for line in session.log.tail(40) {
+                report.out(line);
+            }
+            report.status = 1;
+            return Ok(report);
         }
-        report.status = 1;
-        return Ok(report);
     };
+    let stops = hazards(&session, &run, root, previous.as_ref()).lines("A real sync would stop: ");
+    for line in &stops {
+        report.out(line);
+    }
     let manual_edits: BTreeSet<String> = previous
         .map(|m| m.manual_edits(root, &run.keyed_dests))
         .unwrap_or_default()
@@ -188,8 +190,12 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
         }
     }
 
-    if differences.is_empty() {
+    if differences.is_empty() && stops.is_empty() {
         report.out("✓ Exuno configurations are safe and synced.");
+        return Ok(report);
+    }
+    if differences.is_empty() {
+        report.status = 1;
         return Ok(report);
     }
     report.out("");
@@ -207,6 +213,241 @@ pub fn check(root: &str, env: &Env) -> Result<Report, Error> {
     }
     report.status = 1;
     Ok(report)
+}
+
+/// What a sync would write, rendered in memory the way `check` sees it.
+pub(crate) enum InMemory {
+    Rendered(Box<Session>, Box<Run>),
+    SeedFailed(String),
+    RenderFailed(Box<Session>, u8),
+}
+
+/// Who renders in memory: `check` runs every refusal itself; a sync's
+/// preflight has already passed them on the disk.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Purpose {
+    Check,
+    Preflight,
+}
+
+/// Renders the sync of `root` for `selection` into a workspace seeded from
+/// `.ai/`, the recorded outputs, and the other in-project inputs, as
+/// `sync --force` would write it, with no post-sync hook and no disk write.
+pub(crate) fn render_in_memory(
+    root: &str,
+    manifest: &[String],
+    config: (Option<&str>, Option<&str>),
+    env: &Env,
+    selection: Selection,
+    purpose: Purpose,
+) -> Result<InMemory, Error> {
+    let (config_path, config) = config;
+    let ws = match seed_workspace(
+        root,
+        manifest,
+        config_path,
+        config,
+        selection.profile.as_deref(),
+    ) {
+        Ok(ws) => ws,
+        Err(detail) => return Ok(InMemory::SeedFailed(detail)),
+    };
+    let previous = Manifest::load(root)?;
+    let mut session = Session::new(ws, Paths::for_disk_root(root));
+    session.force = true;
+    session.activate_manifest(previous.as_ref().map(Manifest::paths).unwrap_or_default());
+    session.set_owned_before(
+        previous
+            .as_ref()
+            .map(Manifest::owned_records)
+            .unwrap_or_default(),
+    );
+    merge_shared_parent(&mut session.ws, root, config)?;
+    let rendered = match purpose {
+        Purpose::Check => render::render_selected(&mut session, env, selection),
+        Purpose::Preflight => render::render_for_preflight(&mut session, env, selection),
+    };
+    Ok(match rendered {
+        Ok(run) => InMemory::Rendered(Box::new(session), Box::new(run)),
+        Err(stop) => InMemory::RenderFailed(Box::new(session), stop.0),
+    })
+}
+
+/// What stops a real sync before it writes anything.
+#[derive(Clone, Default)]
+pub(crate) struct Hazards {
+    /// One refusal per link sync may not write or remove through.
+    pub refusals: Vec<String>,
+    /// Existing files the previous manifest does not record that the render changes.
+    pub unowned: Vec<String>,
+}
+
+impl Hazards {
+    pub fn is_empty(&self) -> bool {
+        self.refusals.is_empty() && self.unowned.is_empty()
+    }
+
+    /// The report lines, each headline after `lead`.
+    pub fn lines(&self, lead: &str) -> Vec<String> {
+        let mut lines: Vec<String> = self
+            .refusals
+            .iter()
+            .map(|refusal| format!("{lead}{refusal}"))
+            .collect();
+        if !self.unowned.is_empty() {
+            lines.push(format!("{lead}{}", unowned_headline(self.unowned.len())));
+            lines.extend(self.unowned.iter().map(|rel| format!("      {rel}")));
+        }
+        lines
+    }
+}
+
+pub(crate) fn unowned_headline(count: usize) -> String {
+    format!("Sync would overwrite {count} file(s) it did not write:")
+}
+
+/// Compares the in-memory render of `root` with the disk before anything is
+/// written. Settings and MCP files owned by key merge by design, a first sync
+/// (no previous manifest) owns whatever it writes, and a path under a dest the
+/// disk resolves outside the project is one a real sync skips, not writes.
+pub(crate) fn hazards(
+    rendered: &Session,
+    run: &Run,
+    root: &str,
+    previous: Option<&Manifest>,
+) -> Hazards {
+    let recorded = previous.map(Manifest::paths);
+    let disk = Paths::on_disk(root);
+    let skipped_by_sync = |abs: &str| {
+        run.backup_targets
+            .iter()
+            .filter(|dest| paths::is_within(abs, dest))
+            .max_by_key(|dest| dest.len())
+            .is_some_and(|dest| {
+                disk.resolve_dest(dest, "", &mut crate::output::log::Log::default())
+                    .is_none()
+            })
+    };
+    let mut refused: BTreeMap<(&'static str, String), Vec<String>> = BTreeMap::new();
+    let mut found = Hazards::default();
+    if run.update_gitignore
+        && let Some(reason) = rendered
+            .paths
+            .unsafe_output(&format!("{root}/.gitignore"), true)
+    {
+        refused
+            .entry(("write", reason))
+            .or_default()
+            .push(".gitignore".to_string());
+    }
+    for rel in recorded.iter().flatten() {
+        let abs = format!("{root}/{rel}");
+        if rendered.ws.is_file(&abs) || !Path::new(&abs).is_file() || skipped_by_sync(&abs) {
+            continue;
+        }
+        if let Some(reason) = rendered.paths.unsafe_output(&abs, false) {
+            refused
+                .entry(("remove", reason))
+                .or_default()
+                .push(rel.clone());
+        }
+    }
+    for rel in rendered.touched() {
+        let abs = format!("{root}/{rel}");
+        if skipped_by_sync(&abs) {
+            continue;
+        }
+        if let Some(reason) = rendered.paths.unsafe_output(&abs, true) {
+            refused
+                .entry(("write", reason))
+                .or_default()
+                .push(rel.clone());
+            continue;
+        }
+        if let Some(blocker) = blocker(root, &abs) {
+            let blocker_rel = blocker[root.len() + 1..].to_string();
+            if !written_by_sync(&blocker, root, recorded.as_ref())
+                && !found.unowned.contains(&blocker_rel)
+            {
+                found.unowned.push(blocker_rel);
+            }
+            continue;
+        }
+        let Some(recorded) = &recorded else {
+            continue;
+        };
+        if recorded.contains(rel) || run.keyed_dests.contains(rel) {
+            continue;
+        }
+        let on_disk = match std::fs::read(&abs) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                found
+                    .refusals
+                    .push(format!("Could not read {rel} to compare it: {e}"));
+                continue;
+            }
+        };
+        if rendered.ws.read(&abs).ok() != Some(on_disk) {
+            found.unowned.push(rel.clone());
+        }
+    }
+    for ((action, reason), rels) in refused {
+        let path = match rels.len() {
+            1 => rels[0].clone(),
+            count => format!("{} and {} more file(s)", rels[0], count - 1),
+        };
+        let refusal = Error::UnsafeOutput {
+            action,
+            path,
+            reason,
+        };
+        found.refusals.push(refusal.to_string());
+    }
+    found
+}
+
+/// The entry on disk that stands where the render puts the file `abs`: a
+/// folder at `abs`, or a file where the render needs one of its folders.
+fn blocker(root: &str, abs: &str) -> Option<String> {
+    if std::fs::symlink_metadata(abs).is_ok_and(|meta| meta.is_dir()) {
+        return Some(abs.to_string());
+    }
+    let mut dir = paths::parent(abs);
+    while dir != root && paths::is_within(&dir, root) {
+        match std::fs::symlink_metadata(&dir) {
+            Ok(meta) if meta.is_file() => return Some(dir),
+            Ok(_) => return None,
+            Err(_) => dir = paths::parent(&dir),
+        }
+    }
+    None
+}
+
+/// Whether the previous manifest records `path`, or every file below it.
+fn written_by_sync(path: &str, root: &str, recorded: Option<&BTreeSet<String>>) -> bool {
+    let Some(recorded) = recorded else {
+        return false;
+    };
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return true;
+    };
+    if !meta.is_dir() {
+        return recorded.contains(&path[root.len() + 1..]);
+    }
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+    entries.into_iter().all(|entry| {
+        entry.is_ok_and(|entry| {
+            written_by_sync(
+                &format!("{path}/{}", entry.file_name().to_string_lossy()),
+                root,
+                Some(recorded),
+            )
+        })
+    })
 }
 
 fn read_config(path: &str) -> Result<String, Error> {
@@ -251,7 +492,7 @@ fn version_pin_mismatch(
 }
 
 /// `manifest_paths`: the text before the first tab of every complete line.
-fn manifest_paths(root: &str) -> Result<Vec<String>, Error> {
+pub(crate) fn manifest_paths(root: &str) -> Result<Vec<String>, Error> {
     let path = Path::new(root).join(MANIFEST_REL);
     if !path.is_file() {
         return Ok(Vec::new());
@@ -264,7 +505,7 @@ fn manifest_paths(root: &str) -> Result<Vec<String>, Error> {
         .into_iter()
         .map(|line| line.trim_start_matches('\t'))
         .map(|line| line.split('\t').next().unwrap_or(""))
-        .filter(|rel| !rel.is_empty())
+        .filter(|rel| !rel.is_empty() && !rel.starts_with('#'))
         .map(str::to_string)
         .collect())
 }
@@ -278,6 +519,7 @@ fn seed_workspace(
     manifest: &[String],
     selected: Option<&str>,
     config_text: Option<&str>,
+    profile: Option<&str>,
 ) -> Result<Workspace, String> {
     let mut ws = Workspace::new(root);
     let ai = Path::new(root).join(".ai");
@@ -343,7 +585,78 @@ fn seed_workspace(
                 .map_err(|e| e.to_string())?;
         }
     }
+    for abs in inputs_outside_ai(root, config_text, profile) {
+        if Path::new(&abs).exists() {
+            ws.seed_from_disk(&abs, Path::new(&abs), &is_git)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     Ok(ws)
+}
+
+/// The other inputs the sync reads from the project outside `.ai/`: the
+/// overlays of the profiles it syncs (`profile`, or every active one) and
+/// the `targets.<key>.source` of the tools it syncs.
+fn inputs_outside_ai(root: &str, config_text: Option<&str>, profile: Option<&str>) -> Vec<String> {
+    let absolute = |raw: &str| {
+        if crate::paths::is_absolute(raw) {
+            paths::normalize(raw)
+        } else {
+            paths::normalize(&format!("{root}/{raw}"))
+        }
+    };
+    let text = config_text.unwrap_or_default();
+    let synced_profiles: Vec<String> = match profile {
+        Some(name) => vec![name.to_string()],
+        None => profiles::names(text)
+            .into_iter()
+            .filter(|name| profiles::is_active(text, name))
+            .collect(),
+    };
+    let mut raw_paths: Vec<String> = synced_profiles
+        .iter()
+        .map(|name| profiles::overlay_dir(text, name))
+        .collect();
+    let tools_dir = Some(yaml_subset::value(text, "source.tools"))
+        .filter(|raw| !raw.is_empty())
+        .unwrap_or_else(|| ".ai/src/tools".to_string());
+    let tools_dir = absolute(&tools_dir);
+    let read = |slug: &str| std::fs::read_to_string(format!("{tools_dir}/{slug}.yaml")).ok();
+    let mut slugs: BTreeSet<String> = yaml_subset::list(text, "tools.enabled")
+        .into_iter()
+        .collect();
+    for name in &synced_profiles {
+        slugs.extend(profiles::tools(text, name));
+    }
+    if let Ok(entries) = std::fs::read_dir(&tools_dir) {
+        slugs.extend(entries.filter_map(|entry| {
+            let name = entry.ok()?.file_name().disk_text();
+            let slug = name.strip_suffix(".yaml")?.to_string();
+            let user = read(&slug)?;
+            (yaml_subset::value(&user, "enabled") == "true").then_some(slug)
+        }));
+    }
+    for slug in slugs {
+        let mut tool = Tool::new(&slug, read(&slug));
+        let base = tool.base_name();
+        if !base.is_empty() && base != slug {
+            tool = tool.with_base_override(read(&base));
+        }
+        for key in render::TARGET_KEYS {
+            let raw = tool.value(&format!("targets.{key}.source"));
+            if !raw.is_empty() {
+                raw_paths.push(raw);
+            }
+        }
+    }
+    let ai = format!("{root}/.ai/");
+    raw_paths
+        .iter()
+        .map(|raw| absolute(raw))
+        .filter(|abs| abs.starts_with(&format!("{root}/")) && !abs.starts_with(&ai) && !is_git(abs))
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect()
 }
 
 fn is_git(rel: &str) -> bool {
@@ -447,6 +760,7 @@ mod tests {
                 &root,
                 &[],
                 Some(&format!("{root}/.ai/agent_sync.yaml")),
+                None,
                 None,
             )
             .unwrap(),

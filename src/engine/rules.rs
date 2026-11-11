@@ -4,7 +4,7 @@
 
 use crate::engine::filters::Filter;
 use crate::engine::session::Session;
-use crate::{Error, engine::convert, engine::file_ops, paths, text};
+use crate::{Error, engine::convert, engine::file_ops, engine::frontmatter, paths, text};
 
 /// `add_header`: `printf '%b\n'` of the header, a blank line, the file.
 pub fn add_header(file: &[u8], header: &str) -> Vec<u8> {
@@ -15,17 +15,6 @@ pub fn add_header(file: &[u8], header: &str) -> Vec<u8> {
     out.push(b'\n');
     out.extend_from_slice(file);
     out
-}
-
-fn frontmatter_key(line: &[u8]) -> Option<&[u8]> {
-    let first = *line.first()?;
-    if !(first.is_ascii_alphabetic() || first == b'_') {
-        return None;
-    }
-    let end = line
-        .iter()
-        .position(|b| !(b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-'))?;
-    (line[end] == b':').then_some(&line[..end])
 }
 
 /// `merge_or_prepend_header`: a file without frontmatter gets the header; a
@@ -45,7 +34,7 @@ pub fn merge_or_prepend_header(file: &[u8], header: &str) -> Vec<u8> {
             in_fm = true;
             continue;
         }
-        if in_fm && let Some(key) = frontmatter_key(line) {
+        if in_fm && let Some(key) = frontmatter::key(line) {
             existing.push(key);
         }
     }
@@ -55,7 +44,7 @@ pub fn merge_or_prepend_header(file: &[u8], header: &str) -> Vec<u8> {
         if hline == b"---" || hline.is_empty() {
             continue;
         }
-        if let Some(key) = frontmatter_key(hline)
+        if let Some(key) = frontmatter::key(hline)
             && !existing.contains(&key)
         {
             additions.extend_from_slice(hline);
@@ -259,7 +248,7 @@ pub fn merge_rules_to_file(
         return Ok(());
     }
     s.ws.create_dir_all(&paths::parent(dest_file))?;
-    let _ = s.ws.remove(dest_file);
+    s.ws.remove(dest_file)?;
     if let Some(agents) = agents_file.filter(|a| s.ws.is_file(a)) {
         let mut preamble = read(s, agents)?;
         preamble.extend_from_slice(b"\n---\n\n");
@@ -460,11 +449,11 @@ pub fn sync_commands_as_skills(
                 b"policy:\n  allow_implicit_invocation: false\n".to_vec(),
             )?;
             s.record_write(&policy);
-        } else if s.ws.is_file(&policy) {
+        } else if s.ws.is_file(&policy) && s.may_prune(&policy) {
             s.ws.remove(&policy)?;
             let agents_dir = format!("{skill_dir}/agents");
             if s.ws.list(&agents_dir).is_empty() {
-                let _ = s.ws.remove(&agents_dir);
+                s.ws.remove(&agents_dir)?;
             }
         }
     }
@@ -473,16 +462,24 @@ pub fn sync_commands_as_skills(
         if !name.starts_with("command-") || !s.ws.is_dir(&format!("{dest_dir}/{name}")) {
             continue;
         }
-        if valid.contains(&name) {
+        let path = format!("{dest_dir}/{name}");
+        if valid.contains(&name) || s.was_touched(&path) {
+            continue;
+        }
+        if !s.may_prune(&path) {
+            s.note_preserved(&format!("{dest_disp}/{name}"));
             continue;
         }
         if s.dry_run {
             s.log
                 .step(&format!("Would remove obsolete generated skill: {name}"));
-        } else {
-            s.ws.remove(&format!("{dest_dir}/{name}"))?;
+        } else if file_ops::remove_obsolete(s, &path)? {
             s.log
                 .step(&format!("Removed obsolete generated skill: {name}"));
+        } else {
+            s.log.step(&format!(
+                "Left {dest_disp}/{name} in place: it holds files sync did not write"
+            ));
         }
     }
     let suffix = if s.dry_run { " (dry-run)" } else { "" };
@@ -694,6 +691,7 @@ mod tests {
         file(&mut s, "/proj/.ai/src/rules/core.md", "# Core\n");
         file(&mut s, "/proj/.cursor/rules/old.mdc", "x");
         file(&mut s, "/proj/.cursor/rules/notes.txt", "keep");
+        s.activate_manifest([".cursor/rules/old.mdc"].map(String::from).into());
         let opts = RuleOptions {
             extension: ".mdc",
             header: CURSOR_HEADER,
@@ -775,7 +773,13 @@ mod tests {
             "---\ndescription: D\ndisable-model-invocation: true\n---\nBody\n",
         );
         file(&mut s, "/proj/.agents/skills/command-gone/SKILL.md", "x");
+        file(&mut s, "/proj/.agents/skills/command-kept/SKILL.md", "x");
         file(&mut s, "/proj/.agents/skills/mine/SKILL.md", "x");
+        s.activate_manifest(
+            [".agents/skills/command-gone/SKILL.md"]
+                .map(String::from)
+                .into(),
+        );
         sync_commands_as_skills(
             &mut s,
             "/proj/.ai/src/commands",
@@ -788,6 +792,7 @@ mod tests {
             "policy:\n  allow_implicit_invocation: false\n"
         );
         assert!(!s.ws.exists("/proj/.agents/skills/command-gone"));
+        assert!(s.ws.exists("/proj/.agents/skills/command-kept"));
         assert!(s.ws.exists("/proj/.agents/skills/mine"));
     }
 
@@ -810,9 +815,13 @@ mod tests {
         file(&mut s, "/proj/.codex/agents/mine.toml", "mine");
         file(&mut s, "/proj/.agents/skills/command-gone/SKILL.md", "x");
         s.activate_manifest(
-            [".cursor/rules/old.mdc", ".codex/agents/old.toml"]
-                .map(String::from)
-                .into(),
+            [
+                ".cursor/rules/old.mdc",
+                ".codex/agents/old.toml",
+                ".agents/skills/command-gone/SKILL.md",
+            ]
+            .map(String::from)
+            .into(),
         );
         s
     }
@@ -913,6 +922,7 @@ mod tests {
         );
         file(&mut s, "/proj/.codex/agents/old.toml", "x");
         file(&mut s, "/proj/.codex/agents/keep.json", "x");
+        s.activate_manifest([".codex/agents/old.toml"].map(String::from).into());
         sync_converted(
             &mut s,
             "/proj/.ai/src/agents",

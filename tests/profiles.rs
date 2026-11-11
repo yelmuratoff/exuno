@@ -449,3 +449,64 @@ fn profile_add_scaffolds_a_readme_not_empty_overlay_dirs() {
     assert!(!project.join(".ai/profiles/hub/src/rules").is_dir());
     assert!(!project.join(".ai/profiles/hub/src/skills").is_dir());
 }
+
+#[test]
+fn profile_add_refuses_the_plugin_tool_before_writing() {
+    let project = seeded();
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "plugin"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "does not support config-home profiles",
+        ));
+    assert!(!project.exists(".ai/profiles/hub"));
+    assert!(!project.exists(".ai/src/tools/plugin-hub.yaml"));
+}
+
+#[test]
+fn a_variant_inherits_a_base_project_override() {
+    let project = seeded();
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  rules:\n    extension: \".x.md\"\n",
+    );
+    add_hub(&project);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".claude/rules/core.x.md"));
+    assert!(project.exists(".claude-hub/rules/core.x.md"));
+    assert!(!project.exists(".claude-hub/rules/core.md"));
+}
+
+// The post_sync hook runs through `bash`, which on the Windows runner is the
+// WSL launcher with no distribution installed.
+#[cfg(unix)]
+#[test]
+fn a_variant_never_inherits_dest_source_or_post_sync_from_the_base_override() {
+    let project = seeded();
+    project.write(".ai/src/OTHER.md", "# Other\n");
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "post_sync: \"echo ran >> post-sync.log\"\ntargets:\n  agents:\n    source: \".ai/src/OTHER.md\"\n  rules:\n    dest: \".claude/custom-rules\"\n    extension: \".x.md\"\n",
+    );
+    add_hub(&project);
+    project.write(
+        ".ai/src/tools/claude-hub.yaml",
+        "base: claude\nprofile_home: \".claude-hub\"\ntargets:\n  agents:\n    dest: \".claude-hub/CLAUDE.md\"\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_ALLOW_POST_SYNC", "true")
+        .assert()
+        .success();
+    assert_eq!(project.read("CLAUDE.md"), "# Other\n");
+    assert_eq!(
+        project.read(".claude-hub/CLAUDE.md"),
+        project.read(".ai/src/AGENTS.md")
+    );
+    assert!(project.exists(".claude/custom-rules/core.x.md"));
+    assert!(project.exists(".claude/rules/core.x.md"));
+    assert_eq!(project.read("post-sync.log"), "ran\n");
+}

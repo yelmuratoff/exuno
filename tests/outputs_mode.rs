@@ -4,26 +4,8 @@
 
 mod common;
 
-use std::process::Command as StdCommand;
-
-use common::Project;
+use common::{Project, is_ignored};
 use predicates::prelude::*;
-
-/// `git check-ignore -q <rel>`: whether git ignores the path.
-fn is_ignored(project: &Project, rel: &str) -> bool {
-    StdCommand::new("git")
-        .args(["check-ignore", "-q", rel])
-        .current_dir(project.path())
-        .env("GIT_CONFIG_GLOBAL", absent_git_config())
-        .env("GIT_CONFIG_SYSTEM", absent_git_config())
-        .status()
-        .unwrap()
-        .success()
-}
-
-fn absent_git_config() -> std::path::PathBuf {
-    std::env::temp_dir().join("agentsync-tests-absent-gitconfig")
-}
 
 /// Rewrite the `outputs:` line in `.ai/exuno.yaml`.
 fn set_outputs_mode(project: &Project, mode: &str) {
@@ -177,6 +159,45 @@ fn outputs_an_unknown_value_fails_sync_before_writing_anything() {
         .failure()
         .stderr(predicate::str::contains("outputs"));
     assert!(!project.exists("CLAUDE.md"));
+}
+
+#[test]
+fn sync_leaves_a_target_with_gitignore_false_out_of_the_managed_block() {
+    let project = Project::empty();
+    init_no_sync(&project, &["--outputs", "local"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    gitignore: false\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    let gitignore = project.read(".gitignore");
+    assert!(!gitignore.contains(".claude/skills/"), "{gitignore}");
+    assert!(gitignore.contains(".claude/rules/"), "{gitignore}");
+    assert!(project.exists(".claude/skills/exuno/SKILL.md"));
+    assert!(!is_ignored(&project, ".claude/skills/exuno/SKILL.md"));
+    assert!(is_ignored(&project, ".claude/rules"));
+}
+
+#[test]
+fn a_profile_variant_honors_gitignore_false() {
+    let project = Project::empty();
+    init_no_sync(&project, &[]);
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "claude"])
+        .assert()
+        .success();
+    let variant = project.read(".ai/src/tools/claude-hub.yaml");
+    let skills_dest = "    dest: \".claude-hub/skills\"\n";
+    assert!(variant.contains(skills_dest), "{variant}");
+    project.write(
+        ".ai/src/tools/claude-hub.yaml",
+        &variant.replace(skills_dest, &format!("{skills_dest}    gitignore: false\n")),
+    );
+    project.exuno().arg("sync").assert().success();
+    let gitignore = project.read(".gitignore");
+    assert!(!gitignore.contains(".claude-hub/skills/"), "{gitignore}");
+    assert!(gitignore.contains(".claude-hub/rules/"), "{gitignore}");
 }
 
 #[test]

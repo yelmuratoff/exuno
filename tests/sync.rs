@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::Project;
+use common::{Project, is_ignored};
 use predicates::prelude::*;
 use std::path::Path;
 
@@ -21,6 +21,13 @@ const ENABLED_TOOLS: &[&str] = &[
     "kimi",
     "minimax",
     "opencode",
+    "plugin",
+];
+
+const PLUGIN_MANIFESTS: [&str; 3] = [
+    "plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    ".agents/plugins/marketplace.json",
 ];
 
 const SCOPED_FIXTURE_RULE: &str =
@@ -509,6 +516,112 @@ fn sync_zed_rules_gets_commands_inline_section_merge_to_file_fallback() {
     let content = project.read(".rules");
     assert!(content.contains("## Commands"));
     assert!(content.contains("- `/fix-issue` —"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_copied_file_that_cannot_be_removed_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["amazonq"]);
+    project.exuno().arg("sync").assert().success();
+    let context = project.read(".amazonq/rules/00-context.md");
+    project.append(".ai/src/AGENTS.md", "\nOne more line.\n");
+    common::chmod(&project.join(".amazonq/rules"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".amazonq/rules"), 0o755);
+    synced.failure().stderr(predicate::str::contains(
+        ".amazonq/rules/00-context.md: Permission denied",
+    ));
+    assert_eq!(project.read(".amazonq/rules/00-context.md"), context);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_disabled_tool_output_that_cannot_be_removed_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    common::chmod(&project.join(".cursor/rules"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".cursor/rules"), 0o755);
+    synced
+        .failure()
+        .stderr(predicate::str::contains(
+            ".cursor/rules/comments.mdc: Permission denied",
+        ))
+        .stderr(predicate::str::contains("Cleaned up Cursor").not());
+    assert!(project.exists(".cursor/rules/comments.mdc"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_automatic_restore_is_left_for_the_next_run() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let rule = project.read(".cursor/rules/comments.mdc");
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    common::chmod(&project.join(".cursor/rules"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".cursor/rules"), 0o755);
+    synced
+        .failure()
+        .stderr(predicate::str::contains("Automatic restore failed"));
+    assert!(project.exists(".ai/backups/.pending"));
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ));
+    assert_eq!(project.read(".cursor/rules/comments.mdc"), rule);
+    assert!(!project.exists(".ai/backups/.pending"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_merged_rules_file_that_cannot_be_removed_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["zed"]);
+    project.write(
+        ".ai/src/tools/zed.yaml",
+        "targets:\n  rules:\n    dest: \"docs/zed/rules.md\"\n",
+    );
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.exuno().arg("sync").assert().success();
+    let merged = project.read("docs/zed/rules.md");
+    project.write(".ai/src/rules/extra.md", "# Extra\n\nOne more rule.\n");
+    common::chmod(&project.join("docs/zed"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join("docs/zed"), 0o755);
+    synced
+        .failure()
+        .stderr(predicate::str::contains("docs/zed/rules.md"));
+    assert_eq!(project.read("docs/zed/rules.md"), merged);
 }
 
 #[test]
@@ -1083,4 +1196,1164 @@ fn sync_warns_when_skills_hide_has_no_settings_file_to_land_in() {
         .stderr(predicate::str::contains(
             "skills.hide has no settings file to land in for Claude Code",
         ));
+}
+
+// ── Plugin ───────────────────────────────────────────────────────────────
+
+#[test]
+fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
+    let project = synced_project();
+    let skill = "---\nname: demo\nargument-hint: <file>\ndescription: Runs the demo\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody.\n";
+    project.write(".ai/src/skills/demo/SKILL.md", skill);
+    let agent = "---\nname: reviewer\ndescription: Reviews a diff\nmodel: sonnet\ntools: [Read, Grep]\n---\n\nReview the diff.\n";
+    project.write(".ai/src/agents/reviewer.md", agent);
+    let output = project.exuno().arg("sync").assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).unwrap();
+
+    assert_eq!(project.read("plugin/agents/reviewer.md"), agent);
+    assert_eq!(
+        project.read("plugin/skills/demo/SKILL.md"),
+        "---\nname: demo\ndescription: Runs the demo\n---\n\n# Demo\n\nBody.\n"
+    );
+    assert!(
+        stderr.contains(
+            "[WARNING] Agent plugin (claude.ai, ChatGPT, Codex): dropped frontmatter keys argument-hint, disable-model-invocation (allowlist targets.skills.frontmatter_keys) from 1 skill\n"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "[WARNING] Agent plugin (claude.ai, ChatGPT, Codex): dropped frontmatter key"
+        ) && stderr.contains("(allowlist targets.commands.frontmatter_keys) from "),
+        "{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("dropped frontmatter key").count(),
+        2,
+        "{stderr}"
+    );
+    assert_eq!(project.read(".claude/skills/demo/SKILL.md"), skill);
+    assert!(project.exists("plugin/skills/exuno/SKILL.md"));
+    assert_eq!(
+        project.read("plugin/commands/explicit-only.md"),
+        "---\ndescription: Explicit-only fixture command\n---\n\nBody.\n"
+    );
+
+    for rel in PLUGIN_MANIFESTS {
+        let manifest = json(&project, rel);
+        assert_eq!(manifest["name"], "my-skills", "{rel}");
+        assert!(manifest.get("version").is_none(), "{rel}");
+        assert!(project.read(rel).ends_with("}\n"), "{rel}");
+    }
+    let plugin = json(&project, "plugin/plugin.json");
+    assert_eq!(
+        plugin["$schema"],
+        "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+    );
+    assert_eq!(
+        plugin["description"],
+        "Skills, commands and agents synced by Exuno"
+    );
+    let claude = json(&project, ".claude-plugin/marketplace.json");
+    assert_eq!(claude["owner"]["name"], "exuno");
+    assert_eq!(
+        claude["description"],
+        "Skills, commands and agents synced by Exuno"
+    );
+    assert_eq!(claude["plugins"][0]["name"], "my-skills");
+    assert_eq!(claude["plugins"][0]["source"], "./plugin");
+    let codex = json(&project, ".agents/plugins/marketplace.json");
+    assert_eq!(codex["interface"]["displayName"], "my-skills");
+    assert_eq!(codex["plugins"][0]["source"]["source"], "local");
+    assert_eq!(codex["plugins"][0]["source"]["path"], "./plugin");
+    assert_eq!(codex["plugins"][0]["policy"]["installation"], "AVAILABLE");
+    assert_eq!(codex["plugins"][0]["category"], "Productivity");
+}
+
+#[test]
+fn sync_plugin_outputs_are_not_gitignored() {
+    let project = synced_project();
+    let mut plugin_outputs = vec![
+        "plugin/skills/exuno/SKILL.md",
+        "plugin/commands/explicit-only.md",
+    ];
+    plugin_outputs.extend(PLUGIN_MANIFESTS);
+    for rel in plugin_outputs {
+        assert!(project.exists(rel), "{rel}");
+        assert!(!is_ignored(&project, rel), "{rel}");
+    }
+    for rel in [
+        "CLAUDE.md",
+        ".claude/skills/exuno/SKILL.md",
+        ".agents/skills/exuno/SKILL.md",
+    ] {
+        assert!(is_ignored(&project, rel), "{rel}");
+    }
+}
+
+const HAND_WRITTEN_SKILL: &str = "plugin/skills/mine/SKILL.md";
+
+#[test]
+fn a_disabled_plugin_leaves_hand_written_files_in_its_dests() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(HAND_WRITTEN_SKILL, "---\nname: mine\n---\n");
+    project.write("plugin/agents/mine.md", "mine\n");
+    project.write(".claude-plugin/marketplace.json", "{}\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Cleaned up Agent plugin").not());
+    assert_eq!(project.read(HAND_WRITTEN_SKILL), "---\nname: mine\n---\n");
+    assert_eq!(project.read("plugin/agents/mine.md"), "mine\n");
+    assert_eq!(project.read(".claude-plugin/marketplace.json"), "{}\n");
+}
+
+#[test]
+fn disabling_a_tool_leaves_another_tools_files_under_its_dest() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/agents/helper.md",
+        "---\nname: helper\n---\nHelp.\n",
+    );
+    project.write(
+        ".ai/src/tools/aaa.yaml",
+        "name: \"A\"\nenabled: true\ntargets:\n  subagents:\n    dest: \".claude\"\n",
+    );
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".claude/helper.md"));
+    let core_rule = project.read(".claude/rules/core.md");
+    project.write(".claude/notes.md", "mine\n");
+
+    project.write(
+        ".ai/src/tools/aaa.yaml",
+        "name: \"A\"\nenabled: false\ntargets:\n  subagents:\n    dest: \".claude\"\n",
+    );
+    project
+        .exuno()
+        .args(["sync", "--skip", "claude"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Cleaned up A (disabled)"));
+    assert!(!project.exists(".claude/helper.md"));
+    assert_eq!(project.read(".claude/notes.md"), "mine\n");
+    assert_eq!(project.read(".claude/rules/core.md"), core_rule);
+    assert!(project.exists(".claude/skills/exuno/SKILL.md"));
+    assert!(project.exists(".claude/settings.json"));
+    assert!(project.exists(".claude/hooks/agentsync-guard.sh"));
+}
+
+#[test]
+fn disabling_a_tool_removes_only_its_recorded_files() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".cursor/rules/core.mdc"));
+    project.write(".cursor/rules/mine.mdc", "mine\n");
+
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[INFO] Cleaned up Cursor (disabled)",
+        ))
+        .stderr(predicate::str::contains(
+            "[INFO] Left .cursor/rules in place: it holds files sync did not write\n",
+        ));
+    assert!(!project.exists(".cursor/rules/core.mdc"));
+    assert!(!project.exists(".cursor/mcp.json"));
+    assert_eq!(project.read(".cursor/rules/mine.mdc"), "mine\n");
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Left .cursor").not())
+        .stderr(predicate::str::contains("Cleaned up Cursor").not());
+    assert_eq!(project.read(".cursor/rules/mine.mdc"), "mine\n");
+}
+
+#[test]
+fn disabling_the_plugin_removes_only_what_it_wrote() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "plugin"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists("plugin/skills/exuno/SKILL.md"));
+    project.write(HAND_WRITTEN_SKILL, "---\nname: mine\n---\n");
+
+    project
+        .exuno()
+        .args(["disable", "plugin"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Cleaned up Agent plugin"));
+    assert_eq!(project.read(HAND_WRITTEN_SKILL), "---\nname: mine\n---\n");
+    for gone in [
+        "plugin/skills/exuno",
+        "plugin/commands",
+        "plugin/agents",
+        "plugin/plugin.json",
+        ".claude-plugin",
+        ".agents",
+    ] {
+        assert!(!project.exists(gone), "{gone}");
+    }
+    assert!(project.exists("CLAUDE.md"));
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn a_tool_based_on_plugin_renders_the_plugin_templates_with_its_own_vars() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/tools/team.yaml",
+        "base: plugin\nenabled: true\ntargets:\n  manifests:\n    vars:\n      name: \"team-skills\"\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    for rel in PLUGIN_MANIFESTS {
+        assert_eq!(json(&project, rel)["name"], "team-skills", "{rel}");
+    }
+    assert_eq!(
+        json(&project, ".claude-plugin/marketplace.json")["owner"]["name"],
+        "exuno"
+    );
+    project.exuno().arg("check").assert().success();
+}
+
+// ── Engine safety ────────────────────────────────────────────────────────
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_to_write_through_a_symlink_that_leaves_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("notes.txt");
+    std::fs::write(&secret, "keep me\n").unwrap();
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    std::fs::create_dir_all(project.join(".cursor/rules")).unwrap();
+    std::os::unix::fs::symlink(&secret, project.join(".cursor/rules/core.mdc")).unwrap();
+    project.enable_tools(&["cursor"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Refusing to write .cursor/rules/core.mdc: .cursor/rules/core.mdc is a symlink to",
+        ))
+        .stderr(predicate::str::contains("outside the project"));
+    assert_eq!(std::fs::read_to_string(&secret).unwrap(), "keep me\n");
+    assert!(project.exists("CLAUDE.md"));
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_follows_a_symlink_that_stays_inside_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    std::fs::create_dir_all(project.join("store/claude")).unwrap();
+    std::os::unix::fs::symlink("store/claude", project.join(".claude")).unwrap();
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists("store/claude/rules/core.md"));
+    assert!(project.exists("store/claude/skills/exuno/SKILL.md"));
+    project.exuno().arg("sync").assert().success();
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_to_write_through_a_symlink_into_ai_or_git() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/mine/SKILL.md", "---\nname: mine\n---\n");
+    std::fs::create_dir_all(project.join(".claude")).unwrap();
+    std::os::unix::fs::symlink("../.ai/src/skills", project.join(".claude/skills")).unwrap();
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "more file(s): .claude/skills is a symlink to",
+        ))
+        .stderr(predicate::str::contains(
+            "inside .ai/, where the sources live",
+        ));
+    assert!(!project.exists(".ai/src/skills/exuno"));
+    assert!(project.exists(".ai/src/skills/mine/SKILL.md"));
+
+    std::fs::remove_file(project.join(".claude/skills")).unwrap();
+    std::fs::create_dir_all(project.join(".git/info")).unwrap();
+    std::os::unix::fs::symlink("../.git/info", project.join(".claude/rules")).unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(".claude/rules is a symlink to"))
+        .stderr(predicate::str::contains("inside .git/"));
+    assert!(!project.exists(".git/info/core.md"));
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_to_write_through_a_symlink_into_an_in_project_source() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    let config = project
+        .read(".ai/exuno.yaml")
+        .replace("  rules: \".ai/src/rules\"", "  rules: \"docs/rules\"");
+    project.write(".ai/exuno.yaml", &config);
+    project.write("docs/rules/core.md", "# Core\n");
+    std::fs::create_dir_all(project.join(".claude")).unwrap();
+    std::os::unix::fs::symlink("../docs/rules", project.join(".claude/rules")).unwrap();
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(".claude/rules is a symlink to"))
+        .stderr(predicate::str::contains("inside a source directory"));
+    assert_eq!(project.read("docs/rules/core.md"), "# Core\n");
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("inside a source directory"));
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_to_write_through_a_symlink_into_a_tool_target_source() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    source: \"vendor/skills\"\n",
+    );
+    let skill = "---\nname: pdf\n---\nPDF.\n";
+    project.write("vendor/skills/pdf/SKILL.md", skill);
+    std::fs::create_dir_all(project.join(".claude/skills")).unwrap();
+    std::os::unix::fs::symlink(
+        "../../vendor/skills/pdf",
+        project.join(".claude/skills/pdf"),
+    )
+    .unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            ".claude/skills/pdf is a symlink to",
+        ))
+        .stderr(predicate::str::contains("inside a source directory"));
+    assert_eq!(project.read("vendor/skills/pdf/SKILL.md"), skill);
+}
+
+#[cfg(unix)]
+#[test]
+fn cleanup_refuses_to_remove_through_a_symlink_that_leaves_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let project = Project::seeded(&[]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let synced = project.read(".cursor/skills/demo/SKILL.md");
+    std::fs::write(outside.path().join("SKILL.md"), &synced).unwrap();
+    std::fs::remove_dir_all(project.join(".cursor/skills/demo")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), project.join(".cursor/skills/demo")).unwrap();
+
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Refusing to remove .cursor/skills/demo/SKILL.md: .cursor/skills/demo is a symlink to",
+        ));
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "A real sync would stop: Refusing to remove .cursor/skills/demo/SKILL.md",
+        ));
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Refusing to remove .cursor/skills/demo/SKILL.md: .cursor/skills/demo is a symlink to",
+        ));
+    assert_eq!(
+        std::fs::read_to_string(outside.path().join("SKILL.md")).unwrap(),
+        synced
+    );
+}
+
+/// A synced claude project, then a hand-written `.cursor/rules/core.mdc` that
+/// enabling cursor would overwrite.
+fn unrecorded_cursor_rule() -> Project {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".ai/.sync-manifest"));
+    project.write(".cursor/rules/core.mdc", "mine\n");
+    project.enable_tools(&["cursor"]);
+    project
+}
+
+#[test]
+fn sync_refuses_to_overwrite_an_unrecorded_file_that_differs() {
+    let project = unrecorded_cursor_rule();
+    let manifest = project.read(".ai/.sync-manifest");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Sync would overwrite 1 file(s) it did not write:\n      .cursor/rules/core.mdc\n",
+        ))
+        .stderr(predicate::str::contains("--force"));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+    assert!(!project.exists("AGENTS.md"));
+    assert_eq!(project.read(".ai/.sync-manifest"), manifest);
+}
+
+#[test]
+fn force_overwrites_an_unrecorded_file() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .args(["sync", "--force"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Overwriting 1 file(s) sync did not write (--force):\n      .cursor/rules/core.mdc\n",
+        ));
+    assert!(project.read(".cursor/rules/core.mdc").starts_with("---\n"));
+    project.exuno().arg("sync").assert().success();
+}
+
+#[test]
+fn an_overwrite_from_a_profile_overlay_outside_ai_is_refused() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "claude"])
+        .assert()
+        .success();
+    let config = project
+        .read(".ai/exuno.yaml")
+        .replace("overlay: \".ai/profiles/hub\"", "overlay: \"profiles/hub\"");
+    project.write(".ai/exuno.yaml", &config);
+    project.write("profiles/hub/src/rules/hub.md", "# Hub\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".claude-hub/rules/hub.md"), "# Hub\n");
+
+    project.write("profiles/hub/src/rules/extra.md", "# Extra\n");
+    project.write(".claude-hub/rules/extra.md", "mine\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Sync would overwrite 1 file(s) it did not write:\n      .claude-hub/rules/extra.md\n",
+        ));
+    assert_eq!(project.read(".claude-hub/rules/extra.md"), "mine\n");
+}
+
+#[test]
+fn an_overwrite_from_a_tool_target_source_outside_ai_is_refused() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  rules:\n    source: \"docs/rules\"\n",
+    );
+    project.write("docs/rules/core.md", "# Core\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".claude/rules/core.md"), "# Core\n");
+
+    project.write("docs/rules/extra.md", "# Extra\n");
+    project.write(".claude/rules/extra.md", "mine\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Sync would overwrite 1 file(s) it did not write:\n      .claude/rules/extra.md\n",
+        ));
+    assert_eq!(project.read(".claude/rules/extra.md"), "mine\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_folder_in_an_inactive_profile_overlay_does_not_block_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "claude"])
+        .assert()
+        .success();
+    let config = project
+        .read(".ai/exuno.yaml")
+        .replace("overlay: \".ai/profiles/hub\"", "overlay: \"profiles/hub\"");
+    project.write(".ai/exuno.yaml", &config);
+    project.write("profiles/hub/src/rules/hub.md", "# Hub\n");
+    project.exuno().arg("sync").assert().success();
+    let inactive = config.replace("    active: true\n", "    active: false\n");
+    assert_ne!(inactive, config);
+    project.write(".ai/exuno.yaml", &inactive);
+    common::chmod(&project.join("profiles/hub"), 0o000);
+    let synced = project.exuno().arg("sync").assert();
+    let checked = project.exuno().arg("check").assert();
+    common::chmod(&project.join("profiles/hub"), 0o755);
+    synced.success();
+    checked.success();
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_folder_inside_a_source_does_not_block_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.write(".ai/src/skills/demo/private/notes.md", "secret\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    common::chmod(&project.join(".ai/src/skills/demo/private"), 0o000);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".ai/src/skills/demo/private"), 0o755);
+    synced
+        .success()
+        .stderr(predicate::str::contains("Could not render").not());
+    assert_eq!(project.read(".claude/rules/extra.md"), "# Extra\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_cycle_in_a_source_skill_ends_the_walk() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.exuno().arg("sync").assert().success();
+    std::os::unix::fs::symlink("..", project.join(".ai/src/skills/demo/loop")).unwrap();
+    project.exuno().arg("check").assert().success();
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success();
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".claude/skills/demo/SKILL.md"));
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn a_preflight_that_cannot_render_stops_the_sync() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write(
+        ".ai/src/tools/demo.yaml",
+        "name: \"Demo\"\nenabled: true\ntargets:\n  manifests:\n    dest: \"out\"\n",
+    );
+    project.write(
+        ".ai/src/tools/demo/manifests/a.json",
+        "{\"n\": \"${name}\"}\n",
+    );
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Could not render this sync in memory to check it before writing:",
+        ))
+        .stderr(predicate::str::contains("no value for ${name}"))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+}
+
+// The post_sync hook runs through `bash`, which on the Windows runner is the
+// WSL launcher with no distribution installed.
+#[cfg(unix)]
+#[test]
+fn a_refused_overwrite_runs_no_post_sync_hook() {
+    let project = Project::seeded(&[]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "post_sync: \"echo ran >> hook.log\"\n",
+    );
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_ALLOW_POST_SYNC", "true")
+        .assert()
+        .success();
+    assert_eq!(project.read("hook.log"), "ran\n");
+    project.write(".cursor/rules/core.mdc", "mine\n");
+    project.enable_tools(&["cursor"]);
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_ALLOW_POST_SYNC", "true")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Sync would overwrite 1 file(s)"))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+    assert_eq!(project.read("hook.log"), "ran\n");
+}
+
+#[test]
+fn a_refused_overwrite_writes_nothing_without_a_backup() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .arg("sync")
+        .env("EXUNO_INTERNAL_SKIP_BACKUP", "true")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Sync would overwrite 1 file(s)"));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+    assert!(!project.exists("AGENTS.md"));
+}
+
+/// Leaves `project` as an `exuno <operation>` killed after it wrote `text` to
+/// `rel`: the snapshot of `rel` is pending and no lock holds it.
+fn interrupt(project: &Project, operation: &str, rel: &str, text: &str) {
+    use exuno::paths::DiskText;
+    use exuno::transaction::backup::{self, Retention};
+    use exuno::transaction::lock::Lock;
+    let root = std::fs::canonicalize(project.path()).unwrap().disk_text();
+    let (lock, _) = Lock::acquire(&root, operation, Retention::Bounded).unwrap();
+    let snapshot = backup::create(
+        &root,
+        operation,
+        &[format!("{root}/{rel}")],
+        Retention::Bounded,
+    )
+    .unwrap();
+    lock.begin(&snapshot).unwrap();
+    project.write(rel, text);
+    drop(lock);
+}
+
+#[test]
+fn sync_restores_an_interrupted_run_before_it_checks_for_manual_edits() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let generated = project.read(".cursor/rules/core.mdc");
+    interrupt(&project, "sync", ".cursor/rules/core.mdc", "half-written\n");
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno sync",
+        ))
+        .stderr(predicate::str::contains(
+            "[ERROR] exuno sync changed nothing; run it again.",
+        ))
+        .stderr(predicate::str::contains("Manual edits").not());
+    assert_eq!(project.read(".cursor/rules/core.mdc"), generated);
+    project.exuno().arg("sync").assert().success();
+}
+
+#[test]
+fn sync_stops_after_restoring_an_interrupted_config_edit() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    let config = project.read(".ai/exuno.yaml");
+    project.enable_tools(&["cursor"]);
+    let enabled = project.read(".ai/exuno.yaml");
+    project.write(".ai/exuno.yaml", &config);
+    interrupt(&project, "enable", ".ai/exuno.yaml", &enabled);
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno enable",
+        ))
+        .stderr(predicate::str::contains(
+            "[ERROR] exuno sync changed nothing; run it again.",
+        ));
+    assert_eq!(project.read(".ai/exuno.yaml"), config);
+    assert!(!project.exists(".cursor"));
+    project.exuno().arg("sync").assert().success();
+    assert!(!project.exists(".cursor"));
+}
+
+#[test]
+fn a_forced_dry_run_reports_the_overwrite_it_would_make() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .args(["sync", "--dry-run", "--force"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] Would overwrite 1 file(s) sync did not write (--force):\n      .cursor/rules/core.mdc\n",
+        ))
+        .stderr(predicate::str::contains("A real sync would stop").not());
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+}
+
+#[test]
+fn a_dry_run_reports_an_overwrite_a_real_sync_would_refuse() {
+    let project = unrecorded_cursor_rule();
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Sync would overwrite 1 file(s) it did not write:\n      .cursor/rules/core.mdc\n",
+        ));
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+}
+
+#[test]
+fn an_unrecorded_file_that_matches_the_final_render_is_taken_over() {
+    let reference = Project::seeded(&[]);
+    reference.enable_tools(&["claude", "codex"]);
+    reference.exuno().arg("sync").assert().success();
+    let agents = reference.read("AGENTS.md");
+    assert!(agents.contains("## Rules"), "codex appends to AGENTS.md");
+
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write("AGENTS.md", &agents);
+    project.enable_tools(&["codex"]);
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read("AGENTS.md"), agents);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dry_run_reports_a_write_a_real_sync_would_refuse() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("notes.txt");
+    std::fs::write(&secret, "keep me\n").unwrap();
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    std::fs::create_dir_all(project.join(".cursor/rules")).unwrap();
+    std::os::unix::fs::symlink(&secret, project.join(".cursor/rules/core.mdc")).unwrap();
+    project.enable_tools(&["cursor"]);
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Refusing to write .cursor/rules/core.mdc: .cursor/rules/core.mdc is a symlink to",
+        ));
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "A real sync would stop: Refusing to write .cursor/rules/core.mdc",
+        ));
+    assert_eq!(std::fs::read_to_string(&secret).unwrap(), "keep me\n");
+}
+
+#[test]
+fn a_first_sync_without_a_manifest_still_writes_over_existing_files() {
+    let project = Project::seeded(&[]);
+    assert!(!project.exists(".ai/.sync-manifest"));
+    project.write("CLAUDE.md", "mine\n");
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read("CLAUDE.md"), project.read(".ai/src/AGENTS.md"));
+}
+
+#[test]
+fn a_first_sync_prunes_nothing_unrecorded() {
+    let project = Project::seeded(&[]);
+    assert!(!project.exists(".ai/.sync-manifest"));
+    project.write(
+        ".ai/src/agents/helper.md",
+        "---\nname: helper\n---\nHelp.\n",
+    );
+    project.write(".claude/rules/mine.md", "# Mine\n");
+    project.write(".claude/skills/mine/SKILL.md", "---\nname: mine\n---\n");
+    project.write(".claude/agents/mine.md", "mine\n");
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Kept .claude/rules/mine.md"))
+        .stderr(predicate::str::contains("Kept .claude/skills/mine"))
+        .stderr(predicate::str::contains("Kept .claude/agents/mine.md"));
+    assert_eq!(project.read(".claude/rules/mine.md"), "# Mine\n");
+    assert!(project.exists(".claude/skills/mine/SKILL.md"));
+    assert_eq!(project.read(".claude/agents/mine.md"), "mine\n");
+    assert!(project.exists(".claude/rules/core.md"));
+    assert!(project.exists(".claude/agents/helper.md"));
+}
+
+#[test]
+fn a_synced_skill_folder_keeps_unrecorded_files_and_drops_what_the_source_lost() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.write(".ai/src/skills/demo/references/old.md", "old\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/demo/__pycache__/x.pyc", "cache");
+    project.write(".claude/skills/demo/.DS_Store", "finder");
+
+    std::fs::remove_file(project.join(".ai/src/skills/demo/references/old.md")).unwrap();
+    project.write(
+        ".ai/src/skills/demo/SKILL.md",
+        "---\nname: demo\n---\nNew.\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/__pycache__/x.pyc"),
+        "cache"
+    );
+    assert_eq!(project.read(".claude/skills/demo/.DS_Store"), "finder");
+    assert!(!project.exists(".claude/skills/demo/references/old.md"));
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\nNew.\n"
+    );
+    let manifest = project.read(".ai/.sync-manifest");
+    assert!(!manifest.contains("__pycache__"), "{manifest}");
+    assert!(!manifest.contains(".DS_Store"), "{manifest}");
+
+    project.exuno().arg("sync").assert().success();
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
+fn an_unrecorded_skill_folder_matching_a_source_skill_keeps_its_extra_files() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    let skill = "---\nname: pdf\n---\nPDF.\n";
+    project.write(".claude/skills/pdf/SKILL.md", skill);
+    project.write(".claude/skills/pdf/.venv/lib.py", "venv\n");
+    project.write(".ai/src/skills/pdf/SKILL.md", skill);
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".claude/skills/pdf/.venv/lib.py"), "venv\n");
+    assert_eq!(project.read(".claude/skills/pdf/SKILL.md"), skill);
+    assert!(!project.read(".ai/.sync-manifest").contains(".venv"));
+}
+
+#[test]
+fn an_obsolete_skill_folder_keeps_an_unrecorded_cache_file() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/demo/__pycache__/x.pyc", "cache");
+    std::fs::remove_dir_all(project.join(".ai/src/skills/demo")).unwrap();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Left .claude/skills/demo in place: it holds files sync did not write",
+        ))
+        .stderr(predicate::str::contains("Removed: .claude/skills/demo").not());
+    assert!(!project.exists(".claude/skills/demo/SKILL.md"));
+    assert_eq!(
+        project.read(".claude/skills/demo/__pycache__/x.pyc"),
+        "cache"
+    );
+}
+
+fn set_readonly(project: &Project, rel: &str, readonly: bool) {
+    let path = project.join(rel);
+    let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(readonly);
+    std::fs::set_permissions(&path, permissions).unwrap();
+}
+
+#[test]
+fn a_skill_folder_keeps_the_empty_folders_of_its_source() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    std::fs::create_dir_all(project.join(".ai/src/skills/demo/cache/empty")).unwrap();
+    project.exuno().arg("sync").assert().success();
+    assert!(project.join(".claude/skills/demo/cache/empty").is_dir());
+    project.exuno().arg("sync").assert().success();
+    assert!(project.join(".claude/skills/demo/cache/empty").is_dir());
+}
+
+#[test]
+fn a_read_only_source_skill_syncs_twice() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    set_readonly(&project, ".ai/src/skills/demo/SKILL.md", true);
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\n"
+    );
+    set_readonly(&project, ".ai/src/skills/demo/SKILL.md", false);
+}
+
+#[test]
+fn a_read_only_recorded_skill_file_is_replaced() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.exuno().arg("sync").assert().success();
+    set_readonly(&project, ".claude/skills/demo/SKILL.md", true);
+    project.write(
+        ".ai/src/skills/demo/SKILL.md",
+        "---\nname: demo\n---\nNew.\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\nNew.\n"
+    );
+}
+
+#[test]
+fn an_unrecorded_file_in_the_way_of_a_skill_folder_stops_the_sync() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/demo", "mine\n");
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Sync would overwrite 1 file(s) it did not write:\n      .claude/skills/demo\n",
+        ))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+    assert_eq!(project.read(".claude/skills/demo"), "mine\n");
+    project.exuno().args(["sync", "--force"]).assert().success();
+    assert_eq!(
+        project.read(".claude/skills/demo/SKILL.md"),
+        "---\nname: demo\n---\n"
+    );
+}
+
+#[test]
+fn an_unrecorded_folder_in_the_way_of_a_skill_file_stops_the_sync() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    project.write(".claude/skills/notes.md/mine.md", "mine\n");
+    project.write(".ai/src/skills/notes.md", "Notes.\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "[ERROR] Sync would overwrite 1 file(s) it did not write:\n      .claude/skills/notes.md\n",
+        ));
+    assert_eq!(project.read(".claude/skills/notes.md/mine.md"), "mine\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_file_sync_would_overwrite_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = unrecorded_cursor_rule();
+    common::chmod(&project.join(".cursor/rules/core.mdc"), 0o000);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".cursor/rules/core.mdc"), 0o644);
+    synced
+        .failure()
+        .stderr(predicate::str::contains(
+            "Could not read .cursor/rules/core.mdc",
+        ))
+        .stderr(predicate::str::contains("Syncing Cursor").not());
+    assert_eq!(project.read(".cursor/rules/core.mdc"), "mine\n");
+}
+
+#[test]
+fn an_unrecorded_command_skill_folder_is_kept_and_a_recorded_obsolete_one_goes() {
+    let project = Project::seeded(&[]);
+    for name in ["old", "noted"] {
+        project.write(
+            &format!(".ai/src/commands/{name}.md"),
+            "---\ndescription: Old\n---\nOld.\n",
+        );
+    }
+    project.enable_tools(&["codex"]);
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".agents/skills/command-old/SKILL.md"));
+    project.write(".agents/skills/command-mine/SKILL.md", "mine\n");
+    project.write(".agents/skills/command-noted/notes.md", "notes\n");
+
+    for name in ["old", "noted"] {
+        std::fs::remove_file(project.join(&format!(".ai/src/commands/{name}.md"))).unwrap();
+    }
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Kept .agents/skills/command-mine"))
+        .stderr(predicate::str::contains(
+            "Removed obsolete generated skill: command-old\n",
+        ))
+        .stderr(predicate::str::contains(
+            "Left .agents/skills/command-noted in place: it holds files sync did not write",
+        ));
+    assert!(!project.exists(".agents/skills/command-old"));
+    assert!(!project.exists(".agents/skills/command-noted/SKILL.md"));
+    assert_eq!(
+        project.read(".agents/skills/command-noted/notes.md"),
+        "notes\n"
+    );
+    assert_eq!(
+        project.read(".agents/skills/command-mine/SKILL.md"),
+        "mine\n"
+    );
+}
+
+/// A seeded project with local outputs, so sync manages `.gitignore`, and no
+/// `.gitignore` yet.
+#[cfg(unix)]
+fn local_outputs_project() -> Project {
+    let project = Project::seeded(&["--outputs", "local"]);
+    let _ = std::fs::remove_file(project.join(".gitignore"));
+    project.enable_tools(&["claude"]);
+    project
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_refuses_a_gitignore_link_that_leaves_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("ignore.txt");
+    std::fs::write(&target, "outside\n").unwrap();
+    let project = local_outputs_project();
+    std::os::unix::fs::symlink(&target, project.join(".gitignore")).unwrap();
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "[WARNING] A real sync would stop: Refusing to write .gitignore: .gitignore is a symlink to",
+        ));
+    project
+        .exuno()
+        .arg("check")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "A real sync would stop: Refusing to write .gitignore",
+        ));
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Refusing to write .gitignore: .gitignore is a symlink to",
+        ))
+        .stderr(predicate::str::contains("Syncing Claude Code").not());
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "outside\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_writes_through_a_gitignore_link_inside_the_project() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = local_outputs_project();
+    project.write("config/gitignore", "node_modules/\n");
+    std::os::unix::fs::symlink("config/gitignore", project.join(".gitignore")).unwrap();
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    project.exuno().arg("sync").assert().success();
+    let meta = std::fs::symlink_metadata(project.join(".gitignore")).unwrap();
+    assert!(meta.file_type().is_symlink());
+    let text = project.read("config/gitignore");
+    assert!(text.starts_with("node_modules/\n"), "{text}");
+    assert!(text.contains("AI SYNC GENERATED START"), "{text}");
+    assert!(text.contains(".claude/rules/"), "{text}");
+
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  skills:\n    gitignore: false\n",
+    );
+    project.exuno().arg("sync").assert().success();
+    assert!(!project.read("config/gitignore").contains(".claude/skills/"));
+    project
+        .exuno()
+        .args(["rollback", "--yes"])
+        .assert()
+        .success();
+    assert!(project.read("config/gitignore").contains(".claude/skills/"));
 }

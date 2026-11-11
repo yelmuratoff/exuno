@@ -6,23 +6,6 @@ use crate::engine::session::Session;
 use crate::engine::skill_tree::{self, Skill};
 use crate::{Error, paths};
 
-/// `cleanup_path`: removes `target` when it exists; true when something went.
-/// A failed removal is not an error: Bash calls it inside an `if`, where
-/// `set -e` does not apply.
-pub fn cleanup_path(s: &mut Session, target: &str) -> bool {
-    if !s.ws.exists(target) {
-        return false;
-    }
-    let shown = s.display(target);
-    if s.dry_run {
-        s.log.step(&format!("Would remove: {shown} (dry-run)"));
-    } else {
-        let _ = s.ws.remove(target);
-        s.log.step(&format!("Removed: {shown}"));
-    }
-    true
-}
-
 /// `copy_file`: a missing source is a warning, not a failure.
 pub fn copy_file(s: &mut Session, src: &str, dest: &str) -> Result<(), Error> {
     copy_file_noted(s, src, dest, "")
@@ -51,7 +34,8 @@ pub fn copy_file_noted(s: &mut Session, src: &str, dest: &str, note: &str) -> Re
     if s.ws.is_dir(dest) {
         s.ws.copy(src, &format!("{dest}/{}", paths::leaf(src)))?;
     } else {
-        let _ = s.ws.remove(dest);
+        refuse_copy_onto_itself(s, src, dest)?;
+        s.ws.remove(dest)?;
         s.ws.copy(src, dest)?;
     }
     s.record_write(dest);
@@ -93,14 +77,9 @@ pub fn sync_skills_dir(
         if s.dry_run {
             continue;
         }
+        let source = format!("{src}/{}", entry.rel);
         let target = format!("{dest}/{}", entry.name);
-        let _ = s.ws.remove(&target);
-        s.ws.copy(&format!("{src}/{}", entry.rel), &target)?;
-        if s.ws.is_dir(&target) {
-            s.record_tree(&target);
-        } else {
-            s.record_write(&target);
-        }
+        replace_skill(s, &source, &target)?;
     }
 
     let mut cleaned = 0usize;
@@ -123,9 +102,13 @@ pub fn sync_skills_dir(
         if s.dry_run {
             s.log
                 .step(&format!("Would remove: {dest_disp}/{name} (extraneous)"));
-        } else {
-            s.ws.remove(&item)?;
+        } else if remove_obsolete(s, &item)? {
             s.log.step(&format!("Removed: {dest_disp}/{name}"));
+        } else {
+            s.log.step(&format!(
+                "Left {dest_disp}/{name} in place: it holds files sync did not write"
+            ));
+            continue;
         }
         cleaned += 1;
     }
@@ -143,14 +126,116 @@ pub fn sync_skills_dir(
     Ok(())
 }
 
+/// Puts the skill at `source` at `target`. An existing folder is updated in
+/// place: the recorded files the source no longer has go, and files nothing
+/// recorded (caches, `.DS_Store`, a virtualenv) stay. Each copied file
+/// replaces the file at its path; a file where the source has a folder, or a
+/// folder where it has a file, goes only when sync wrote it or under
+/// `--force`. Only the files copied from `source` are recorded.
+fn replace_skill(s: &mut Session, source: &str, target: &str) -> Result<(), Error> {
+    if !s.ws.is_dir(source) {
+        return replace_file(s, source, target);
+    }
+    if s.ws.exists(target) && !s.ws.is_dir(target) {
+        clear_the_way(s, target)?;
+    }
+    if s.ws.is_dir(target) {
+        for file in recorded_under(s, target) {
+            let rel = &file[target.len() + 1..];
+            if s.ws.is_file(&format!("{source}/{rel}")) || s.was_touched(&file) {
+                continue;
+            }
+            s.ws.remove(&file)?;
+            remove_empty_parents(s, &file, target)?;
+        }
+    }
+    s.ws.create_dir_all(target)?;
+    for dir in s.ws.dirs_under(source) {
+        let dest = format!("{target}{}", &dir[source.len()..]);
+        if s.ws.exists(&dest) && !s.ws.is_dir(&dest) {
+            clear_the_way(s, &dest)?;
+        }
+        s.ws.create_dir_all(&dest)?;
+    }
+    for file in s.ws.files_under(source) {
+        let dest = format!("{target}{}", &file[source.len()..]);
+        replace_file(s, &file, &dest)?;
+    }
+    Ok(())
+}
+
+fn replace_file(s: &mut Session, source: &str, dest: &str) -> Result<(), Error> {
+    if s.ws.is_dir(dest) {
+        clear_the_way(s, dest)?;
+    } else {
+        refuse_copy_onto_itself(s, source, dest)?;
+        s.ws.remove(dest)?;
+    }
+    s.ws.copy(source, dest)?;
+    s.record_write(dest);
+    Ok(())
+}
+
+/// A dest that a link makes the source file itself would be deleted by the
+/// removal before its copy.
+fn refuse_copy_onto_itself(s: &Session, src: &str, dest: &str) -> Result<(), Error> {
+    if !s.ws.same_disk_file(src, dest) {
+        return Ok(());
+    }
+    Err(Error::UnsafeOutput {
+        action: "write",
+        path: s.display(dest),
+        reason: format!("it is the source file {} itself", s.display(src)),
+    })
+}
+
+/// Removes `path`, which stands where the source has the other kind of
+/// entry, when sync wrote everything in it or under `--force`.
+fn clear_the_way(s: &mut Session, path: &str) -> Result<(), Error> {
+    let (files, kind) = if s.ws.is_dir(path) {
+        (s.ws.files_under(path), "a folder")
+    } else {
+        (vec![path.to_string()], "a file")
+    };
+    if s.force || files.iter().all(|f| s.recorded(f) || s.was_touched(f)) {
+        return s.ws.remove(path);
+    }
+    Err(Error::UnsafeOutput {
+        action: "replace",
+        path: s.display(path),
+        reason: format!("{kind} sync did not write is in the way"),
+    })
+}
+
+/// Removes an obsolete entry sync may prune: a file whole, a folder whole
+/// under `--force`, otherwise only its recorded files and the folders that
+/// leaves empty. True when the entry is gone.
+pub fn remove_obsolete(s: &mut Session, item: &str) -> Result<bool, Error> {
+    if s.ws.is_dir(item) && !s.force {
+        remove_recorded(s, item)?;
+    } else {
+        s.ws.remove(item)?;
+    }
+    Ok(!s.ws.exists(item))
+}
+
 /// Removes `path`, or every file below it, that the previous manifest records
 /// and this run did not write, then the directories that leaves empty; files
 /// nothing recorded stay. Returns how many files went, or would under
 /// `--dry-run`.
 pub fn remove_recorded(s: &mut Session, path: &str) -> Result<usize, Error> {
+    remove_recorded_outside(s, path, &[])
+}
+
+/// [`remove_recorded`], keeping every file at or below one of `kept`.
+pub fn remove_recorded_outside(
+    s: &mut Session,
+    path: &str,
+    kept: &[String],
+) -> Result<usize, Error> {
     let mut removed = 0;
     for file in recorded_under(s, path) {
-        if s.was_touched(&file) {
+        if s.was_touched(&file) || kept.iter().any(|keep| paths::is_within(&file, keep)) {
             continue;
         }
         if !s.dry_run {
@@ -174,6 +259,21 @@ pub fn recorded_under(s: &Session, path: &str) -> Vec<String> {
         Vec::new()
     };
     files.into_iter().filter(|file| s.recorded(file)).collect()
+}
+
+/// Removes each directory above `path` that is empty, deepest first, up to
+/// but not including `stop`.
+pub fn remove_empty_parents(s: &mut Session, path: &str, stop: &str) -> Result<(), Error> {
+    let mut dir = paths::parent(path);
+    while dir != stop
+        && paths::is_within(&dir, stop)
+        && s.ws.is_dir(&dir)
+        && s.ws.list(&dir).is_empty()
+    {
+        s.ws.remove(&dir)?;
+        dir = paths::parent(&dir);
+    }
+    Ok(())
 }
 
 /// Whether `dir` ended up removed, being empty once its empty children went.
@@ -268,6 +368,10 @@ mod tests {
         file(&mut s, "/proj/.ai/src/skills/.hidden/SKILL.md", "h");
         file(&mut s, "/proj/.claude/skills/stale/SKILL.md", "s");
         file(&mut s, "/proj/.claude/skills/command-review/SKILL.md", "c");
+        s.activate_manifest(BTreeSet::from([
+            ".claude/skills/stale/SKILL.md".to_string(),
+            ".claude/skills/command-review/SKILL.md".to_string(),
+        ]));
         sync_skills_dir(
             &mut s,
             "/proj/.ai/src/skills",
@@ -357,19 +461,35 @@ mod tests {
     }
 
     #[test]
+    fn a_skill_replaces_an_entry_of_the_other_kind_only_when_sync_wrote_it() {
+        let mut s = test_session();
+        file(&mut s, "/proj/.ai/src/skills/a/SKILL.md", "a");
+        file(&mut s, "/proj/.ai/src/skills/b/SKILL.md", "b");
+        file(&mut s, "/proj/.claude/skills/a", "mine");
+        file(&mut s, "/proj/.claude/skills/b", "old");
+        s.activate_manifest(BTreeSet::from([".claude/skills/b".to_string()]));
+        let skills = "/proj/.ai/src/skills";
+        let dest = "/proj/.claude/skills";
+        assert_eq!(
+            replace_skill(&mut s, &format!("{skills}/a"), &format!("{dest}/a"))
+                .unwrap_err()
+                .to_string(),
+            "Refusing to replace .claude/skills/a: a file sync did not write is in the way"
+        );
+        assert_eq!(s.ws.read("/proj/.claude/skills/a").unwrap(), b"mine");
+        replace_skill(&mut s, &format!("{skills}/b"), &format!("{dest}/b")).unwrap();
+        assert_eq!(s.ws.read("/proj/.claude/skills/b/SKILL.md").unwrap(), b"b");
+        s.force = true;
+        replace_skill(&mut s, &format!("{skills}/a"), &format!("{dest}/a")).unwrap();
+        assert_eq!(s.ws.read("/proj/.claude/skills/a/SKILL.md").unwrap(), b"a");
+    }
+
+    #[test]
     fn remove_recorded_keeps_everything_without_a_manifest() {
         let mut s = test_session();
         file(&mut s, "/proj/.windsurf/rules/core.md", "c");
         assert_eq!(remove_recorded(&mut s, "/proj/.windsurf").unwrap(), 0);
         assert!(s.ws.exists("/proj/.windsurf/rules/core.md"));
-    }
-
-    #[test]
-    fn cleanup_path_reports_whether_anything_was_removed() {
-        let mut s = test_session();
-        file(&mut s, "/proj/.cursor/rules/core.mdc", "x");
-        assert!(cleanup_path(&mut s, "/proj/.cursor/rules"));
-        assert!(!cleanup_path(&mut s, "/proj/.cursor/rules"));
     }
 
     #[test]
@@ -379,7 +499,9 @@ mod tests {
         file(&mut s, "/proj/.ai/src/AGENTS.md", "new");
         file(&mut s, "/proj/.ai/src/skills/a/SKILL.md", "a");
         file(&mut s, "/proj/.claude/skills/stale/SKILL.md", "s");
-        file(&mut s, "/proj/.cursor/rules/core.mdc", "x");
+        s.activate_manifest(BTreeSet::from(
+            [".claude/skills/stale/SKILL.md".to_string()],
+        ));
         copy_file(&mut s, "/proj/.ai/src/AGENTS.md", "/proj/CLAUDE.md").unwrap();
         sync_skills_dir(
             &mut s,
@@ -388,19 +510,16 @@ mod tests {
             &Filter::default(),
         )
         .unwrap();
-        assert!(cleanup_path(&mut s, "/proj/.cursor/rules"));
         assert!(!s.ws.exists("/proj/CLAUDE.md"));
         assert!(s.ws.exists("/proj/.claude/skills/stale"));
         assert!(!s.ws.exists("/proj/.claude/skills/a"));
-        assert!(s.ws.exists("/proj/.cursor/rules/core.mdc"));
         assert!(s.touched().is_empty());
         assert_eq!(
-            s.log.tail(4),
+            s.log.tail(3),
             [
                 "   .ai/src/AGENTS.md → CLAUDE.md (dry-run)",
                 "   Would remove: .claude/skills/stale (extraneous)",
                 "   .ai/src/skills/ → .claude/skills/ (1 updated, 1 removed) (dry-run)",
-                "   Would remove: .cursor/rules (dry-run)"
             ]
         );
     }

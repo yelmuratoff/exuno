@@ -466,6 +466,20 @@ impl<'a> Resolver<'a> {
                 "{slug} inlines a skill index into AGENTS.md. Edit {}/ instead.",
                 self.sources.skills
             )),
+            "skills" | "commands"
+                if !tool
+                    .filter(&format!("targets.{key}.frontmatter_keys"))
+                    .is_empty() =>
+            {
+                let source = if key == "skills" {
+                    &self.sources.skills
+                } else {
+                    &self.sources.commands
+                };
+                Some(format!(
+                    "{slug} filters frontmatter keys on sync. Adopting would drop the filtered keys from the source. Edit {source}/ instead."
+                ))
+            }
             "commands" if value("targets.commands.format") == "toml" => Some(format!(
                 "{slug} serializes commands as TOML. Conversion is not reversible — edit {}/ instead.",
                 self.sources.commands

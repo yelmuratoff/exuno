@@ -49,9 +49,14 @@ fn manifest_is_created_on_first_sync() {
 fn manifest_contains_tab_separated_path_hash_entries() {
     let project = synced_project();
     let manifest = project.read(".ai/.sync-manifest");
-    let first_line = manifest.lines().next().unwrap();
-    assert!(first_line.contains('\t'));
-    let hash = first_line.rsplit('\t').next().unwrap();
+    let mut lines = manifest.lines();
+    assert_eq!(
+        lines.next(),
+        Some(format!("# exuno {}", env!("CARGO_PKG_VERSION")).as_str())
+    );
+    let first_entry = lines.next().unwrap();
+    assert!(first_entry.contains('\t'));
+    let hash = first_entry.rsplit('\t').next().unwrap();
     assert_eq!(hash.len(), 64);
 }
 
@@ -385,6 +390,84 @@ fn if_stale_treats_a_missing_manifest_as_stale_and_re_syncs() {
         .success()
         .stderr(predicate::str::contains("[DONE] Synced "));
     assert!(project.exists(".ai/.sync-manifest"));
+}
+
+fn version_header() -> String {
+    format!("# exuno {}\n", env!("CARGO_PKG_VERSION"))
+}
+
+/// The manifest rewritten by `edit`, its mtime pinned in the future so only
+/// the version can make the next `--if-stale` run stale.
+fn rewrite_fresh_manifest(project: &Project, edit: &dyn Fn(String) -> String) {
+    let text = project.read(".ai/.sync-manifest");
+    project.write(".ai/.sync-manifest", &edit(text));
+    set_mtime(&project.join(".ai/.sync-manifest"), future_mtime());
+}
+
+#[test]
+fn if_stale_resyncs_after_an_engine_version_change() {
+    let project = synced_project();
+    rewrite_fresh_manifest(&project, &|text| {
+        text.replacen(&version_header(), "# exuno 0.0.1\n", 1)
+    });
+    assert!(
+        project
+            .read(".ai/.sync-manifest")
+            .starts_with("# exuno 0.0.1\n")
+    );
+    project
+        .exuno()
+        .args(["sync", "--if-stale"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[DONE] Synced "));
+    assert!(
+        project
+            .read(".ai/.sync-manifest")
+            .starts_with(&version_header())
+    );
+}
+
+#[test]
+fn if_stale_skips_when_version_and_inputs_are_unchanged() {
+    let project = synced_project();
+    assert!(
+        project
+            .read(".ai/.sync-manifest")
+            .starts_with(&version_header())
+    );
+    rewrite_fresh_manifest(&project, &|text| text);
+    let before = project.read(".ai/.sync-manifest");
+    project
+        .exuno()
+        .args(["sync", "--if-stale"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[DONE] Synced ").not());
+    assert_eq!(project.read(".ai/.sync-manifest"), before);
+}
+
+#[test]
+fn a_manifest_without_a_version_counts_as_stale() {
+    let project = synced_project();
+    rewrite_fresh_manifest(&project, &|text| {
+        text.lines()
+            .filter(|line| !line.starts_with('#'))
+            .map(|line| format!("{line}\n"))
+            .collect()
+    });
+    assert!(!project.read(".ai/.sync-manifest").starts_with('#'));
+    project
+        .exuno()
+        .args(["sync", "--if-stale"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[DONE] Synced "));
+    assert!(
+        project
+            .read(".ai/.sync-manifest")
+            .starts_with(&version_header())
+    );
 }
 
 // ── First-run baseline ───────────────────────────────────────────────────

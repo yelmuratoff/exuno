@@ -8,8 +8,8 @@ use super::{Env, Run, Selection, Step, Stop, io};
 use crate::engine::overlay::{self, Sources};
 use crate::engine::session::Session;
 use crate::{
-    config::catalog, config::project_config, config::version, config::yaml_subset, engine_version,
-    paths, transaction::backup, transaction::lock::Lock,
+    config::catalog, config::profiles, config::project_config, config::version,
+    config::yaml_subset, engine_version, paths, transaction::backup, transaction::lock::Lock,
 };
 
 /// `_load_run_config` and `_resolve_sources`.
@@ -216,11 +216,21 @@ fn source_paths(s: &Session, config: Option<&str>) -> Sources {
 }
 
 /// Every `source.*` outside the project registered as an explicit root; one
-/// that is refused or untrusted stops the run.
+/// that is refused or untrusted stops the run. The source directories inside
+/// the project, the tools directory, and profile overlays are registered as
+/// places no output link may lead.
 fn register_explicit_sources(s: &mut Session, env: &Env, config: Option<&str>) -> Step {
     s.paths
         .trust_external_roots(env.external_source_roots.as_deref());
     let mut explicit = Vec::new();
+    let mut unwritable = vec![tools_dir(s, config)];
+    if let Some(text) = config {
+        unwritable.extend(
+            profiles::names(text)
+                .iter()
+                .map(|name| s.paths.absolute(&profiles::overlay_dir(text, name))),
+        );
+    }
     for key in [
         "agents",
         "rules",
@@ -236,6 +246,9 @@ fn register_explicit_sources(s: &mut Session, env: &Env, config: Option<&str>) -
             continue;
         }
         match s.paths.classify_explicit_source(&raw) {
+            paths::ExplicitSource::Inside if key != "agents" => {
+                unwritable.push(s.paths.absolute(&raw));
+            }
             paths::ExplicitSource::Inside => {}
             paths::ExplicitSource::Outside(canonical) => explicit.push(canonical),
             paths::ExplicitSource::Refused(canonical) => {
@@ -253,6 +266,12 @@ fn register_explicit_sources(s: &mut Session, env: &Env, config: Option<&str>) -
         }
     }
     s.paths.register_explicit_roots(explicit);
+    let unwritable = unwritable
+        .iter()
+        .filter_map(|abs| s.paths.canonicalize_with_existing_ancestor(abs))
+        .collect();
+    s.paths.register_unwritable_roots(unwritable);
+    s.ws.guard_writes(&s.paths);
     Ok(())
 }
 

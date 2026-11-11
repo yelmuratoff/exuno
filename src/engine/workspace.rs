@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::paths::{self, ENGINE_ROOT};
+use crate::paths::{self, ENGINE_ROOT, Paths};
 use crate::{Error, config::catalog};
 
 #[derive(Clone, Debug)]
@@ -33,6 +33,7 @@ pub struct Workspace {
     root: String,
     on_disk: bool,
     entries: BTreeMap<String, Entry>,
+    guard: Option<Paths>,
 }
 
 impl Workspace {
@@ -42,6 +43,7 @@ impl Workspace {
             root: root.to_string(),
             on_disk: false,
             entries: BTreeMap::new(),
+            guard: None,
         };
         ws.mkdir_entries(root);
         for (rel, bytes) in catalog::engine_files() {
@@ -61,6 +63,39 @@ impl Workspace {
 
     pub fn root(&self) -> &str {
         &self.root
+    }
+
+    /// Every later disk write, copy, or removal is refused when a symlink on
+    /// its way leaves the roots `paths` treats as safe.
+    pub fn guard_writes(&mut self, paths: &Paths) {
+        self.guard = Some(paths.clone());
+    }
+
+    fn refuse_escape(&self, path: &str) -> Result<(), Error> {
+        self.refuse_unsafe(path, "write", true)
+    }
+
+    /// Removing a link deletes the link alone, so only the links above `path`
+    /// matter for a removal.
+    fn refuse_unsafe(
+        &self,
+        path: &str,
+        action: &'static str,
+        include_last: bool,
+    ) -> Result<(), Error> {
+        let Some(guard) = self.guard.as_ref().filter(|_| self.writes_disk(path)) else {
+            return Ok(());
+        };
+        let Some(reason) = guard.unsafe_output(path, include_last) else {
+            return Ok(());
+        };
+        Err(Error::UnsafeOutput {
+            action,
+            path: guard
+                .to_repo_relative(path)
+                .unwrap_or_else(|| path.to_string()),
+            reason,
+        })
     }
 
     fn indexed(&self, path: &str) -> bool {
@@ -85,17 +120,27 @@ impl Workspace {
             return Ok(());
         }
         self.mkdir_entries(at);
-        self.seed_dir(at, disk, "", skip)
+        let entries = std::fs::read_dir(disk).map_err(|e| Error::io(disk, e))?;
+        let mut walked = Vec::new();
+        self.seed_dir(at, disk, "", skip, entries, &mut walked)
     }
 
+    /// A folder below the seeded root that cannot be read, or that a link
+    /// leads back to on the walk's own path, is seeded empty, as the disk
+    /// listing of [`Self::list`] and [`Self::files_under`] sees it.
     fn seed_dir(
         &mut self,
         at: &str,
         disk: &Path,
         rel: &str,
         skip: &dyn Fn(&str) -> bool,
+        entries: std::fs::ReadDir,
+        walked: &mut Vec<std::path::PathBuf>,
     ) -> Result<(), Error> {
-        let entries = std::fs::read_dir(disk).map_err(|e| Error::io(disk, e))?;
+        let canonical = std::fs::canonicalize(disk).ok();
+        if let Some(canonical) = &canonical {
+            walked.push(canonical.clone());
+        }
         for entry in entries {
             let entry = entry.map_err(|e| Error::io(disk, e))?;
             let name = entry.file_name().disk_text();
@@ -114,11 +159,29 @@ impl Workspace {
             };
             if meta.is_dir() {
                 self.entries.insert(child_at.clone(), Entry::Dir);
-                self.seed_dir(&child_at, &child_disk, &child_rel, skip)?;
+                let cycle = std::fs::canonicalize(&child_disk)
+                    .is_ok_and(|canonical| walked.contains(&canonical));
+                if cycle {
+                    continue;
+                }
+                let Ok(child_entries) = std::fs::read_dir(&child_disk) else {
+                    continue;
+                };
+                self.seed_dir(
+                    &child_at,
+                    &child_disk,
+                    &child_rel,
+                    skip,
+                    child_entries,
+                    walked,
+                )?;
             } else {
                 self.entries
                     .insert(child_at, Entry::File(Content::Disk(child_disk)));
             }
+        }
+        if canonical.is_some() {
+            walked.pop();
         }
         Ok(())
     }
@@ -143,6 +206,7 @@ impl Workspace {
 
     /// `mkdir -p`.
     pub fn create_dir_all(&mut self, path: &str) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return std::fs::create_dir_all(path).map_err(|e| Error::io(path, e));
         }
@@ -230,19 +294,52 @@ impl Workspace {
     /// Regular files below `dir` at any depth, as `find "$dir" -type f` lists them.
     pub fn files_under(&self, dir: &str) -> Vec<String> {
         let mut found = Vec::new();
+        self.collect_files(dir, &mut Vec::new(), &mut found, &mut Vec::new());
+        found
+    }
+
+    /// Directories below `dir` at any depth, parents before their children.
+    pub fn dirs_under(&self, dir: &str) -> Vec<String> {
+        let mut dirs = Vec::new();
+        self.collect_files(dir, &mut Vec::new(), &mut Vec::new(), &mut dirs);
+        dirs
+    }
+
+    /// A link back to a directory on the walk's own path is not descended,
+    /// so a cycle of links ends.
+    fn collect_files(
+        &self,
+        dir: &str,
+        walked: &mut Vec<std::path::PathBuf>,
+        found: &mut Vec<String>,
+        dirs: &mut Vec<String>,
+    ) {
+        let canonical = (!self.indexed(dir))
+            .then(|| std::fs::canonicalize(dir).ok())
+            .flatten();
+        if let Some(canonical) = &canonical {
+            if walked.contains(canonical) {
+                return;
+            }
+            walked.push(canonical.clone());
+        }
         for name in self.list(dir) {
             let child = format!("{dir}/{name}");
             if self.is_dir(&child) {
-                found.extend(self.files_under(&child));
+                dirs.push(child.clone());
+                self.collect_files(&child, walked, found, dirs);
             } else if self.is_file(&child) {
                 found.push(child);
             }
         }
-        found
+        if canonical.is_some() {
+            walked.pop();
+        }
     }
 
     /// `>`: the parent directory must exist.
     pub fn write(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return std::fs::write(path, bytes).map_err(|e| Error::io(path, e));
         }
@@ -255,6 +352,7 @@ impl Workspace {
     }
 
     pub fn replace_atomically(&mut self, path: &str, bytes: Vec<u8>) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return crate::engine::staging::write_beside(Path::new(path), &bytes);
         }
@@ -263,6 +361,7 @@ impl Workspace {
 
     /// `>>`: creates the file when missing, the parent directory must exist.
     pub fn append(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             return std::fs::OpenOptions::new()
                 .create(true)
@@ -282,12 +381,13 @@ impl Workspace {
 
     /// `rm -rf`.
     pub fn remove(&mut self, path: &str) -> Result<(), Error> {
+        self.refuse_unsafe(path, "remove", false)?;
         if self.writes_disk(path) {
             let removed = match std::fs::symlink_metadata(path) {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(e) => Err(e),
                 Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
-                Ok(_) => std::fs::remove_file(path),
+                Ok(meta) => remove_file(path, meta),
             };
             return removed.map_err(|e| Error::io(path, e));
         }
@@ -308,6 +408,7 @@ impl Workspace {
     /// `chmod +x` as the default umask applies it; the in-memory tree has no modes.
     #[cfg(unix)]
     pub fn make_executable(&mut self, path: &str) -> Result<(), Error> {
+        self.refuse_escape(path)?;
         if self.writes_disk(path) {
             use std::os::unix::fs::PermissionsExt;
             let mut permissions = std::fs::metadata(path)
@@ -324,9 +425,38 @@ impl Workspace {
         Ok(())
     }
 
+    /// Whether `a` and `b` name the same file on disk, through a link or not.
+    pub fn same_disk_file(&self, a: &str, b: &str) -> bool {
+        if self.indexed(a) || self.indexed(b) {
+            return false;
+        }
+        match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
+    }
+
     /// `cp -r src dst` onto a missing `dst`: a file, or a whole tree with its
-    /// empty directories.
+    /// empty directories. A link back to a directory on the walk's own path
+    /// is copied as an empty directory.
     pub fn copy(&mut self, src: &str, dst: &str) -> Result<(), Error> {
+        self.copy_walk(src, dst, &mut Vec::new())
+    }
+
+    fn copy_walk(
+        &mut self,
+        src: &str,
+        dst: &str,
+        walked: &mut Vec<std::path::PathBuf>,
+    ) -> Result<(), Error> {
+        self.refuse_escape(dst)?;
+        if self.is_file(src) && self.same_disk_file(src, dst) {
+            return Err(Error::UnsafeOutput {
+                action: "write",
+                path: dst.to_string(),
+                reason: format!("it is the source file {src} itself"),
+            });
+        }
         if self.is_file(src) {
             let content = self.content_of(src)?;
             if self.writes_disk(dst) {
@@ -347,8 +477,20 @@ impl Workspace {
             return Err(not_found(src));
         }
         self.create_dir_all(dst)?;
+        let canonical = (!self.indexed(src))
+            .then(|| std::fs::canonicalize(src).ok())
+            .flatten();
+        if let Some(canonical) = &canonical {
+            if walked.contains(canonical) {
+                return Ok(());
+            }
+            walked.push(canonical.clone());
+        }
         for name in self.list(src) {
-            self.copy(&format!("{src}/{name}"), &format!("{dst}/{name}"))?;
+            self.copy_walk(&format!("{src}/{name}"), &format!("{dst}/{name}"), walked)?;
+        }
+        if canonical.is_some() {
+            walked.pop();
         }
         Ok(())
     }
@@ -359,6 +501,20 @@ impl Workspace {
         }
         self.content(path).cloned().ok_or_else(|| not_found(path))
     }
+}
+
+/// Windows refuses to delete a read-only file, which `rm -f` removes.
+fn remove_file(path: &str, meta: std::fs::Metadata) -> std::io::Result<()> {
+    #[cfg(windows)]
+    if meta.permissions().readonly() {
+        let mut writable = meta.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        writable.set_readonly(false);
+        std::fs::set_permissions(path, writable)?;
+    }
+    #[cfg(not(windows))]
+    let _ = meta;
+    std::fs::remove_file(path)
 }
 
 fn not_found(path: &str) -> Error {
@@ -441,6 +597,33 @@ mod tests {
             .unwrap();
         assert_eq!(ws.read("/proj/.ai/src/rules/core.md").unwrap(), b"c");
         assert!(!ws.exists("/proj/.ai/backups"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_onto_its_own_source_through_a_link_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap().disk_text();
+        std::fs::create_dir_all(dir.path().join("vendor")).unwrap();
+        std::fs::write(dir.path().join("vendor/SKILL.md"), "s").unwrap();
+        std::os::unix::fs::symlink("vendor/SKILL.md", dir.path().join("SKILL.md")).unwrap();
+        let mut ws = Workspace::on_disk(&root);
+        let (src, dst) = (
+            format!("{root}/vendor/SKILL.md"),
+            format!("{root}/SKILL.md"),
+        );
+        assert!(ws.same_disk_file(&src, &dst));
+        assert!(!ws.same_disk_file(&src, &format!("{root}/vendor")));
+        assert!(
+            ws.copy(&src, &dst)
+                .unwrap_err()
+                .to_string()
+                .ends_with("vendor/SKILL.md itself")
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("vendor/SKILL.md")).unwrap(),
+            b"s"
+        );
     }
 
     #[cfg(unix)]

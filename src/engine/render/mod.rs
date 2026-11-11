@@ -21,7 +21,7 @@ use crate::Error;
 use crate::engine::session::Session;
 use crate::{config::profiles, engine::overlay};
 
-pub const TARGET_KEYS: [&str; 9] = [
+pub const TARGET_KEYS: [&str; 10] = [
     "agents",
     "rules",
     "skills",
@@ -31,6 +31,7 @@ pub const TARGET_KEYS: [&str; 9] = [
     "mcp",
     "hooks",
     "guard",
+    "manifests",
 ];
 
 /// A render stopped the way `sync.sh` exits: the status after its log lines.
@@ -117,11 +118,27 @@ fn io(s: &mut Session, error: Error) -> Stop {
 /// What `check` needs: `sync.sh --force` without its transaction and without
 /// `shared:`, which `lib/check.sh` merged into the workspace beforehand.
 pub fn render(s: &mut Session, env: &Env) -> Result<Run, Stop> {
-    let mut run = prepare(s, env, Selection::default())?;
+    render_selected(s, env, Selection::default())
+}
+
+/// [`render`] limited to the tools `selection` picks, as a sync with
+/// `--only`, `--skip`, or `--profile` writes them.
+pub fn render_selected(s: &mut Session, env: &Env, selection: Selection) -> Result<Run, Stop> {
+    let mut run = prepare(s, env, selection)?;
     refuse_configless_cleanup(s, &run)?;
     refuse_escaping_source_links(s, &run)?;
     check_version_pin(s, &run)?;
     banner(s);
+    setup_overlays(s, &mut run, false)?;
+    build_catalog(s, &mut run);
+    run_passes(s, &mut run)?;
+    Ok(run)
+}
+
+/// [`render_selected`] without the refusals a sync has already passed on the
+/// disk before it renders in memory to check what it would write.
+pub fn render_for_preflight(s: &mut Session, env: &Env, selection: Selection) -> Result<Run, Stop> {
+    let mut run = prepare(s, env, selection)?;
     setup_overlays(s, &mut run, false)?;
     build_catalog(s, &mut run);
     run_passes(s, &mut run)?;

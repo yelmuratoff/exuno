@@ -68,7 +68,7 @@ A profile produces a second, self-contained config-home directory for a tool —
 
 **Create one — `exuno profile add <name>`.** Scaffolds, per enabled tool (or `--tools a,b`):
 
-- a thin variant tool `.ai/src/tools/<tool>-<name>.yaml` — `base: <tool>` (inherits every unset field), `profile_home: ".<tool>-<name>"`, and config-home `targets.*.dest` (everything inside the home dir);
+- a thin variant tool `.ai/src/tools/<tool>-<name>.yaml` — `base: <tool>` (inherits every unset field, from the project's `.ai/src/tools/<tool>.yaml` first and then the shipped config; never `name`, `base`, `profile_home`, `enabled`, `post_sync`, or a target's `dest`/`legacy_dest`/`source`/`user_dirs`/`ownership`), `profile_home: ".<tool>-<name>"`, and config-home `targets.*.dest` (everything inside the home dir);
 - an overlay dir `.ai/profiles/<name>/src/` — drop profile-only `rules/`, `skills/`, `commands/`, `agents/`, or `AGENTS.md` here (profile wins on path collisions with base);
 - a `profiles:` entry in `exuno.yaml`:
 

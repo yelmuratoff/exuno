@@ -8,7 +8,7 @@ Before a real `init`, `sync`, `import`, or `mcp use --apply` writes anything, Ex
 
 No backup is made for a dry run, a `sync --if-stale` that finds nothing to do, or a sync that stopped because of hand edits.
 
-Only one run can change a project at a time. A run takes a project lock before its backup, and a second run started meanwhile is refused. If a run is killed partway through, the next run finds its unfinished record and restores the backup before doing anything else.
+Only one run can change a project at a time. A run takes a project lock before its backup, and a second run started meanwhile is refused. If a run is killed partway through, the next run finds its unfinished record and restores the backup before doing anything else. `sync` and the commands that edit the config then stop with `changed nothing; run it again`, because they read the project before the restore.
 
 A trusted `post_sync` command can run anything. Changes it makes outside the tool's targets aren't covered by the backup.
 

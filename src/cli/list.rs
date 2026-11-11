@@ -253,7 +253,7 @@ mod tests {
         assert!(
             text.contains("    ○    Zed                    zed           available   ·  ·  S  \n")
         );
-        assert!(text.contains("\n  0 of 15 enabled\n\n  Enable a tool:     exuno enable <slug>\n"));
+        assert!(text.contains("\n  0 of 16 enabled\n\n  Enable a tool:     exuno enable <slug>\n"));
         assert!(text.contains("  Add MCP server:    exuno add mcp <server> --command …\n"));
         assert!(text.ends_with("  Sync outputs:      exuno sync\n\n"));
     }
@@ -286,7 +286,7 @@ mod tests {
         assert!(
             text.contains("    ○    Kimi Code              kimi          available   ·  M* ·  \n")
         );
-        assert!(text.contains("\n  1 of 15 enabled, 1 tool override(s), 3 payload override(s)\n"));
+        assert!(text.contains("\n  1 of 16 enabled, 1 tool override(s), 3 payload override(s)\n"));
         assert!(text.contains("  Shared MCP: .ai/src/mcp.json (+ 1 per-tool override)\n"));
         assert!(!text.contains("Enable a tool:"));
         assert!(!text.contains("Add MCP server:"));

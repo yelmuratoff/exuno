@@ -28,7 +28,8 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(ws: Workspace, paths: Paths) -> Self {
+    pub fn new(mut ws: Workspace, paths: Paths) -> Self {
+        ws.guard_writes(&paths);
         Self {
             ws,
             tools_dir: format!("{}/.ai/src/tools", paths.root),
@@ -64,25 +65,27 @@ impl Session {
         self.manifest = Some(paths);
     }
 
-    /// `sync_may_prune`: outside a manifest-aware run, or under `--force`,
-    /// every extraneous entry may go; otherwise a file the manifest records, or
-    /// a directory it records a file below.
+    /// `sync_may_prune`: a project file the manifest records, or a directory it records
+    /// a file below. Without a manifest nothing may go; `--force` lets every
+    /// extraneous entry in the project go, as its `Kept … --force to prune`
+    /// hint promises.
     pub fn may_prune(&self, abs: &str) -> bool {
-        let Some(manifest) = &self.manifest else {
-            return true;
+        let Some(rel) = self.paths.to_repo_relative(abs) else {
+            return false;
         };
         if self.force {
             return true;
         }
-        self.paths.to_repo_relative(abs).is_none_or(|rel| {
-            let below = format!("{rel}/");
-            manifest.contains(&rel)
-                || (self.ws.is_dir(abs)
-                    && manifest
-                        .range(below.clone()..)
-                        .next()
-                        .is_some_and(|key| key.starts_with(&below)))
-        })
+        let Some(manifest) = &self.manifest else {
+            return false;
+        };
+        let below = format!("{rel}/");
+        manifest.contains(&rel)
+            || (self.ws.is_dir(abs)
+                && manifest
+                    .range(below.clone()..)
+                    .next()
+                    .is_some_and(|key| key.starts_with(&below)))
     }
 
     /// Whether the previous run's manifest records the file `abs`; false
@@ -138,13 +141,6 @@ impl Session {
     pub fn record_write(&mut self, abs: &str) {
         if let Some(rel) = self.paths.to_repo_relative(abs) {
             self.touched.insert(rel);
-        }
-    }
-
-    /// `manifest_record_tree`.
-    pub fn record_tree(&mut self, dir: &str) {
-        for file in self.ws.files_under(dir) {
-            self.record_write(&file);
         }
     }
 
@@ -211,7 +207,8 @@ mod tests {
         let mut s = test_session();
         s.ws.create_dir_all("/proj/.claude/skills/old").unwrap();
         s.ws.create_dir_all("/proj/.claude/skills/mine").unwrap();
-        assert!(s.may_prune("/proj/.claude/rules/mine.md"));
+        assert!(!s.may_prune("/proj/.claude/rules/mine.md"));
+        assert!(!s.may_prune("/proj/.claude/skills/old"));
         s.activate_manifest(BTreeSet::from([
             ".claude/rules/old.md".to_string(),
             ".claude/skills/old/SKILL.md".to_string(),
@@ -221,9 +218,10 @@ mod tests {
         assert!(s.may_prune("/proj/.claude/skills/old"));
         assert!(!s.may_prune("/proj/.claude/skills/mine"));
         assert!(!s.may_prune("/proj/.claude/skills/ol"));
-        assert!(s.may_prune("/elsewhere/mine.md"));
+        assert!(!s.may_prune("/elsewhere/mine.md"));
         s.force = true;
         assert!(s.may_prune("/proj/.claude/rules/mine.md"));
+        assert!(!s.may_prune("/elsewhere/mine.md"));
     }
 
     #[test]

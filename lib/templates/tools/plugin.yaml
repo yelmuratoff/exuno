@@ -1,0 +1,31 @@
+name: "Agent plugin (claude.ai, ChatGPT, Codex)"
+enabled: false
+# A config-home variant would move the plugin folder while the marketplace
+# indexes still point at ./plugin.
+profile_supported: false
+
+# claude.ai, ChatGPT and Codex pull this plugin from the repository, so every
+# output stays out of the managed .gitignore block and is committed.
+targets:
+  skills:
+    dest: "plugin/skills"
+    gitignore: false
+    # claude.ai rejects a skill whose frontmatter carries any other key.
+    frontmatter_keys: [name, description, license, compatibility, metadata, allowed-tools]
+
+  commands:
+    dest: "plugin/commands"
+    gitignore: false
+    frontmatter_keys: [description]
+
+  subagents:
+    dest: "plugin/agents"
+    gitignore: false
+
+  manifests:
+    dest: "."
+    gitignore: false
+    vars:
+      name: "my-skills"
+      description: "Skills, commands and agents synced by Exuno"
+      owner: "exuno"

@@ -382,11 +382,28 @@ fn copy_preserving(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     std::fs::copy(src, dst)?;
-    // Windows refuses `set_modified` on a read-only handle.
-    OpenOptions::new()
-        .write(true)
-        .open(dst)?
-        .set_modified(meta.modified()?)
+    #[cfg(unix)]
+    return std::fs::File::open(dst)?.set_modified(meta.modified()?);
+    // Windows refuses `set_modified` on a read-only handle, and a read-only
+    // file opens only for reading.
+    #[cfg(windows)]
+    {
+        let readonly = meta.permissions().readonly();
+        if readonly {
+            let mut writable = meta.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
+            writable.set_readonly(false);
+            std::fs::set_permissions(dst, writable)?;
+        }
+        OpenOptions::new()
+            .write(true)
+            .open(dst)?
+            .set_modified(meta.modified()?)?;
+        if readonly {
+            std::fs::set_permissions(dst, meta.permissions())?;
+        }
+        Ok(())
+    }
 }
 
 /// `backup_create`: the snapshot's path.
