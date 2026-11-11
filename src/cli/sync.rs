@@ -667,10 +667,12 @@ fn lock_project(s: &mut Session, run: &Run, env: &Env, tx: &mut Transaction) -> 
     }
     let (lock, recovered) =
         Lock::acquire(&s.paths.root, "sync", run.retention).map_err(|e| refuse_backup(s, e))?;
+    tx.lock = Some(lock);
     if let Some(recovered) = recovered {
         s.log.warning(&recovered.message());
+        s.log.error("exuno sync changed nothing; run it again.");
+        return Err(Stop(1));
     }
-    tx.lock = Some(lock);
     Ok(())
 }
 

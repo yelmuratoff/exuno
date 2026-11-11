@@ -1656,39 +1656,76 @@ fn a_refused_overwrite_writes_nothing_without_a_backup() {
     assert!(!project.exists("AGENTS.md"));
 }
 
-#[test]
-fn sync_restores_an_interrupted_run_before_it_checks_for_manual_edits() {
+/// Leaves `project` as an `exuno <operation>` killed after it wrote `text` to
+/// `rel`: the snapshot of `rel` is pending and no lock holds it.
+fn interrupt(project: &Project, operation: &str, rel: &str, text: &str) {
+    use exuno::paths::DiskText;
     use exuno::transaction::backup::{self, Retention};
     use exuno::transaction::lock::Lock;
-    let project = Project::seeded(&[]);
-    project.enable_tools(&["cursor"]);
-    project.exuno().arg("sync").assert().success();
-    let generated = project.read(".cursor/rules/core.mdc");
-    let root = std::fs::canonicalize(project.path())
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    let (lock, _) = Lock::acquire(&root, "sync", Retention::Bounded).unwrap();
+    let root = std::fs::canonicalize(project.path()).unwrap().disk_text();
+    let (lock, _) = Lock::acquire(&root, operation, Retention::Bounded).unwrap();
     let snapshot = backup::create(
         &root,
-        "sync",
-        &[format!("{root}/.cursor/rules/core.mdc")],
+        operation,
+        &[format!("{root}/{rel}")],
         Retention::Bounded,
     )
     .unwrap();
     lock.begin(&snapshot).unwrap();
-    project.write(".cursor/rules/core.mdc", "half-written\n");
+    project.write(rel, text);
     drop(lock);
+}
+
+#[test]
+fn sync_restores_an_interrupted_run_before_it_checks_for_manual_edits() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["cursor"]);
+    project.exuno().arg("sync").assert().success();
+    let generated = project.read(".cursor/rules/core.mdc");
+    interrupt(&project, "sync", ".cursor/rules/core.mdc", "half-written\n");
 
     project
         .exuno()
         .arg("sync")
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains(
             "Restored the state from before an interrupted exuno sync",
-        ));
+        ))
+        .stderr(predicate::str::contains(
+            "[ERROR] exuno sync changed nothing; run it again.",
+        ))
+        .stderr(predicate::str::contains("Manual edits").not());
     assert_eq!(project.read(".cursor/rules/core.mdc"), generated);
+    project.exuno().arg("sync").assert().success();
+}
+
+#[test]
+fn sync_stops_after_restoring_an_interrupted_config_edit() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.exuno().arg("sync").assert().success();
+    let config = project.read(".ai/exuno.yaml");
+    project.enable_tools(&["cursor"]);
+    let enabled = project.read(".ai/exuno.yaml");
+    project.write(".ai/exuno.yaml", &config);
+    interrupt(&project, "enable", ".ai/exuno.yaml", &enabled);
+
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Restored the state from before an interrupted exuno enable",
+        ))
+        .stderr(predicate::str::contains(
+            "[ERROR] exuno sync changed nothing; run it again.",
+        ));
+    assert_eq!(project.read(".ai/exuno.yaml"), config);
+    assert!(!project.exists(".cursor"));
+    project.exuno().arg("sync").assert().success();
+    assert!(!project.exists(".cursor"));
 }
 
 #[test]

@@ -377,10 +377,13 @@ fn sync_restores_a_run_killed_mid_write_before_it_starts() {
         .exuno()
         .args(["sync", "--only", "claude"])
         .assert()
-        .success()
+        .failure()
         .stderr(predicate::str::contains(format!(
             "Restored the state from before an interrupted exuno sync (backup {killed}); undo with exuno rollback "
-        )));
+        )))
+        .stderr(predicate::str::contains(
+            "exuno sync changed nothing; run it again.",
+        ));
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
     let undo = stderr
         .split("undo with exuno rollback ")
@@ -393,6 +396,12 @@ fn sync_restores_a_run_killed_mid_write_before_it_starts() {
     );
     assert!(project.exists(&format!(".ai/backups/{killed}/after.tsv")));
     assert!(!project.exists(".ai/backups/.pending"));
+    assert_eq!(project.read("CLAUDE.md"), "before-sync\n");
+    project
+        .exuno()
+        .args(["sync", "--only", "claude"])
+        .assert()
+        .success();
 }
 
 #[test]
