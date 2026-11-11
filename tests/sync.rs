@@ -520,6 +520,26 @@ fn sync_zed_rules_gets_commands_inline_section_merge_to_file_fallback() {
 
 #[cfg(unix)]
 #[test]
+fn a_copied_file_that_cannot_be_removed_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["amazonq"]);
+    project.exuno().arg("sync").assert().success();
+    let context = project.read(".amazonq/rules/00-context.md");
+    project.append(".ai/src/AGENTS.md", "\nOne more line.\n");
+    common::chmod(&project.join(".amazonq/rules"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".amazonq/rules"), 0o755);
+    synced.failure().stderr(predicate::str::contains(
+        ".amazonq/rules/00-context.md: Permission denied",
+    ));
+    assert_eq!(project.read(".amazonq/rules/00-context.md"), context);
+}
+
+#[cfg(unix)]
+#[test]
 fn a_disabled_tool_output_that_cannot_be_removed_stops_the_sync() {
     if !common::unreadable_dirs_are_possible() {
         return;
