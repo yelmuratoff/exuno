@@ -473,10 +473,13 @@ pub fn sync_commands_as_skills(
         if s.dry_run {
             s.log
                 .step(&format!("Would remove obsolete generated skill: {name}"));
-        } else {
-            s.ws.remove(&format!("{dest_dir}/{name}"))?;
+        } else if file_ops::remove_obsolete(s, &path)? {
             s.log
                 .step(&format!("Removed obsolete generated skill: {name}"));
+        } else {
+            s.log.step(&format!(
+                "Left {dest_disp}/{name} in place: it holds files sync did not write"
+            ));
         }
     }
     let suffix = if s.dry_run { " (dry-run)" } else { "" };

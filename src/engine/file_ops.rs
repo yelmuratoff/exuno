@@ -102,13 +102,13 @@ pub fn sync_skills_dir(
         if s.dry_run {
             s.log
                 .step(&format!("Would remove: {dest_disp}/{name} (extraneous)"));
-        } else {
-            if s.ws.is_dir(&item) && !s.force {
-                remove_recorded(s, &item)?;
-            } else {
-                s.ws.remove(&item)?;
-            }
+        } else if remove_obsolete(s, &item)? {
             s.log.step(&format!("Removed: {dest_disp}/{name}"));
+        } else {
+            s.log.step(&format!(
+                "Left {dest_disp}/{name} in place: it holds files sync did not write"
+            ));
+            continue;
         }
         cleaned += 1;
     }
@@ -207,6 +207,18 @@ fn clear_the_way(s: &mut Session, path: &str) -> Result<(), Error> {
         path: s.display(path),
         reason: format!("{kind} sync did not write is in the way"),
     })
+}
+
+/// Removes an obsolete entry sync may prune: a file whole, a folder whole
+/// under `--force`, otherwise only its recorded files and the folders that
+/// leaves empty. True when the entry is gone.
+pub fn remove_obsolete(s: &mut Session, item: &str) -> Result<bool, Error> {
+    if s.ws.is_dir(item) && !s.force {
+        remove_recorded(s, item)?;
+    } else {
+        s.ws.remove(item)?;
+    }
+    Ok(!s.ws.exists(item))
 }
 
 /// Removes `path`, or every file below it, that the previous manifest records

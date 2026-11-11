@@ -2052,7 +2052,15 @@ fn an_obsolete_skill_folder_keeps_an_unrecorded_cache_file() {
     project.exuno().arg("sync").assert().success();
     project.write(".claude/skills/demo/__pycache__/x.pyc", "cache");
     std::fs::remove_dir_all(project.join(".ai/src/skills/demo")).unwrap();
-    project.exuno().arg("sync").assert().success();
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Left .claude/skills/demo in place: it holds files sync did not write",
+        ))
+        .stderr(predicate::str::contains("Removed: .claude/skills/demo").not());
     assert!(!project.exists(".claude/skills/demo/SKILL.md"));
     assert_eq!(
         project.read(".claude/skills/demo/__pycache__/x.pyc"),
@@ -2166,23 +2174,39 @@ fn an_unreadable_file_sync_would_overwrite_stops_the_sync() {
 #[test]
 fn an_unrecorded_command_skill_folder_is_kept_and_a_recorded_obsolete_one_goes() {
     let project = Project::seeded(&[]);
-    project.write(
-        ".ai/src/commands/old.md",
-        "---\ndescription: Old\n---\nOld.\n",
-    );
+    for name in ["old", "noted"] {
+        project.write(
+            &format!(".ai/src/commands/{name}.md"),
+            "---\ndescription: Old\n---\nOld.\n",
+        );
+    }
     project.enable_tools(&["codex"]);
     project.exuno().arg("sync").assert().success();
     assert!(project.exists(".agents/skills/command-old/SKILL.md"));
     project.write(".agents/skills/command-mine/SKILL.md", "mine\n");
+    project.write(".agents/skills/command-noted/notes.md", "notes\n");
 
-    std::fs::remove_file(project.join(".ai/src/commands/old.md")).unwrap();
+    for name in ["old", "noted"] {
+        std::fs::remove_file(project.join(&format!(".ai/src/commands/{name}.md"))).unwrap();
+    }
     project
         .exuno()
         .arg("sync")
         .assert()
         .success()
-        .stderr(predicate::str::contains("Kept .agents/skills/command-mine"));
+        .stderr(predicate::str::contains("Kept .agents/skills/command-mine"))
+        .stderr(predicate::str::contains(
+            "Removed obsolete generated skill: command-old\n",
+        ))
+        .stderr(predicate::str::contains(
+            "Left .agents/skills/command-noted in place: it holds files sync did not write",
+        ));
     assert!(!project.exists(".agents/skills/command-old"));
+    assert!(!project.exists(".agents/skills/command-noted/SKILL.md"));
+    assert_eq!(
+        project.read(".agents/skills/command-noted/notes.md"),
+        "notes\n"
+    );
     assert_eq!(
         project.read(".agents/skills/command-mine/SKILL.md"),
         "mine\n"
