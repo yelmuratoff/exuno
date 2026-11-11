@@ -67,23 +67,25 @@ impl Session {
 
     /// `sync_may_prune`: a project file the manifest records, or a directory it records
     /// a file below. Without a manifest nothing may go; `--force` lets every
-    /// extraneous entry go, as its `Kept … --force to prune` hint promises.
+    /// extraneous entry in the project go, as its `Kept … --force to prune`
+    /// hint promises.
     pub fn may_prune(&self, abs: &str) -> bool {
+        let Some(rel) = self.paths.to_repo_relative(abs) else {
+            return false;
+        };
         if self.force {
             return true;
         }
         let Some(manifest) = &self.manifest else {
             return false;
         };
-        self.paths.to_repo_relative(abs).is_some_and(|rel| {
-            let below = format!("{rel}/");
-            manifest.contains(&rel)
-                || (self.ws.is_dir(abs)
-                    && manifest
-                        .range(below.clone()..)
-                        .next()
-                        .is_some_and(|key| key.starts_with(&below)))
-        })
+        let below = format!("{rel}/");
+        manifest.contains(&rel)
+            || (self.ws.is_dir(abs)
+                && manifest
+                    .range(below.clone()..)
+                    .next()
+                    .is_some_and(|key| key.starts_with(&below)))
     }
 
     /// Whether the previous run's manifest records the file `abs`; false
@@ -219,6 +221,7 @@ mod tests {
         assert!(!s.may_prune("/elsewhere/mine.md"));
         s.force = true;
         assert!(s.may_prune("/proj/.claude/rules/mine.md"));
+        assert!(!s.may_prune("/elsewhere/mine.md"));
     }
 
     #[test]
