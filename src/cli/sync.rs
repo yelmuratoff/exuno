@@ -693,7 +693,7 @@ fn start_transaction(
         if Path::new(&link).is_symlink()
             && let Ok(target) = std::fs::canonicalize(&link)
         {
-            targets.push(target.to_string_lossy().into_owned());
+            targets.push(crate::paths::from_disk(&target));
         }
         targets.push(link);
     }
