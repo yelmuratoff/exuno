@@ -1617,6 +1617,102 @@ fn an_overwrite_from_a_profile_overlay_outside_ai_is_refused() {
 }
 
 #[test]
+fn an_overwrite_from_a_tool_target_source_outside_ai_is_refused() {
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(
+        ".ai/src/tools/claude.yaml",
+        "targets:\n  rules:\n    source: \"docs/rules\"\n",
+    );
+    project.write("docs/rules/core.md", "# Core\n");
+    project.exuno().arg("sync").assert().success();
+    assert_eq!(project.read(".claude/rules/core.md"), "# Core\n");
+
+    project.write("docs/rules/extra.md", "# Extra\n");
+    project.write(".claude/rules/extra.md", "mine\n");
+    project
+        .exuno()
+        .arg("sync")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Sync would overwrite 1 file(s) it did not write:\n      .claude/rules/extra.md\n",
+        ));
+    assert_eq!(project.read(".claude/rules/extra.md"), "mine\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_folder_in_an_inactive_profile_overlay_does_not_block_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project
+        .exuno()
+        .args(["profile", "add", "hub", "--tools", "claude"])
+        .assert()
+        .success();
+    let config = project
+        .read(".ai/exuno.yaml")
+        .replace("overlay: \".ai/profiles/hub\"", "overlay: \"profiles/hub\"");
+    project.write(".ai/exuno.yaml", &config);
+    project.write("profiles/hub/src/rules/hub.md", "# Hub\n");
+    project.exuno().arg("sync").assert().success();
+    let inactive = config.replace("    active: true\n", "    active: false\n");
+    assert_ne!(inactive, config);
+    project.write(".ai/exuno.yaml", &inactive);
+    common::chmod(&project.join("profiles/hub"), 0o000);
+    let synced = project.exuno().arg("sync").assert();
+    let checked = project.exuno().arg("check").assert();
+    common::chmod(&project.join("profiles/hub"), 0o755);
+    synced.success();
+    checked.success();
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_folder_inside_a_source_does_not_block_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.write(".ai/src/skills/demo/private/notes.md", "secret\n");
+    project.exuno().arg("sync").assert().success();
+    project.write(".ai/src/rules/extra.md", "# Extra\n");
+    common::chmod(&project.join(".ai/src/skills/demo/private"), 0o000);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".ai/src/skills/demo/private"), 0o755);
+    synced
+        .success()
+        .stderr(predicate::str::contains("Could not render").not());
+    assert_eq!(project.read(".claude/rules/extra.md"), "# Extra\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_cycle_in_a_source_skill_ends_the_walk() {
+    // Creating a symlink on Windows needs Developer Mode or admin rights.
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude"]);
+    project.write(".ai/src/skills/demo/SKILL.md", "---\nname: demo\n---\n");
+    project.exuno().arg("sync").assert().success();
+    std::os::unix::fs::symlink("..", project.join(".ai/src/skills/demo/loop")).unwrap();
+    project.exuno().arg("check").assert().success();
+    project
+        .exuno()
+        .args(["sync", "--dry-run"])
+        .assert()
+        .success();
+    project.exuno().arg("sync").assert().success();
+    assert!(project.exists(".claude/skills/demo/SKILL.md"));
+    project.exuno().arg("check").assert().success();
+}
+
+#[test]
 fn a_preflight_that_cannot_render_stops_the_sync() {
     let project = Project::seeded(&[]);
     project.enable_tools(&["claude"]);

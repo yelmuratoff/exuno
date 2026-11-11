@@ -120,17 +120,27 @@ impl Workspace {
             return Ok(());
         }
         self.mkdir_entries(at);
-        self.seed_dir(at, disk, "", skip)
+        let entries = std::fs::read_dir(disk).map_err(|e| Error::io(disk, e))?;
+        let mut walked = Vec::new();
+        self.seed_dir(at, disk, "", skip, entries, &mut walked)
     }
 
+    /// A folder below the seeded root that cannot be read, or that a link
+    /// leads back to on the walk's own path, is seeded empty, as the disk
+    /// listing of [`Self::list`] and [`Self::files_under`] sees it.
     fn seed_dir(
         &mut self,
         at: &str,
         disk: &Path,
         rel: &str,
         skip: &dyn Fn(&str) -> bool,
+        entries: std::fs::ReadDir,
+        walked: &mut Vec<std::path::PathBuf>,
     ) -> Result<(), Error> {
-        let entries = std::fs::read_dir(disk).map_err(|e| Error::io(disk, e))?;
+        let canonical = std::fs::canonicalize(disk).ok();
+        if let Some(canonical) = &canonical {
+            walked.push(canonical.clone());
+        }
         for entry in entries {
             let entry = entry.map_err(|e| Error::io(disk, e))?;
             let name = entry.file_name().disk_text();
@@ -149,11 +159,29 @@ impl Workspace {
             };
             if meta.is_dir() {
                 self.entries.insert(child_at.clone(), Entry::Dir);
-                self.seed_dir(&child_at, &child_disk, &child_rel, skip)?;
+                let cycle = std::fs::canonicalize(&child_disk)
+                    .is_ok_and(|canonical| walked.contains(&canonical));
+                if cycle {
+                    continue;
+                }
+                let Ok(child_entries) = std::fs::read_dir(&child_disk) else {
+                    continue;
+                };
+                self.seed_dir(
+                    &child_at,
+                    &child_disk,
+                    &child_rel,
+                    skip,
+                    child_entries,
+                    walked,
+                )?;
             } else {
                 self.entries
                     .insert(child_at, Entry::File(Content::Disk(child_disk)));
             }
+        }
+        if canonical.is_some() {
+            walked.pop();
         }
         Ok(())
     }
@@ -266,15 +294,38 @@ impl Workspace {
     /// Regular files below `dir` at any depth, as `find "$dir" -type f` lists them.
     pub fn files_under(&self, dir: &str) -> Vec<String> {
         let mut found = Vec::new();
+        self.collect_files(dir, &mut Vec::new(), &mut found);
+        found
+    }
+
+    /// A link back to a directory on the walk's own path is not descended,
+    /// so a cycle of links ends.
+    fn collect_files(
+        &self,
+        dir: &str,
+        walked: &mut Vec<std::path::PathBuf>,
+        found: &mut Vec<String>,
+    ) {
+        let canonical = (!self.indexed(dir))
+            .then(|| std::fs::canonicalize(dir).ok())
+            .flatten();
+        if let Some(canonical) = &canonical {
+            if walked.contains(canonical) {
+                return;
+            }
+            walked.push(canonical.clone());
+        }
         for name in self.list(dir) {
             let child = format!("{dir}/{name}");
             if self.is_dir(&child) {
-                found.extend(self.files_under(&child));
+                self.collect_files(&child, walked, found);
             } else if self.is_file(&child) {
                 found.push(child);
             }
         }
-        found
+        if canonical.is_some() {
+            walked.pop();
+        }
     }
 
     /// `>`: the parent directory must exist.
@@ -377,8 +428,18 @@ impl Workspace {
     }
 
     /// `cp -r src dst` onto a missing `dst`: a file, or a whole tree with its
-    /// empty directories.
+    /// empty directories. A link back to a directory on the walk's own path
+    /// is copied as an empty directory.
     pub fn copy(&mut self, src: &str, dst: &str) -> Result<(), Error> {
+        self.copy_walk(src, dst, &mut Vec::new())
+    }
+
+    fn copy_walk(
+        &mut self,
+        src: &str,
+        dst: &str,
+        walked: &mut Vec<std::path::PathBuf>,
+    ) -> Result<(), Error> {
         self.refuse_escape(dst)?;
         if self.is_file(src) && self.same_disk_file(src, dst) {
             return Err(Error::UnsafeOutput {
@@ -407,8 +468,20 @@ impl Workspace {
             return Err(not_found(src));
         }
         self.create_dir_all(dst)?;
+        let canonical = (!self.indexed(src))
+            .then(|| std::fs::canonicalize(src).ok())
+            .flatten();
+        if let Some(canonical) = &canonical {
+            if walked.contains(canonical) {
+                return Ok(());
+            }
+            walked.push(canonical.clone());
+        }
         for name in self.list(src) {
-            self.copy(&format!("{src}/{name}"), &format!("{dst}/{name}"))?;
+            self.copy_walk(&format!("{src}/{name}"), &format!("{dst}/{name}"), walked)?;
+        }
+        if canonical.is_some() {
+            walked.pop();
         }
         Ok(())
     }

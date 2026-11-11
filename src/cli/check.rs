@@ -16,8 +16,8 @@ use crate::paths::{DiskText, Paths};
 use crate::project::Project;
 use crate::transaction::manifest::Manifest;
 use crate::{
-    Error, config::catalog, config::profiles, config::project_config, config::tool::Tool,
-    config::version, config::yaml_subset, engine::overlay, engine_version, paths,
+    Error, config::profiles, config::project_config, config::tool::Tool, config::version,
+    config::yaml_subset, engine::overlay, engine_version, paths,
 };
 
 const MANIFEST_REL: &str = ".ai/.sync-manifest";
@@ -242,7 +242,13 @@ pub(crate) fn render_in_memory(
     purpose: Purpose,
 ) -> Result<InMemory, Error> {
     let (config_path, config) = config;
-    let ws = match seed_workspace(root, manifest, config_path, config) {
+    let ws = match seed_workspace(
+        root,
+        manifest,
+        config_path,
+        config,
+        selection.profile.as_deref(),
+    ) {
         Ok(ws) => ws,
         Err(detail) => return Ok(InMemory::SeedFailed(detail)),
     };
@@ -513,6 +519,7 @@ fn seed_workspace(
     manifest: &[String],
     selected: Option<&str>,
     config_text: Option<&str>,
+    profile: Option<&str>,
 ) -> Result<Workspace, String> {
     let mut ws = Workspace::new(root);
     let ai = Path::new(root).join(".ai");
@@ -578,8 +585,8 @@ fn seed_workspace(
                 .map_err(|e| e.to_string())?;
         }
     }
-    for abs in inputs_outside_ai(root, config_text) {
-        if !ws.exists(&abs) && Path::new(&abs).exists() {
+    for abs in inputs_outside_ai(root, config_text, profile) {
+        if Path::new(&abs).exists() {
             ws.seed_from_disk(&abs, Path::new(&abs), &is_git)
                 .map_err(|e| e.to_string())?;
         }
@@ -587,9 +594,10 @@ fn seed_workspace(
     Ok(ws)
 }
 
-/// The other inputs a sync reads from the project outside `.ai/`: profile
-/// overlays and every tool's `targets.<key>.source`.
-fn inputs_outside_ai(root: &str, config_text: Option<&str>) -> Vec<String> {
+/// The other inputs the sync reads from the project outside `.ai/`: the
+/// overlays of the profiles it syncs (`profile`, or every active one) and
+/// the `targets.<key>.source` of the tools it syncs.
+fn inputs_outside_ai(root: &str, config_text: Option<&str>, profile: Option<&str>) -> Vec<String> {
     let absolute = |raw: &str| {
         if crate::paths::is_absolute(raw) {
             paths::normalize(raw)
@@ -597,29 +605,43 @@ fn inputs_outside_ai(root: &str, config_text: Option<&str>) -> Vec<String> {
             paths::normalize(&format!("{root}/{raw}"))
         }
     };
-    let mut raw_paths: Vec<String> = Vec::new();
-    if let Some(text) = config_text {
-        raw_paths.extend(
-            profiles::names(text)
-                .iter()
-                .map(|name| profiles::overlay_dir(text, name)),
-        );
-    }
-    let tools_dir = config_text
-        .map(|text| yaml_subset::value(text, "source.tools"))
+    let text = config_text.unwrap_or_default();
+    let synced_profiles: Vec<String> = match profile {
+        Some(name) => vec![name.to_string()],
+        None => profiles::names(text)
+            .into_iter()
+            .filter(|name| profiles::is_active(text, name))
+            .collect(),
+    };
+    let mut raw_paths: Vec<String> = synced_profiles
+        .iter()
+        .map(|name| profiles::overlay_dir(text, name))
+        .collect();
+    let tools_dir = Some(yaml_subset::value(text, "source.tools"))
         .filter(|raw| !raw.is_empty())
         .unwrap_or_else(|| ".ai/src/tools".to_string());
     let tools_dir = absolute(&tools_dir);
-    let mut slugs: BTreeSet<String> = catalog::base_tools().into_iter().collect();
+    let read = |slug: &str| std::fs::read_to_string(format!("{tools_dir}/{slug}.yaml")).ok();
+    let mut slugs: BTreeSet<String> = yaml_subset::list(text, "tools.enabled")
+        .into_iter()
+        .collect();
+    for name in &synced_profiles {
+        slugs.extend(profiles::tools(text, name));
+    }
     if let Ok(entries) = std::fs::read_dir(&tools_dir) {
         slugs.extend(entries.filter_map(|entry| {
             let name = entry.ok()?.file_name().disk_text();
-            Some(name.strip_suffix(".yaml")?.to_string())
+            let slug = name.strip_suffix(".yaml")?.to_string();
+            let user = read(&slug)?;
+            (yaml_subset::value(&user, "enabled") == "true").then_some(slug)
         }));
     }
     for slug in slugs {
-        let user = std::fs::read_to_string(format!("{tools_dir}/{slug}.yaml")).ok();
-        let tool = Tool::new(&slug, user);
+        let mut tool = Tool::new(&slug, read(&slug));
+        let base = tool.base_name();
+        if !base.is_empty() && base != slug {
+            tool = tool.with_base_override(read(&base));
+        }
         for key in render::TARGET_KEYS {
             let raw = tool.value(&format!("targets.{key}.source"));
             if !raw.is_empty() {
@@ -738,6 +760,7 @@ mod tests {
                 &root,
                 &[],
                 Some(&format!("{root}/.ai/agent_sync.yaml")),
+                None,
                 None,
             )
             .unwrap(),
