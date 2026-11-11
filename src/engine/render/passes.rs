@@ -53,7 +53,7 @@ pub fn run_passes(s: &mut Session, run: &mut Run) -> Step {
         if run.enabled.contains(slug) {
             sync_tool(s, run, slug)?;
         } else {
-            cleanup_tool(s, run, slug);
+            cleanup_tool(s, run, slug)?;
         }
         if run.printed {
             s.log.blank();
@@ -345,14 +345,14 @@ fn remove_legacy_outputs(s: &mut Session, tool: &Tool) -> Step {
 
 /// `cleanup_tool`: remove the outputs a disabled tool's earlier syncs recorded,
 /// never a file nothing recorded or one below another tool's dest.
-fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
+fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) -> Step {
     let tool = load_tool(s, slug);
     let display = tool.display_name();
     run.skipped_names.push(display.clone());
     run.skipped += 1;
     run.printed = false;
     if run.cleanup != "true" {
-        return;
+        return Ok(());
     }
     let mut owned_paths: Vec<String> = Vec::new();
     for key in TARGET_KEYS {
@@ -387,11 +387,11 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
         .iter()
         .any(|path| !file_ops::recorded_under(s, path).is_empty());
     if !has_history {
-        return;
+        return Ok(());
     }
     let mut cleaned = false;
     for path in owned_paths {
-        if remove_recorded_outputs(s, &path, &run.protected) {
+        if remove_recorded_outputs(s, &path, &run.protected).map_err(|e| io(s, e))? {
             cleaned = true;
         }
         if !s.dry_run && s.ws.exists(&path) && s.ws.is_dir(&path) {
@@ -406,22 +406,21 @@ fn cleanup_tool(s: &mut Session, run: &mut Run, slug: &str) {
         s.log.info(&format!("Cleaned up {display} (disabled)"));
         run.printed = true;
     }
+    Ok(())
 }
 
 /// Removes the files at or below `path` the previous manifest records, except
 /// those at or below a dest another tool claims, then the directories that
-/// leaves empty; true when something went. A failed removal is not an error:
-/// cleanup of a disabled tool never stops a sync.
-fn remove_recorded_outputs(s: &mut Session, path: &str, protected: &[String]) -> bool {
-    let removed = match file_ops::remove_recorded_outside(s, path, protected) {
-        Ok(removed) => removed,
-        Err(error) => {
-            s.log.warning(&error.to_string());
-            return false;
-        }
-    };
+/// leaves empty; true when something went. A removal that fails, a refused
+/// one through a link included, stops the sync as it does for an enabled tool.
+fn remove_recorded_outputs(
+    s: &mut Session,
+    path: &str,
+    protected: &[String],
+) -> Result<bool, crate::Error> {
+    let removed = file_ops::remove_recorded_outside(s, path, protected)?;
     if removed == 0 {
-        return false;
+        return Ok(false);
     }
     let verb = if s.dry_run { "Would remove" } else { "Removed" };
     s.log.step(&format!(
@@ -430,11 +429,9 @@ fn remove_recorded_outputs(s: &mut Session, path: &str, protected: &[String]) ->
     ));
     if !s.dry_run {
         let root = s.paths.root.clone();
-        if let Err(error) = file_ops::remove_empty_parents(s, path, &root) {
-            s.log.warning(&error.to_string());
-        }
+        file_ops::remove_empty_parents(s, path, &root)?;
     }
-    true
+    Ok(true)
 }
 
 #[cfg(test)]

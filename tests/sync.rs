@@ -520,6 +520,32 @@ fn sync_zed_rules_gets_commands_inline_section_merge_to_file_fallback() {
 
 #[cfg(unix)]
 #[test]
+fn a_disabled_tool_output_that_cannot_be_removed_stops_the_sync() {
+    if !common::unreadable_dirs_are_possible() {
+        return;
+    }
+    let project = Project::seeded(&[]);
+    project.enable_tools(&["claude", "cursor"]);
+    project.exuno().arg("sync").assert().success();
+    project
+        .exuno()
+        .args(["disable", "cursor"])
+        .assert()
+        .success();
+    common::chmod(&project.join(".cursor/rules"), 0o555);
+    let synced = project.exuno().arg("sync").assert();
+    common::chmod(&project.join(".cursor/rules"), 0o755);
+    synced
+        .failure()
+        .stderr(predicate::str::contains(
+            ".cursor/rules/comments.mdc: Permission denied",
+        ))
+        .stderr(predicate::str::contains("Cleaned up Cursor").not());
+    assert!(project.exists(".cursor/rules/comments.mdc"));
+}
+
+#[cfg(unix)]
+#[test]
 fn a_merged_rules_file_that_cannot_be_removed_stops_the_sync() {
     if !common::unreadable_dirs_are_possible() {
         return;
