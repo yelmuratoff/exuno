@@ -23,3 +23,7 @@ github-attestations = true
 dispatch-releases = true
 # Until 1.0, installed agentsync binaries update from agentsync-<target> archives
 post-announce-jobs = ["./legacy-assets"]
+
+# GitHub no longer serves the macos-14 image dist 0.32.0 picks for Apple Silicon.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
