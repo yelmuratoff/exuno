@@ -21,7 +21,7 @@ Exuno ships a config for 15 coding tools, plus `plugin`, which publishes your sk
 | Amazon Q | `amazonq` | `00-context.md`, `.amazonq/rules/`, a skills index and a commands index, `mcp.json`, CLI agents (converted to JSON) |
 | Zed | `zed` | `.rules` (`AGENTS.md` followed by all rules), a skills index and a commands index, `settings.json` |
 | Google Antigravity | `antigravity` | `GEMINI.md`, `.agents/rules` with trigger frontmatter, `.agents/skills`, `.agents/workflows` (commands) |
-| Agent plugin (claude.ai, ChatGPT, Codex) | `plugin` | `plugin/` with skills and commands (frontmatter cut to what claude.ai accepts), agents, and `plugin.json`; `.claude-plugin/marketplace.json`; `.agents/plugins/marketplace.json`. Kept out of `.gitignore`. See [Publishing](publishing.md) |
+| Agent plugin (claude.ai, ChatGPT, Codex) | `plugin` | `plugin/` with skills and commands (frontmatter cut to what claude.ai accepts), agents, `plugin.json`, and `.claude-plugin/plugin.json`; `.claude-plugin/marketplace.json`; `.agents/plugins/marketplace.json`. Kept out of `.gitignore`. See [Publishing](publishing.md) |
 
 MiniMax Code reads only files in the main project workspace, so it has no config-home [profile](workspaces-and-profiles.md#profiles-separate-config-homes): `profile add` and `sync` refuse MiniMax profile variants. MiniMax's project skill path isn't verified yet, so Exuno doesn't sync skills to it.
 

@@ -24,8 +24,9 @@ const ENABLED_TOOLS: &[&str] = &[
     "plugin",
 ];
 
-const PLUGIN_MANIFESTS: [&str; 3] = [
+const PLUGIN_MANIFESTS: [&str; 4] = [
     "plugin/plugin.json",
+    "plugin/.claude-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
     ".agents/plugins/marketplace.json",
 ];
@@ -1201,7 +1202,7 @@ fn sync_warns_when_skills_hide_has_no_settings_file_to_land_in() {
 // ── Plugin ───────────────────────────────────────────────────────────────
 
 #[test]
-fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
+fn sync_plugin_writes_skills_commands_agents_and_four_manifests() {
     let project = synced_project();
     let skill = "---\nname: demo\nargument-hint: <file>\ndescription: Runs the demo\ndisable-model-invocation: true\n---\n\n# Demo\n\nBody.\n";
     project.write(".ai/src/skills/demo/SKILL.md", skill);
@@ -1254,6 +1255,12 @@ fn sync_plugin_writes_skills_commands_agents_and_three_manifests() {
         plugin["description"],
         "Skills, commands and agents synced by Exuno"
     );
+    let claude_plugin = json(&project, "plugin/.claude-plugin/plugin.json");
+    assert_eq!(
+        claude_plugin["description"],
+        "Skills, commands and agents synced by Exuno"
+    );
+    assert_eq!(claude_plugin["author"]["name"], "exuno");
     let claude = json(&project, ".claude-plugin/marketplace.json");
     assert_eq!(claude["owner"]["name"], "exuno");
     assert_eq!(
@@ -1409,6 +1416,7 @@ fn disabling_the_plugin_removes_only_what_it_wrote() {
         "plugin/commands",
         "plugin/agents",
         "plugin/plugin.json",
+        "plugin/.claude-plugin",
         ".claude-plugin",
         ".agents",
     ] {
