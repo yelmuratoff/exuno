@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.48.1
+
+### Fixed
+
+- **Publishing plugin:** the `plugin` tool also writes `plugin/.claude-plugin/plugin.json`. Without it, claude.ai answered "Marketplace sync failed" for the repository; an upload of the same plugin worked because uploads require that file.
+- **Release builds:** Apple Silicon binaries build on the `macos-15` runner, since GitHub no longer serves the `macos-14` image dist picked.
+
 ## 0.48.0
 
 ### Breaking
