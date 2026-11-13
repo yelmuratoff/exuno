@@ -15,6 +15,7 @@ Sync writes:
 | --- | --- |
 | `plugin/skills/`, `plugin/commands/`, `plugin/agents/` | Your skills, commands, and subagents |
 | `plugin/plugin.json` | The plugin manifest, in the [Agent Plugins](https://agent-plugins.org) 1.0 format |
+| `plugin/.claude-plugin/plugin.json` | The Claude plugin manifest. claude.ai syncs a marketplace only when its plugin has one |
 | `.claude-plugin/marketplace.json` | The marketplace index claude.ai and ChatGPT read |
 | `.agents/plugins/marketplace.json` | The marketplace index Codex reads |
 
