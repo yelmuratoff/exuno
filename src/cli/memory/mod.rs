@@ -116,6 +116,27 @@ pub fn run(
     }
 }
 
+/// How much memory this project has and how many `check` findings it holds.
+pub struct Summary {
+    pub notes: usize,
+    pub issues: usize,
+}
+
+/// `check` for the project at `root` alone, counted, for `doctor`.
+pub fn summary(root: &str, env: &Env) -> Result<Summary, Error> {
+    let found = find(root, env, false, &mut std::io::sink())?;
+    let context = store::Context {
+        stale: None,
+        root: Path::new(root),
+        home: env.home.as_deref().map(Path::new),
+    };
+    let shown = |path: &Path| shown(path, env.home.as_deref());
+    Ok(Summary {
+        notes: found.stores.iter().map(|(_, _, notes)| notes.len()).sum(),
+        issues: issues(&found, &context, &shown).len(),
+    })
+}
+
 fn find(root: &str, env: &Env, all: bool, err: &mut dyn Write) -> Result<Found, Error> {
     let project = Project::configured(root)?;
     let place = Place {
@@ -217,12 +238,7 @@ fn check(
     shown: &dyn Fn(&Path) -> String,
     out: &mut dyn Write,
 ) -> Result<u8, Error> {
-    let mut issues = Vec::new();
-    for (spec, store, notes) in &found.stores {
-        issues.extend(store::findings(&found.specs[*spec], store, notes, context));
-    }
-    issues.extend(shared_names(found));
-    issues.extend(overlaps(found, context.root, shown));
+    let issues = issues(found, context, shown);
     let checked: usize = found.stores.iter().map(|(_, _, notes)| notes.len()).sum();
     if json {
         let values: Vec<serde_json::Value> = issues
@@ -246,6 +262,21 @@ fn check(
         put(out, text.as_bytes())?;
     }
     Ok(u8::from(!issues.is_empty()))
+}
+
+/// Every `check` finding, as `(path, message)`.
+fn issues(
+    found: &Found,
+    context: &store::Context,
+    shown: &dyn Fn(&Path) -> String,
+) -> Vec<(std::path::PathBuf, String)> {
+    let mut issues = Vec::new();
+    for (spec, store, notes) in &found.stores {
+        issues.extend(store::findings(&found.specs[*spec], store, notes, context));
+    }
+    issues.extend(shared_names(found));
+    issues.extend(overlaps(found, context.root, shown));
+    issues
 }
 
 /// A note whose name notes in other projects carry too: one rule could hold it.

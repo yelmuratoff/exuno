@@ -90,21 +90,8 @@ fn dispatch(command: Command, rest: &[String], style: &Style) -> Result<u8, Erro
             cli::skills::run(rest, &repo_root()?, &env.render, style, stdout, stderr)
         }
         Command::Memory => {
-            let today = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| (d.as_secs() / 86_400) as i64);
             let root = repo_root()?;
-            let msystem = var("MSYSTEM");
-            let path_var =
-                |name: &str| var(name).map(|value| paths::from_msys(&value, msystem.as_deref()));
-            let env = cli::memory::Env {
-                home: paths::Paths::for_disk_root(&root)
-                    .home()
-                    .map(str::to_string),
-                var: &path_var,
-                today,
-            };
-            cli::memory::run(rest, &root, &env, style, stdout, stderr)
+            cli::memory::run(rest, &root, &memory_env(&root), style, stdout, stderr)
         }
         Command::Mcp => cli::mcp::run(rest, style, stdout, stderr),
         Command::Catalog => write_stdout(&cli::update::catalog_dump()),
@@ -142,6 +129,7 @@ fn dispatch(command: Command, rest: &[String], style: &Style) -> Result<u8, Erro
             let env = cli::doctor::Env {
                 version: engine_version(),
                 external_roots: external_roots_var(),
+                memory: memory_env(&repo_root()?),
             };
             cli::doctor::doctor(rest, &Project::discover, style, &env, stdout, stderr)
         }
@@ -465,6 +453,24 @@ fn rollback_command(rest: &[String], style: &Style) -> Result<u8, Error> {
 
 fn var(name: &str) -> Option<String> {
     std::env::var(name).ok()
+}
+
+/// A variable holding one path, translated from Git Bash's spelling on Windows.
+fn path_var(name: &str) -> Option<String> {
+    var(name).map(|value| paths::from_msys(&value, var("MSYSTEM").as_deref()))
+}
+
+/// What `memory` and `doctor` read agent memory with: the home the engine
+/// resolves, path variables, and today's UTC day.
+fn memory_env(root: &str) -> cli::memory::Env<'static> {
+    let today = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| (d.as_secs() / 86_400) as i64);
+    cli::memory::Env {
+        home: paths::Paths::for_disk_root(root).home().map(str::to_string),
+        var: &path_var,
+        today,
+    }
 }
 
 /// `EXUNO_<suffix>`, else `AGENTSYNC_<suffix>`.

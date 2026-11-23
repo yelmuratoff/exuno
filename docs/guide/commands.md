@@ -28,7 +28,7 @@ Every command prints its own options and examples with `exuno <command> --help`.
 | `dedupe` | | Remove source files that duplicate a parent `.ai/src/`, interactively |
 | `migrate` | | Upgrade an older project, or print a prompt that helps an AI do it |
 | `profile <cmd>` | | Manage config-home profiles: `add`, `list`, `remove` |
-| `doctor` | | Check the setup; report drift, config warnings, and cross-project notes |
+| `doctor` | | Check the setup; report drift, config warnings, cross-project notes, and how many `memory check` findings this project's agent memory holds |
 | `skills list\|show\|check` | | Inspect the project's skills and their `SKILL.md` metadata (`--profile <name>`) |
 | `memory list\|check` | | Read the notes coding agents keep for themselves, across tools and config homes (`--all`, `--stale-days <n>`, `--json`) |
 | `mcp list\|show\|validate\|render\|use` | | Read a local MCP catalog and prepare a per-tool source, without running any server |
