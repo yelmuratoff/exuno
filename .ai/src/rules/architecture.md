@@ -20,7 +20,7 @@ The sync engine is config-driven: shipped tool behaviour lives in `lib/templates
 
 ```
 src/main.rs                    → process boundary: arguments, exit codes, environment; matches `cli::Command` and wires each command.
-src/cli/<cmd>.rs               → one command each (`init/`, `doctor/`, `refresh/` are directories); `usage.rs` owns help and the unknown-command refusal.
+src/cli/<cmd>.rs               → one command each (`init/`, `doctor/`, `memory/`, `refresh/`, `skills/` are directories); `usage.rs` owns help and the unknown-command refusal.
 src/config/                    → what a project and the engine declare:
   yaml_subset.rs / yaml_edit.rs                    supported YAML scalar, nesting, and list shapes; line-preserving edits.
   tool.rs / catalog.rs / payload.rs                layered base/user/profile config, embedded templates, payload resolution.
