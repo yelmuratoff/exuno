@@ -231,4 +231,114 @@ fn memory_refuses_an_unknown_action() {
         .assert()
         .code(1)
         .stderr("Error: unknown option: --stale-days\n");
+    for bad in [
+        &["--stale-days", "-1"][..],
+        &["--stale-days", "x"],
+        &["--stale-days"],
+    ] {
+        memory(&project, &[&["check"][..], bad].concat())
+            .assert()
+            .code(1)
+            .stderr("Error: --stale-days requires a number of days\n");
+    }
+}
+
+fn typed(name: &str) -> String {
+    format!("---\nname: {name}\ndescription: d\ntype: project\n---\n")
+}
+
+#[test]
+fn a_profile_session_keeps_the_base_tool_in_its_own_home() {
+    let project = project();
+    let key = key(&project);
+    project.write(
+        ".ai/src/tools/claude-hub.yaml",
+        "base: claude\nprofile_home: \".claude-hub\"\n",
+    );
+    project.write(
+        &format!("{}/personal.md", claude_memory(&key)),
+        &typed("personal"),
+    );
+    project.write(
+        &format!(".claude-hub/projects/{key}/memory/hub.md"),
+        &typed("hub"),
+    );
+    memory(&project, &["list"])
+        .env("CLAUDE_CONFIG_DIR", project.join(".claude-hub"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "claude\t{key}\tpersonal\t"
+        )))
+        .stdout(predicate::str::contains(format!(
+            "claude-hub\t{key}\thub\t"
+        )))
+        .stdout(predicate::str::contains(format!("claude\t{key}\thub\t")).not())
+        .stderr("");
+}
+
+#[test]
+fn two_tools_reading_one_store_list_it_once() {
+    let project = project();
+    project.write(
+        ".ai/src/tools/mirror.yaml",
+        "memory:\n  home: \"~/.codex\"\n  dirs: [memories_v2]\n",
+    );
+    project.write("home/.codex/memories_v2/memory_summary.md", "# Summary\n");
+    let output = memory(&project, &["list"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.matches("memory_summary.md").count(), 1, "{stdout}");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "Warning: mirror: ~/.codex/memories_v2 is already read for codex\n"
+    );
+}
+
+#[test]
+fn check_matches_index_links_not_substrings() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(
+        &format!("{dir}/MEMORY.md"),
+        "- [Agent CLI](./agent-cli.md#use)\n",
+    );
+    project.write(&format!("{dir}/agent-cli.md"), &typed("agent-cli"));
+    project.write(&format!("{dir}/cli.md"), &typed("cli"));
+    memory(&project, &["check"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "memory/cli.md: not listed in MEMORY.md",
+        ))
+        .stdout(predicate::str::contains("agent-cli.md: not listed").not())
+        .stdout(predicate::str::contains("Checked 2 memories: 1 issue\n"));
+}
+
+#[test]
+fn an_unknown_project_key_is_a_warning() {
+    let project = project();
+    project.write(
+        ".ai/src/tools/notes.yaml",
+        "memory:\n  home: \"~/.notes\"\n  dirs: [\"projects/{project}/memory\"]\n  project_key: \"hash\"\n",
+    );
+    memory(&project, &["list"])
+        .assert()
+        .success()
+        .stderr("Warning: notes: memory.project_key 'hash' is not one of: path-dashed\n");
+}
+
+#[test]
+fn check_json_prints_the_count_and_the_issues() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(&format!("{dir}/MEMORY.md"), "- [Gone](gone.md)\n");
+    let output = memory(&project, &["check", "--json"]).output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["checked"], 0);
+    assert_eq!(
+        value["issues"][0]["message"],
+        "links to gone.md, which does not exist"
+    );
 }

@@ -13,6 +13,9 @@ const PROJECT: &str = "{project}";
 pub struct Spec {
     pub tool: String,
     home: PathBuf,
+    home_from: HomeFrom,
+    /// `memory.home`, for when the variable points at a variant's home.
+    declared_home: Option<PathBuf>,
     dirs: Vec<String>,
     project_key: String,
     pub index: String,
@@ -41,9 +44,13 @@ impl Spec {
             return None;
         }
         let number = |key: &str| tool.value(key).parse::<usize>().ok();
+        let declared_home = declared_home(tool, place);
+        let (home, home_from) = home(tool, place, declared_home.as_ref())?;
         Some(Self {
             tool: tool.slug.clone(),
-            home: home(tool, place)?,
+            home,
+            home_from,
+            declared_home,
             dirs,
             project_key: tool.value("memory.project_key"),
             index: tool.value("memory.index"),
@@ -56,27 +63,62 @@ impl Spec {
                 .collect(),
         })
     }
+
+    /// The home's own path, symlinks resolved, when it is a variant's `profile_home`.
+    pub fn profile_home(&self) -> Option<PathBuf> {
+        matches!(self.home_from, HomeFrom::Profile).then(|| canonical(&self.home))
+    }
+
+    /// Reads `memory.home` instead when `memory.home_env` points at a home a
+    /// profile variant reads: a session started for that profile sets the
+    /// variable, and the variant already lists that home.
+    pub fn leave_profile_homes(&mut self, profile_homes: &[PathBuf]) {
+        if matches!(self.home_from, HomeFrom::Variable)
+            && profile_homes.contains(&canonical(&self.home))
+            && let Some(declared) = self.declared_home.take()
+        {
+            self.home = declared;
+            self.home_from = HomeFrom::Declared;
+        }
+    }
+}
+
+enum HomeFrom {
+    Profile,
+    Variable,
+    Declared,
 }
 
 /// A variant's `profile_home`, else the directory `memory.home_env` names,
-/// else `memory.home` with a leading `~` taken from `$HOME`.
-fn home(tool: &Tool, place: &Place) -> Option<PathBuf> {
+/// else the declared `memory.home`.
+fn home(tool: &Tool, place: &Place, declared: Option<&PathBuf>) -> Option<(PathBuf, HomeFrom)> {
     let profile_home = tool.value("profile_home");
     if !profile_home.is_empty() {
-        return Some(place.root.join(profile_home));
+        return Some((place.root.join(profile_home), HomeFrom::Profile));
     }
     let variable = tool.value("memory.home_env");
     if !variable.is_empty()
         && let Some(dir) = (place.var)(&variable).filter(|dir| !dir.is_empty())
     {
-        return Some(PathBuf::from(dir));
+        return Some((PathBuf::from(dir), HomeFrom::Variable));
     }
+    Some((declared?.clone(), HomeFrom::Declared))
+}
+
+/// `memory.home`: a leading `~` is `$HOME`, anything else is relative to the
+/// project root, and an empty value is the root itself.
+fn declared_home(tool: &Tool, place: &Place) -> Option<PathBuf> {
     let declared = tool.value("memory.home");
     match declared.strip_prefix('~') {
-        Some(rest) => Some(Path::new(place.home?).join(rest.trim_start_matches('/'))),
+        Some(rest) => Some(Path::new(place.home?).join(rest.trim_start_matches(['/', '\\']))),
         None if declared.is_empty() => Some(place.root.to_path_buf()),
         None => Some(place.root.join(declared)),
     }
+}
+
+/// `path` with symlinks resolved, or as given when it does not exist.
+pub fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// One directory of notes; `project` is empty for a store every project shares.
@@ -205,24 +247,27 @@ pub fn findings(
     let mut found = Vec::new();
     let index_path = store.dir.join(&spec.index);
     let index = (!spec.index.is_empty())
-        .then(|| std::fs::read_to_string(&index_path).ok())
+        .then(|| std::fs::read(&index_path).ok())
         .flatten();
-    if let Some(text) = &index {
-        if let Some(message) = oversized(spec, text) {
+    let listed = index.as_ref().map(|bytes| {
+        let text = String::from_utf8_lossy(bytes);
+        if let Some(message) = oversized(spec, &text, bytes.len()) {
             found.push((index_path.clone(), message));
         }
-        for target in links(text) {
-            if !store.dir.join(&target).is_file() {
+        let targets = links(&text);
+        for target in &targets {
+            if !store.dir.join(target).is_file() {
                 found.push((
                     index_path.clone(),
                     format!("links to {target}, which does not exist"),
                 ));
             }
         }
-    }
+        targets
+    });
     for note in notes {
-        if let Some(text) = &index
-            && !text.contains(&note.rel)
+        if let Some(targets) = &listed
+            && !targets.contains(&note.rel)
         {
             found.push((note.path.clone(), format!("not listed in {}", spec.index)));
         }
@@ -256,9 +301,8 @@ pub fn findings(
     found
 }
 
-fn oversized(spec: &Spec, text: &str) -> Option<String> {
+fn oversized(spec: &Spec, text: &str, bytes: usize) -> Option<String> {
     let lines = text.lines().count();
-    let bytes = text.len();
     let long = spec.index_max_lines.filter(|max| lines > *max);
     let big = spec.index_max_bytes.filter(|max| bytes > *max);
     let size = match (long, big) {
@@ -276,11 +320,14 @@ fn oversized(spec: &Spec, text: &str) -> Option<String> {
     Some(format!("{size}; only the first {limit} load"))
 }
 
-/// Local Markdown targets of `[text](target.md)` links.
+/// Local Markdown targets of `[text](target.md)` links, without a leading
+/// `./` or a `#fragment`.
 fn links(text: &str) -> Vec<String> {
     text.split("](")
         .skip(1)
         .filter_map(|rest| rest.split_once(')').map(|(target, _)| target.trim()))
+        .map(|target| target.split_once('#').map_or(target, |(path, _)| path))
+        .map(|target| target.strip_prefix("./").unwrap_or(target))
         .filter(|target| target.ends_with(".md") && !target.contains("://"))
         .map(str::to_string)
         .collect()
@@ -320,8 +367,10 @@ mod tests {
     #[test]
     fn links_keep_local_markdown_targets_only() {
         assert_eq!(
-            links("- [a](a.md) — x\n- [b](https://e.com/b.md)\n- [c](c.txt)\n- [d]( d.md )\n"),
-            ["a.md", "d.md"]
+            links(
+                "- [a](a.md) — x\n- [b](https://e.com/b.md)\n- [c](c.txt)\n- [d]( d.md )\n- [e](./e.md#top)\n"
+            ),
+            ["a.md", "d.md", "e.md"]
         );
     }
 

@@ -209,11 +209,15 @@ targets:
   # output), then the folders that leaves empty.
 
 # Optional: where the tool keeps its own memory, for `exuno memory list|check`.
-# Sync never writes here. `home` takes a leading `~`; the variable `home_env`
-# names wins when set, and a profile variant reads its `profile_home` instead.
-# `dirs` are relative to the home; `{project}` stands for this project's key,
-# derived from its git root by `project_key` (only `path-dashed`: every
-# character outside ASCII letters and digits becomes "-"). `index` names the
+# Sync never writes here. `home` takes a leading `~` for your home; any other
+# value is relative to the project root, and an empty one is the root itself.
+# The variable `home_env` names wins when set, unless it points at a profile
+# variant's home, and a profile variant reads its `profile_home` instead.
+# `dirs` are relative to the home and cannot contain spaces (put a spaced part
+# in `home`); `{project}` is one whole path segment that stands for this
+# project's key, derived from its git root by `project_key` (only
+# `path-dashed`: every character outside ASCII letters and digits becomes
+# "-"). `index` names the
 # note listing the others; `index_max_lines`/`index_max_bytes` are the limits
 # the tool loads it within, and `types` the values a note's `type` may take.
 # memory:

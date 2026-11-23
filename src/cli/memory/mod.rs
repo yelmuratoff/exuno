@@ -29,7 +29,7 @@ pub const HELP: Help = Help {
     ],
     description: &[
         "Reads the memory stores each tool's memory: block declares: the\nshipped tools and any .ai/src/tools/<tool>.yaml, profile variants in\ntheir config homes included. Without --all, only this project's store\nand the stores every project shares. No file is changed.",
-        "check reports an index over the tool's size limit, notes the index\ndoes not list, index links to missing notes, a type outside the\ntool's list, and a note name several projects share. --stale-days\nalso reports notes last modified more than <n> days ago. It exits 1\nwhen it finds anything.",
+        "check reports an index over the tool's size limit, notes the index\ndoes not list, index links to missing notes, and a type outside the\ntool's list. With --all it also reports a note name several projects\nshare. --stale-days adds notes last modified more than <n> days ago.\nIt exits 1 when it finds anything.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -117,25 +117,37 @@ fn find(root: &str, env: &Env, all: bool, err: &mut dyn Write) -> Result<Found, 
         home: env.home.as_deref(),
         var: env.var,
     };
-    let mut found = Found {
-        specs: Vec::new(),
-        stores: Vec::new(),
-    };
+    let mut specs = Vec::new();
     for slug in tool_slugs(&project)? {
-        let Some(spec) = Spec::read(&Tool::load(&project, &slug)?, &place) else {
-            continue;
-        };
-        let (stores, warnings) = store::stores(&spec, place.root, all);
+        specs.extend(Spec::read(&Tool::load(&project, &slug)?, &place));
+    }
+    let profile_homes: Vec<_> = specs.iter().filter_map(Spec::profile_home).collect();
+    for spec in &mut specs {
+        spec.leave_profile_homes(&profile_homes);
+    }
+    let mut stores = Vec::new();
+    let mut read_by: BTreeMap<std::path::PathBuf, &str> = BTreeMap::new();
+    for (index, spec) in specs.iter().enumerate() {
+        let (found, warnings) = store::stores(spec, place.root, all);
         for warning in warnings {
             put(err, format!("Warning: {warning}\n").as_bytes())?;
         }
-        for store in stores {
+        for store in found {
+            if let Some(other) = read_by.get(&store::canonical(&store.dir)) {
+                let warning = format!(
+                    "Warning: {}: {} is already read for {other}\n",
+                    spec.tool,
+                    shown(&store.dir, env.home.as_deref())
+                );
+                put(err, warning.as_bytes())?;
+                continue;
+            }
+            read_by.insert(store::canonical(&store.dir), &spec.tool);
             let notes = store::notes(&store, &spec.index);
-            found.stores.push((found.specs.len(), store, notes));
+            stores.push((index, store, notes));
         }
-        found.specs.push(spec);
     }
-    Ok(found)
+    Ok(Found { specs, stores })
 }
 
 /// Every shipped tool and every `.ai/src/tools/<slug>.yaml`, in byte order.
