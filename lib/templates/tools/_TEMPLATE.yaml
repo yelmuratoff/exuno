@@ -208,5 +208,23 @@ targets:
   # recorded under each dest (never a hand-written file, never another tool's
   # output), then the folders that leaves empty.
 
+# Optional: where the tool keeps its own memory, for `exuno memory list|check`.
+# Sync never writes here. `home` takes a leading `~`; the variable `home_env`
+# names wins when set, and a profile variant reads its `profile_home` instead.
+# `dirs` are relative to the home; `{project}` stands for this project's key,
+# derived from its git root by `project_key` (only `path-dashed`: every
+# character outside ASCII letters and digits becomes "-"). `index` names the
+# note listing the others; `index_max_lines`/`index_max_bytes` are the limits
+# the tool loads it within, and `types` the values a note's `type` may take.
+# memory:
+#   home: "~/.tool"
+#   home_env: "TOOL_HOME"
+#   dirs: ["projects/{project}/memory"]
+#   project_key: "path-dashed"
+#   index: "MEMORY.md"
+#   index_max_lines: 200
+#   index_max_bytes: 25600
+#   types: [user, feedback, project, reference]
+
 # Optional: Command to run after sync (e.g. linter or formatter)
 # post_sync: "npx prettier --write .tool/rules/*.mdc"

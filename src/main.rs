@@ -89,6 +89,17 @@ fn dispatch(command: Command, rest: &[String], style: &Style) -> Result<u8, Erro
             let env = sync_env();
             cli::skills::run(rest, &repo_root()?, &env.render, style, stdout, stderr)
         }
+        Command::Memory => {
+            let today = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| (d.as_secs() / 86_400) as i64);
+            let env = cli::memory::Env {
+                home: var("HOME").or_else(|| var("USERPROFILE")),
+                var: &var,
+                today,
+            };
+            cli::memory::run(rest, &repo_root()?, &env, style, stdout, stderr)
+        }
         Command::Mcp => cli::mcp::run(rest, style, stdout, stderr),
         Command::Catalog => write_stdout(&cli::update::catalog_dump()),
         Command::UpdateCache => Ok(0),

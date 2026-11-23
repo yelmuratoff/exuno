@@ -30,6 +30,7 @@ Every command prints its own options and examples with `exuno <command> --help`.
 | `profile <cmd>` | | Manage config-home profiles: `add`, `list`, `remove` |
 | `doctor` | | Check the setup; report drift, config warnings, and cross-project notes |
 | `skills list\|show\|check` | | Inspect the project's skills and their `SKILL.md` metadata (`--profile <name>`) |
+| `memory list\|check` | | Read the notes coding agents keep for themselves, across tools and config homes (`--all`, `--stale-days <n>`, `--json`) |
 | `mcp list\|show\|validate\|render\|use` | | Read a local MCP catalog and prepare a per-tool source, without running any server |
 | `generate [context]` | `gen` | Print a prompt that drafts `.ai/src/` for your project |
 | `setup-hooks` | | Install the git hooks the project's `outputs:` mode needs (`--pre-commit` in `local` mode) |
@@ -151,3 +152,13 @@ None of these start a server or contact an endpoint, and `use` doesn't run `sync
 ## `skills`
 
 `exuno skills list`, `show`, and `check` inspect the project's skills; see [Skills](skills.md#inspecting-skills). `exuno skills catalog list` and `show --catalog FILE` read a catalog of external skills you maintain by hand; `--source ALIAS=LOCAL_REPO` reads metadata from a pinned commit in a local git repository. They don't fetch, install, run, or verify anything. See [skill cards](../skill-cards.md) and the [pinned example](../examples/skill-cards/pilot/catalog.tsv).
+
+## `memory`
+
+Coding agents keep notes for themselves between sessions, and each tool hides them in its own config home. `exuno memory list` prints them as one table: tool, project, name, type, last modified, description, and path. It reads the stores the `memory:` block of each tool's YAML declares. Claude Code and Codex ship with one, and a profile variant such as `claude-hub` is read in its own config home. For any other tool, add a `memory:` block to `.ai/src/tools/<tool>.yaml`; the options are in [`_TEMPLATE.yaml`](../../lib/templates/tools/_TEMPLATE.yaml).
+
+By default you get this project's store plus the stores every project shares. `--all` reads every project's store.
+
+`exuno memory check` reports problems that make a tool skip or misread a note: an index longer than the tool loads, a note the index doesn't list, an index link to a missing note, and a `type` outside the tool's list. It also points out a note name found in several projects, which may belong in one shared rule in `.ai/src/`. `--stale-days <n>` adds notes last modified more than `n` days ago. It exits 1 when it reports anything.
+
+Both commands only read. `--json` prints one JSON value on stdout for scripts.

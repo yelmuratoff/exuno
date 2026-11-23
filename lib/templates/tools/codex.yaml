@@ -31,3 +31,11 @@ targets:
   mcp:
     dest: ".codex/config.toml"
     format: codex_toml
+
+# Local memories, read by `exuno memory`: generated state under CODEX_HOME,
+# memories_v2/ on a fresh install and memories/ kept from v1
+# (https://developers.openai.com/codex/memories).
+memory:
+  home: "~/.codex"
+  home_env: "CODEX_HOME"
+  dirs: [memories_v2, memories]

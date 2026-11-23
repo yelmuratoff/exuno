@@ -51,6 +51,7 @@ exuno simplify --apply -y   # persist + auto-delete emptied files
 
 - `exuno list` shows configured tools and status; `exuno enable` / `disable <tool>` toggle them.
 - `exuno check` verifies generated output matches source and exits non-zero on drift (use it in CI).
+- `exuno memory list [--all] [--json]` reads the notes agents keep for themselves (Claude Code auto memory, Codex memories, any tool with a `memory:` block), profile config homes included; `exuno memory check` reports an index past the load limit, unindexed notes, broken index links, unknown types, and a note name several projects share, a candidate for one rule in `.ai/src/`. Read-only.
 - `exuno doctor` validates the setup and surfaces drift, config warnings, and cross-project advisories.
 - **Keep outputs fresh automatically:** add `eval "$(exuno shell-init zsh)"` to `~/.zshrc` to auto-sync when the current directory is an Exuno project root, without syncing parent projects from nested directories (silent no-op when nothing changed; eval'ing keeps it current across upgrades); `exuno setup-hooks [--pre-commit]` syncs on `git pull` / `checkout`; `exuno sync --if-stale` syncs only when source changed since the last sync. See the README "Automation" section.
 - `exuno generate [context]` prints a prompt you paste into any AI to draft a project-specific `.ai/src/`.
