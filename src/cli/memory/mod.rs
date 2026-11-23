@@ -16,6 +16,8 @@ use crate::project::Project;
 use super::put;
 use super::skills::cell;
 
+mod content;
+mod similar;
 mod store;
 
 use store::{Note, Place, Spec, Store};
@@ -26,10 +28,14 @@ pub const HELP: Help = Help {
     synopsis: &[
         "memory list [--all] [--json]",
         "memory check [--all] [--stale-days <n>] [--json]",
+        "memory review [--all] [--stale-days <n>]",
+        "memory promote <note> --rule <name> [--dry-run]",
     ],
     description: &[
-        "Reads the memory stores each tool's memory: block declares: the\nshipped tools and any .ai/src/tools/<tool>.yaml, profile variants in\ntheir config homes included. Without --all, only this project's store\nand the stores every project shares. No file is changed.",
-        "check reports an index over the tool's size limit, notes the index\ndoes not list, index links to missing notes, and a type outside the\ntool's list. With --all it also reports a note name several projects\nshare. --stale-days adds notes last modified more than <n> days ago.\nIt exits 1 when it finds anything.",
+        "Reads the memory stores each tool's memory: block declares: the\nshipped tools and any .ai/src/tools/<tool>.yaml, profile variants in\ntheir config homes included. Without --all, only this project's store\nand the stores every project shares. list, check, and review change no\nfile.",
+        "check reports an index over the tool's size limit, notes the index\ndoes not list, index links to missing notes, a type outside the\ntool's list, paths under your home that no longer exist, lines\nshaped like a credential, a note that copies another,\nand a note that copies a file in .ai/src/. With --all it also reports\na note name several projects share. --stale-days adds notes last\nmodified more than <n> days ago. It exits 1 when it finds anything.",
+        "review prints the memory-review skill's reviewer brief followed by\nthe stores, the check findings, and the notes, for an agent to judge\nwhat the notes mean: contradictions, stale facts, retold duplicates,\nand lessons to promote.",
+        "promote writes .ai/src/rules/<name>.md from a note's body and leaves\nthe note alone; exuno writes only inside the project. --dry-run\nprints the rule instead.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -37,9 +43,11 @@ pub const HELP: Help = Help {
             ("--all", "Read every project's store, not only this one"),
             (
                 "--stale-days <n>",
-                "check: report notes older than <n> days",
+                "check, review: report notes older than <n> days",
             ),
-            ("--json", "Print one JSON value on stdout"),
+            ("--json", "list, check: print one JSON value on stdout"),
+            ("--rule <name>", "promote: the rule file to create"),
+            ("--dry-run", "promote: print the rule, write nothing"),
             ("-h, --help", "Show this help"),
         ],
     }],
@@ -47,6 +55,8 @@ pub const HELP: Help = Help {
         "memory list",
         "memory list --all --json",
         "memory check --all --stale-days 90",
+        "memory review --all",
+        "memory promote ~/.claude/projects/-repo/memory/release.md --rule release",
     ],
 };
 
@@ -58,10 +68,11 @@ pub struct Env<'a> {
     pub today: i64,
 }
 
-#[derive(PartialEq)]
 enum Action {
     List,
     Check,
+    Review,
+    Promote { note: String, rule: String },
 }
 
 struct Args {
@@ -69,6 +80,7 @@ struct Args {
     all: bool,
     json: bool,
     stale_days: Option<i64>,
+    dry_run: bool,
 }
 
 /// The stores found, each with the index of its tool's spec and its notes.
@@ -99,15 +111,156 @@ pub fn run(
             return Ok(1);
         }
     };
-    let found = find(root, env, parsed.all, err)?;
+    let promoting = matches!(parsed.action, Action::Promote { .. });
+    let found = find(root, env, parsed.all || promoting, err)?;
     let shown = |path: &Path| shown(path, env.home.as_deref());
-    match parsed.action {
+    let context = store::Context {
+        stale: parsed.stale_days.map(|days| (env.today, days)),
+        root: Path::new(root),
+        home: env.home.as_deref().map(Path::new),
+    };
+    match &parsed.action {
         Action::List => list(&found, parsed.json, &shown, out),
-        Action::Check => {
-            let stale = parsed.stale_days.map(|days| (env.today, days));
-            check(&found, stale, parsed.json, &shown, out)
+        Action::Check => check(&found, &context, parsed.json, &shown, out),
+        Action::Review => review(&found, &context, &shown, out),
+        Action::Promote { note, rule } => {
+            let request = Promotion {
+                note,
+                rule,
+                dry_run: parsed.dry_run,
+            };
+            promote(&found, &request, &context, style, out, err)
         }
     }
+}
+
+/// What `promote` was asked to do.
+struct Promotion<'a> {
+    note: &'a str,
+    rule: &'a str,
+    dry_run: bool,
+}
+
+/// `promote`: a rule in `.ai/src/rules/` from a note's body. The note stays
+/// as it is; exuno writes only inside the project.
+fn promote(
+    found: &Found,
+    request: &Promotion,
+    context: &store::Context,
+    style: &Style,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> Result<u8, Error> {
+    let refuse = |err: &mut dyn Write, message: String| -> Result<u8, Error> {
+        put(
+            err,
+            format!("{}: {message}\n", style.red("Error")).as_bytes(),
+        )?;
+        Ok(1)
+    };
+    if let Some(message) = super::add::validate_name(request.rule) {
+        return refuse(err, message);
+    }
+    let given = match request.note.strip_prefix("~/") {
+        Some(rest) => match context.home {
+            Some(home) => home.join(rest),
+            None => return refuse(err, format!("no home directory to expand {}", request.note)),
+        },
+        None => context.root.join(request.note),
+    };
+    let wanted = store::canonical(&given);
+    let Some(note) = found
+        .stores
+        .iter()
+        .flat_map(|(_, _, notes)| notes)
+        .find(|note| store::canonical(&note.path) == wanted)
+    else {
+        return refuse(
+            err,
+            format!(
+                "{} is not a note in any memory store exuno reads",
+                request.note
+            ),
+        );
+    };
+    let body = note.body().trim();
+    if body.is_empty() {
+        return refuse(err, format!("{} has no text to promote", request.note));
+    }
+    if let Some(line) = content::credential_lines(&note.text).first() {
+        return refuse(
+            err,
+            format!(
+                "{} line {line} looks like a credential; remove it from the note before promoting",
+                request.note
+            ),
+        );
+    }
+    let rel = format!(".ai/src/rules/{}.md", request.rule);
+    let dest = context.root.join(&rel);
+    let already = |err: &mut dyn Write| {
+        refuse(
+            err,
+            format!("Already exists: {rel}; pick a different name or edit that rule"),
+        )
+    };
+    let content = format!("# {}\n\n{body}\n", super::add::title(request.rule));
+    if request.dry_run {
+        if dest.exists() {
+            return already(err);
+        }
+        let text = format!("Would create rule: {rel}\n\n{content}");
+        put(out, text.as_bytes())?;
+        return Ok(0);
+    }
+    let project = Project::configured(context.root)?;
+    let (_editing, _) = match super::lock_for_edit(&project, "memory promote", style, err)? {
+        Ok(locked) => locked,
+        Err(status) => return Ok(status),
+    };
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&dest);
+    let mut file = match file {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return already(err),
+        Err(e) => return Err(Error::io(&dest, e)),
+    };
+    file.write_all(content.as_bytes())
+        .map_err(|e| Error::io(&dest, e))?;
+    let text = format!(
+        "\n{} {rel}\n\nEdit the rule, then run {} to propagate.\nThe note at {} is unchanged: replace it with one line that points at the rule,\nand keep its line in the store's index in step.\n\n",
+        style.green("Created rule:"),
+        style.cyan("exuno sync"),
+        shown(&note.path, context.home.and_then(Path::to_str)),
+    );
+    put(out, text.as_bytes())?;
+    Ok(0)
+}
+
+/// How much memory this project has and how many `check` findings it holds.
+pub struct Summary {
+    pub notes: usize,
+    pub issues: usize,
+}
+
+/// `check` for the project at `root` alone, counted, for `doctor`.
+pub fn summary(root: &str, env: &Env) -> Result<Summary, Error> {
+    let found = find(root, env, false, &mut std::io::sink())?;
+    let context = store::Context {
+        stale: None,
+        root: Path::new(root),
+        home: env.home.as_deref().map(Path::new),
+    };
+    let shown = |path: &Path| shown(path, env.home.as_deref());
+    Ok(Summary {
+        notes: found.stores.iter().map(|(_, _, notes)| notes.len()).sum(),
+        issues: issues(&found, &context, &shown).len(),
+    })
 }
 
 fn find(root: &str, env: &Env, all: bool, err: &mut dyn Write) -> Result<Found, Error> {
@@ -169,20 +322,7 @@ fn list(
             .map(move |note| (&found.specs[*spec].tool, store, note))
     });
     if json {
-        let values: Vec<serde_json::Value> = rows
-            .map(|(tool, store, note)| {
-                serde_json::json!({
-                    "tool": tool,
-                    "project": store.project,
-                    "name": note.name,
-                    "type": note.kind,
-                    "modified": note.modified,
-                    "description": note.description,
-                    "path": shown(&note.path),
-                })
-            })
-            .collect();
-        print_json(&serde_json::Value::Array(values), out)?;
+        print_json(&notes_json(found, shown), out)?;
         return Ok(0);
     }
     let mut text = String::from("tool\tproject\tname\ttype\tmodified\tdescription\tpath\n");
@@ -193,7 +333,7 @@ fn list(
             &note.name,
             &note.kind,
             &note.modified,
-            &note.description,
+            printable_description(note),
             &shown(&note.path),
         ];
         let cells: Vec<String> = cells.iter().map(|value| cell(value)).collect();
@@ -206,26 +346,15 @@ fn list(
 
 fn check(
     found: &Found,
-    stale: Option<(i64, i64)>,
+    context: &store::Context,
     json: bool,
     shown: &dyn Fn(&Path) -> String,
     out: &mut dyn Write,
 ) -> Result<u8, Error> {
-    let mut issues = Vec::new();
-    for (spec, store, notes) in &found.stores {
-        issues.extend(store::findings(&found.specs[*spec], store, notes, stale));
-    }
-    issues.extend(shared_names(found));
+    let issues = issues(found, context, shown);
     let checked: usize = found.stores.iter().map(|(_, _, notes)| notes.len()).sum();
     if json {
-        let values: Vec<serde_json::Value> = issues
-            .iter()
-            .map(|(path, message)| serde_json::json!({"path": shown(path), "message": message}))
-            .collect();
-        print_json(
-            &serde_json::json!({"checked": checked, "issues": values}),
-            out,
-        )?;
+        print_json(&check_json(checked, &issues, shown), out)?;
     } else {
         let mut text = String::new();
         for (path, message) in &issues {
@@ -239,6 +368,100 @@ fn check(
         put(out, text.as_bytes())?;
     }
     Ok(u8::from(!issues.is_empty()))
+}
+
+/// `list --json`: one object per note.
+fn notes_json(found: &Found, shown: &dyn Fn(&Path) -> String) -> serde_json::Value {
+    let values = found.stores.iter().flat_map(|(spec, store, notes)| {
+        notes.iter().map(move |note| {
+            serde_json::json!({
+                "tool": found.specs[*spec].tool,
+                "project": store.project,
+                "name": note.name,
+                "type": note.kind,
+                "modified": note.modified,
+                "description": printable_description(note),
+                "path": shown(&note.path),
+            })
+        })
+    });
+    serde_json::Value::Array(values.collect())
+}
+
+/// A note's description, withheld when it holds something shaped like a
+/// credential: `list` and `review` output can be piped to a model.
+fn printable_description(note: &Note) -> &str {
+    if content::credential_lines(&note.description).is_empty() {
+        &note.description
+    } else {
+        "[withheld: looks like a credential]"
+    }
+}
+
+/// `check --json`: the count of notes read and every finding.
+fn check_json(
+    checked: usize,
+    issues: &[(std::path::PathBuf, String)],
+    shown: &dyn Fn(&Path) -> String,
+) -> serde_json::Value {
+    let values: Vec<serde_json::Value> = issues
+        .iter()
+        .map(|(path, message)| serde_json::json!({"path": shown(path), "message": message}))
+        .collect();
+    serde_json::json!({"checked": checked, "issues": values})
+}
+
+/// `review`: the reviewer brief the `memory-review` skill uses, then what it
+/// reads, so any agent can run the review from one paste.
+fn review(
+    found: &Found,
+    context: &store::Context,
+    shown: &dyn Fn(&Path) -> String,
+    out: &mut dyn Write,
+) -> Result<u8, Error> {
+    let issues = issues(found, context, shown);
+    let checked: usize = found.stores.iter().map(|(_, _, notes)| notes.len()).sum();
+    let mut stores: Vec<String> = found
+        .stores
+        .iter()
+        .map(|(spec, store, _)| format!("- {}: {}", found.specs[*spec].tool, shown(&store.dir)))
+        .collect();
+    if stores.is_empty() {
+        stores.push("- none found".to_string());
+    }
+    let src = context.root.join(".ai").join("src");
+    let rules = if src.is_dir() {
+        shown(&src)
+    } else {
+        "none (no .ai/src/ in this project)".to_string()
+    };
+    let pretty = |value: &serde_json::Value| {
+        serde_json::to_string_pretty(value).expect("a JSON value serializes")
+    };
+    let text = format!(
+        "{}\n\n# This run\n\n## Stores\n\n{}\n\n## Project rules\n\n{rules}\n\n## Findings from exuno memory check\n\n```json\n{}\n```\n\n## Notes\n\n```json\n{}\n```\n",
+        catalog::MEMORY_REVIEW_PROMPT.trim_end_matches('\n'),
+        stores.join("\n"),
+        pretty(&check_json(checked, &issues, shown)),
+        pretty(&notes_json(found, shown)),
+    );
+    put(out, text.as_bytes())?;
+    Ok(0)
+}
+
+/// Every `check` finding, as `(path, message)`.
+fn issues(
+    found: &Found,
+    context: &store::Context,
+    shown: &dyn Fn(&Path) -> String,
+) -> Vec<(std::path::PathBuf, String)> {
+    let mut issues = Vec::new();
+    for (spec, store, notes) in &found.stores {
+        issues.extend(store::findings(&found.specs[*spec], store, notes, context));
+    }
+    issues.extend(shared_names(found));
+    issues.extend(overlaps(found, context.root, shown));
+    issues
 }
 
 /// A note whose name notes in other projects carry too: one rule could hold it.
@@ -281,6 +504,83 @@ fn shared_names(found: &Found) -> Vec<(std::path::PathBuf, String)> {
     issues
 }
 
+/// Shingle overlap at which two notes read as one. Shingles catch copied
+/// text, not a lesson retold in other words; that is the review skill's job.
+const DUPLICATE: f64 = 0.5;
+/// Share of a note's shingles a source file must hold to have said it already.
+const COVERED: f64 = 0.5;
+
+/// Notes that repeat another note, or repeat what `.ai/src/` already says.
+/// Only this project's store and the shared stores load these rules, so a
+/// note from another project is never called covered by them.
+fn overlaps(
+    found: &Found,
+    root: &Path,
+    shown: &dyn Fn(&Path) -> String,
+) -> Vec<(std::path::PathBuf, String)> {
+    let mut notes: Vec<&Note> = Vec::new();
+    let mut loads_these_rules: Vec<bool> = Vec::new();
+    for (spec, store, store_notes) in &found.stores {
+        let current = store::current_project(&found.specs[*spec], root);
+        let here = store.project.is_empty() || current.as_deref() == Some(store.project.as_str());
+        notes.extend(store_notes.iter());
+        loads_these_rules.extend(store_notes.iter().map(|_| here));
+    }
+    let texts: Vec<_> = notes
+        .iter()
+        .map(|note| similar::shingles(note.body()))
+        .collect();
+    let mut issues = Vec::new();
+    for (earlier, later, score) in similar::similar_pairs(&texts, DUPLICATE) {
+        issues.push((
+            notes[later].path.clone(),
+            format!(
+                "reads like {} ({}% shared)",
+                shown(&notes[earlier].path),
+                (score * 100.0).round()
+            ),
+        ));
+    }
+    let sources = rule_sources(root);
+    let source_texts: Vec<_> = sources
+        .iter()
+        .map(|(_, text)| similar::shingles(text))
+        .collect();
+    for ((note, text), here) in notes.iter().zip(&texts).zip(&loads_these_rules) {
+        if !here {
+            continue;
+        }
+        if let Some((index, score)) = similar::best_container(text, &source_texts, COVERED) {
+            issues.push((
+                note.path.clone(),
+                format!(
+                    "already said in {} ({}%)",
+                    sources[index].0,
+                    (score * 100.0).round()
+                ),
+            ));
+        }
+    }
+    issues
+}
+
+/// The Markdown under `.ai/src/` of the project, as `(shown path, text)`.
+fn rule_sources(root: &Path) -> Vec<(String, String)> {
+    let src = root.join(".ai").join("src");
+    let mut files = Vec::new();
+    super::files_below(&src, &mut files);
+    files.sort();
+    files
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
+        .filter_map(|path| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let shown = path.strip_prefix(root).ok()?.disk_text();
+            Some((shown, text))
+        })
+        .collect()
+}
+
 fn count(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
@@ -299,31 +599,58 @@ fn shown(path: &Path, home: Option<&str>) -> String {
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let action = match args.first().map(String::as_str) {
-        Some("list") => Action::List,
-        Some("check") => Action::Check,
-        _ => return Err("expected memory list|check".to_string()),
+    let (action, rest) = match args.first().map(String::as_str) {
+        Some("list") => (Action::List, &args[1..]),
+        Some("check") => (Action::Check, &args[1..]),
+        Some("review") => (Action::Review, &args[1..]),
+        Some("promote") => match args.get(1).filter(|note| !note.starts_with('-')) {
+            Some(note) => (
+                Action::Promote {
+                    note: note.clone(),
+                    rule: String::new(),
+                },
+                &args[2..],
+            ),
+            None => return Err("memory promote requires a note path".to_string()),
+        },
+        _ => return Err("expected memory list|check|review|promote".to_string()),
     };
     let mut parsed = Args {
         action,
         all: false,
         json: false,
         stale_days: None,
+        dry_run: false,
     };
-    let mut options = args[1..].iter();
+    let promoting = matches!(parsed.action, Action::Promote { .. });
+    let mut options = rest.iter();
     while let Some(option) = options.next() {
         match option.as_str() {
-            "--all" => parsed.all = true,
-            "--json" => parsed.json = true,
-            "--stale-days" if parsed.action == Action::Check => {
+            "--all" if !promoting => parsed.all = true,
+            "--json" if matches!(parsed.action, Action::List | Action::Check) => parsed.json = true,
+            "--stale-days" if matches!(parsed.action, Action::Check | Action::Review) => {
                 let days = options.next().and_then(|value| value.parse::<i64>().ok());
                 match days.filter(|days| *days >= 0) {
                     Some(days) => parsed.stale_days = Some(days),
                     None => return Err("--stale-days requires a number of days".to_string()),
                 }
             }
+            "--rule" if promoting => {
+                let Some(name) = options.next().filter(|name| !name.starts_with('-')) else {
+                    return Err("--rule requires a name".to_string());
+                };
+                if let Action::Promote { rule, .. } = &mut parsed.action {
+                    *rule = name.clone();
+                }
+            }
+            "--dry-run" if promoting => parsed.dry_run = true,
             _ => return Err(format!("unknown option: {option}")),
         }
+    }
+    if let Action::Promote { rule, .. } = &parsed.action
+        && rule.is_empty()
+    {
+        return Err("memory promote requires --rule <name>".to_string());
     }
     Ok(parsed)
 }

@@ -54,9 +54,11 @@ To look at skills outside this project, `exuno skills catalog list` and `show` r
 
 The `exuno` skill teaches the agent how Exuno works. It ships inside the binary, built from `lib/templates/base-src/skills/`, so it matches the installed version instead of going stale in every project. Sync adds it after any `shared:` parent, so the order is: your project, then the shared parent, then the engine. When you update Exuno, the next `sync` in every project writes the new version, with no prompt and no merge.
 
+A second built-in skill, `memory-review`, ships the same way. It teaches the agent to review the notes coding agents keep for themselves: it runs [`exuno memory`](commands.md#memory) for the data, gives each store to a read-only reviewer, and changes a note only after you approve. Everything below about the `exuno` skill applies to it too, under its own folder name.
+
 To add to it and still get updates, create a folder named `exuno` without a `SKILL.md`, at `.ai/src/skills/exuno/` or inside any category. Its files join the engine's, and a file at the same path as one of the engine's replaces it. A `SKILL.append.md` there is appended to the engine's `SKILL.md` during sync, so the agent learns about your additions; it never reaches a tool as a separate file. The same works for a skill that a `shared:` parent provides.
 
-To replace it completely, put your own `SKILL.md` in that folder. A project copy with its own `SKILL.md` always wins, and engine updates stop reaching it. To drop the skill altogether, set `base_skills: false` in `.ai/exuno.yaml`.
+To replace it completely, put your own `SKILL.md` in that folder. A project copy with its own `SKILL.md` always wins, and engine updates stop reaching it. To drop the built-in skills altogether, set `base_skills: false` in `.ai/exuno.yaml`.
 
 Projects created before the skill moved into the binary have their own copy, which hides the engine's. `exuno migrate` reports it, and `exuno migrate --apply` removes the copy if you haven't edited it. An edited copy stays, since it's a deliberate override.
 

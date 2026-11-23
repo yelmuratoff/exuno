@@ -125,7 +125,7 @@ fn without_spans(
 
 /// `_doctor_scan_file`: the `grep -n` lines that hold a secret, one entry per
 /// line whatever matched it; empty for a clean or binary file.
-pub(super) fn scan_secrets(bytes: &[u8]) -> Vec<String> {
+pub(crate) fn scan_secrets(bytes: &[u8]) -> Vec<String> {
     if bytes.contains(&0) {
         return Vec::new();
     }

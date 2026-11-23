@@ -744,6 +744,51 @@ fn doctor_the_summary_follows_a_blank_line_with_no_rule() {
 }
 
 #[test]
+fn doctor_counts_agent_memory_findings_without_failing() {
+    let project = Project::seeded(&[]);
+    let key: String = std::fs::canonicalize(project.path())
+        .unwrap()
+        .to_string_lossy()
+        .trim_start_matches(r"\\?\")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let doctor_with_home = || {
+        project
+            .exuno()
+            .env("HOME", project.join("home"))
+            .env("PWD", project.path())
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .env_remove("CODEX_HOME")
+            .arg("doctor")
+            .assert()
+    };
+    doctor_with_home()
+        .success()
+        .stdout(predicate::str::contains("No agent memory for this project"));
+    let dir = format!("home/.claude/projects/{key}/memory");
+    project.write(
+        &format!("{dir}/note.md"),
+        "---\nname: note\ndescription: d\ntype: project\n---\n",
+    );
+    project.write(
+        &format!("{dir}/MEMORY.md"),
+        "- [Note](note.md)\n- [Gone](gone.md)\n",
+    );
+    doctor_with_home()
+        .success()
+        .stdout(predicate::str::contains(
+            "Agent memory: 1 issue in 1 note — run exuno memory check",
+        ));
+    project.write(&format!("{dir}/MEMORY.md"), "- [Note](note.md)\n");
+    doctor_with_home()
+        .success()
+        .stdout(predicate::str::contains(
+            "Agent memory: 1 note, nothing to fix",
+        ));
+}
+
+#[test]
 fn doctor_help_is_answered_on_stdout_without_a_project() {
     Project::empty()
         .exuno()

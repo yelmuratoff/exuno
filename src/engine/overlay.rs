@@ -622,8 +622,13 @@ mod tests {
         setup_base_src(&mut s, None, "/proj/.ai/src", &mut sources).unwrap();
 
         let skills = "/<agentsync-overlay>/base-src/src/skills";
+        let exuno: Vec<String> =
+            s.ws.files_under(skills)
+                .into_iter()
+                .filter(|path| path.contains("/exuno/"))
+                .collect();
         assert_eq!(
-            s.ws.files_under(skills),
+            exuno,
             [
                 format!("{skills}/meta/exuno/SKILL.append.md"),
                 format!("{skills}/meta/exuno/SKILL.md"),

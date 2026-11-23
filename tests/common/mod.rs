@@ -121,7 +121,11 @@ pub fn scrub(command: &mut Command) {
             command.env_remove(format!("{prefix}{suffix}"));
         }
     }
+    // A developer's config-home variables would point `memory` and doctor's
+    // Memory section at their real agent memory.
     command
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .env_remove("CODEX_HOME")
         .env("GIT_CONFIG_GLOBAL", absent_git_config())
         .env("GIT_CONFIG_SYSTEM", absent_git_config());
 }

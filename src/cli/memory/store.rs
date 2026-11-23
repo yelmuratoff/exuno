@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use super::content;
 use crate::config::tool::Tool;
 use crate::config::{skill_metadata, yaml_subset};
 use crate::paths::DiskText;
@@ -157,6 +158,11 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
     (stores, warnings)
 }
 
+/// The project key `spec` gives the project at `root`, when it has one.
+pub fn current_project(spec: &Spec, root: &Path) -> Option<String> {
+    project_key(&spec.project_key, &canonical(&git_root(root)))
+}
+
 fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str) {
     if dir.is_dir() {
         stores.push(Store {
@@ -209,6 +215,26 @@ pub struct Note {
     pub kind: String,
     pub modified: String,
     pub description: String,
+    /// The whole file, lossily decoded.
+    pub text: String,
+}
+
+impl Note {
+    /// The text after the frontmatter, or all of it when there is none.
+    pub fn body(&self) -> &str {
+        let mut lines = self.text.split_inclusive('\n');
+        if lines.next().map(str::trim) != Some("---") {
+            return &self.text;
+        }
+        let mut offset = self.text.find('\n').map_or(self.text.len(), |i| i + 1);
+        for line in lines {
+            offset += line.len();
+            if line.trim() == "---" {
+                return &self.text[offset..];
+            }
+        }
+        &self.text
+    }
 }
 
 /// The Markdown files of a store in byte order, its index left out.
@@ -245,9 +271,18 @@ fn note(path: PathBuf, rel: String) -> Note {
         description: skill_metadata::description(&bytes).unwrap_or_default(),
         kind: field("type"),
         modified: field("modified"),
+        text: text.into_owned(),
         rel,
         path,
     }
+}
+
+/// What a `check` run holds the same for every store.
+pub struct Context<'a> {
+    /// Today and the `--stale-days` limit, both in days.
+    pub stale: Option<(i64, i64)>,
+    pub root: &'a Path,
+    pub home: Option<&'a Path>,
 }
 
 /// What `check` finds in one store, as `(path, message)` pairs.
@@ -255,8 +290,9 @@ pub fn findings(
     spec: &Spec,
     store: &Store,
     notes: &[Note],
-    stale: Option<(i64, i64)>,
+    context: &Context,
 ) -> Vec<(PathBuf, String)> {
+    let stale = context.stale;
     let mut found = Vec::new();
     let index_path = store.dir.join(&spec.index);
     let index = (!spec.index.is_empty())
@@ -308,6 +344,18 @@ pub fn findings(
                     "last modified {}, more than {days} days ago",
                     &note.modified[..10]
                 ),
+            ));
+        }
+        for path in content::missing_paths(note.body(), context.home) {
+            found.push((
+                note.path.clone(),
+                format!("mentions {path}, which does not exist"),
+            ));
+        }
+        for line in content::credential_lines(&note.text) {
+            found.push((
+                note.path.clone(),
+                format!("line {line} looks like a credential; move it out of memory"),
             ));
         }
     }

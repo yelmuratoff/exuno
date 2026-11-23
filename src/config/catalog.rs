@@ -79,6 +79,11 @@ pub fn template_sources() -> Vec<String> {
 /// `lib/prompts/migrate.md`, the upgrade prompt `exuno migrate` prints.
 pub const MIGRATE_PROMPT: &str = include_str!("../../lib/prompts/migrate.md");
 
+/// The `memory-review` skill's reviewer brief, which `exuno memory review`
+/// prints ahead of the data: one text for the skill and the command.
+pub const MEMORY_REVIEW_PROMPT: &str =
+    include_str!("../../lib/templates/base-src/skills/memory-review/references/review-prompt.md");
+
 /// The engine-owned skills under `lib/templates/base-src/skills/`, in byte order.
 pub fn base_src_skills() -> Vec<String> {
     TEMPLATES
@@ -161,8 +166,8 @@ mod tests {
     }
 
     #[test]
-    fn the_engine_owns_the_exuno_skill_and_ships_the_migrate_prompt() {
-        assert_eq!(base_src_skills(), ["exuno"]);
+    fn the_engine_owns_its_skills_and_ships_the_migrate_prompt() {
+        assert_eq!(base_src_skills(), ["exuno", "memory-review"]);
         assert!(MIGRATE_PROMPT.starts_with("I need you to safely migrate"));
     }
 

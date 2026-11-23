@@ -18,10 +18,7 @@ const COMMANDS: [(&str, &str); 32] = [
         "skills",
         "Inspect project skills and explicit external catalogs",
     ),
-    (
-        "memory",
-        "Inspect the memory coding agents keep for themselves",
-    ),
+    ("memory", "Check agent memory, or turn a note into a rule"),
     ("mcp", "Inspect an MCP catalog and prepare per-tool sources"),
     ("enable", "Opt in to one or more tools"),
     ("disable", "Opt out of one or more tools"),

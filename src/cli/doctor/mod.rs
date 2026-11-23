@@ -1,10 +1,11 @@
 //! `exuno doctor`: `cmd_doctor` of `lib/helpers/doctor.sh`, which checks
 //! a project's layout, tools, overrides, sources, drift, secrets, skills,
-//! rules, tool outputs, and parent duplicates, and exits 0, 1, or 2.
+//! rules, tool outputs, parent duplicates, and agent memory, and exits 0,
+//! 1, or 2.
 
 mod json;
 mod project_checks;
-mod secrets;
+pub(crate) mod secrets;
 mod tool_checks;
 
 use std::collections::BTreeSet;
@@ -28,7 +29,7 @@ pub const HELP: Help = Help {
     tagline: "validate setup and surface warnings",
     synopsis: &["doctor"],
     description: &[
-        "Checks the project section by section and prints one line per\nfinding: project layout, enabled tools, edit paths, user overrides,\nsource directories, drift, security, skills, rules, tool outputs, and\ncross-project duplicates. The report goes to stdout; the summary line\nnames every command to run next.",
+        "Checks the project section by section and prints one line per\nfinding: project layout, enabled tools, edit paths, user overrides,\nsource directories, drift, security, skills, rules, tool outputs,\ncross-project duplicates, and agent memory. The report goes to stdout;\nthe summary line names every command to run next.",
         "Honours EXUNO_CONFIG_PATH for the project config and\nEXUNO_EXTERNAL_SOURCE_ROOTS for source directories that live\noutside the project.",
     ],
     sections: &[
@@ -59,6 +60,7 @@ pub const HELP: Help = Help {
 pub struct Env<'a> {
     pub version: &'a str,
     pub external_roots: Option<String>,
+    pub memory: super::memory::Env<'a>,
 }
 
 struct External {
@@ -270,6 +272,7 @@ pub fn doctor(
     d.section("Rules", Doctor::check_always_on_rules)?;
     d.section("Tool outputs", Doctor::check_orphan_outputs)?;
     d.section("Cross-project", Doctor::check_cross_project)?;
+    d.section("Memory", |d| d.check_memory(&env.memory))?;
     d.verdict()
 }
 
@@ -283,6 +286,34 @@ impl Doctor<'_> {
         self.heading(heading)?;
         check(self)?;
         self.say("\n")
+    }
+
+    /// `Memory`: what `exuno memory check` would find for this project, counted.
+    fn check_memory(&mut self, env: &super::memory::Env) -> Result<(), Error> {
+        let style = self.style;
+        let summary = match super::memory::summary(&self.root, env) {
+            Ok(summary) => summary,
+            Err(error) => return self.info(&format!("Agent memory not read: {error}")),
+        };
+        let notes = match summary.notes {
+            0 => return self.info("No agent memory for this project"),
+            1 => "1 note".to_string(),
+            n => format!("{n} notes"),
+        };
+        match summary.issues {
+            0 => self.ok(&format!("Agent memory: {notes}, nothing to fix")),
+            n => {
+                let issues = if n == 1 {
+                    "1 issue".to_string()
+                } else {
+                    format!("{n} issues")
+                };
+                self.advise(&format!(
+                    "Agent memory: {issues} in {notes} — run {}",
+                    style.cyan("exuno memory check")
+                ))
+            }
+        }
     }
 
     /// `Project layout`: false when `.ai/` is missing, which ends the report.
@@ -536,10 +567,19 @@ mod tests {
         (dir, root)
     }
 
+    fn no_memory() -> super::super::memory::Env<'static> {
+        super::super::memory::Env {
+            home: None,
+            var: &|_| None,
+            today: 0,
+        }
+    }
+
     fn run(root: &str) -> (u8, String, String) {
         let env = Env {
             version: "0.36.0",
             external_roots: None,
+            memory: no_memory(),
         };
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let status = doctor(
@@ -563,6 +603,7 @@ mod tests {
         let env = Env {
             version: "0.36.0",
             external_roots: None,
+            memory: no_memory(),
         };
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let status = doctor(
@@ -590,7 +631,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(err, "");
         let expected = format!(
-            "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ! No exuno.yaml — using defaults only\n\n  Enabled tools\n    · No tools enabled — run exuno enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    · .ai/src/rules not present (optional)\n    · .ai/src/skills not present (optional)\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    · No .sync-manifest yet — run exuno sync to create it\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    · No .ai/src/skills/ — nothing to scan.\n\n  Rules\n    · No .ai/src/rules/ — nothing to scan.\n\n  Tool outputs\n    ✓ No orphan tool-output directories\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  OK with 1 warning(s)\n\n"
+            "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ! No exuno.yaml — using defaults only\n\n  Enabled tools\n    · No tools enabled — run exuno enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    · .ai/src/rules not present (optional)\n    · .ai/src/skills not present (optional)\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    · No .sync-manifest yet — run exuno sync to create it\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    · No .ai/src/skills/ — nothing to scan.\n\n  Rules\n    · No .ai/src/rules/ — nothing to scan.\n\n  Tool outputs\n    ✓ No orphan tool-output directories\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  Memory\n    · No agent memory for this project\n\n  OK with 1 warning(s)\n\n"
         );
         assert_eq!(out, expected);
     }
@@ -619,7 +660,7 @@ mod tests {
         assert_eq!(status, 1);
         assert_eq!(err, "");
         let expected = format!(
-            "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ✓ Project config: .ai/exuno.yaml\n    ! CLI version v0.36.0 differs from pinned v0.0.1 — run exuno upgrade-config to align\n    ! Project format r1 is behind the engine r3 — run exuno migrate to preview\n\n  Enabled tools\n    · No tools enabled — run exuno enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    ✓ .ai/src/rules\n    ✓ .ai/src/skills\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    ! CLAUDE.md — missing (deleted manually)\n\n    Re-run exuno sync to overwrite, or move edits into .ai/src/ first.\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    ! skills/empty/ — missing SKILL.md (empty skill — populate or remove)\n\n  Rules\n    ✓ No always-on rules (every rule is paths:-scoped)\n\n  Tool outputs\n    ! .claude/ — orphan (tool 'claude' not enabled; output left from prior run)\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  OK with 3 warning(s), 2 advisory(ies)\n\n"
+            "\n  Exuno Doctor\n  {root}\n\n  Project layout\n    ✓ .ai/ directory present\n    ✓ AGENTS.md source file found\n    ✓ Project config: .ai/exuno.yaml\n    ! CLI version v0.36.0 differs from pinned v0.0.1 — run exuno upgrade-config to align\n    ! Project format r1 is behind the engine r3 — run exuno migrate to preview\n\n  Enabled tools\n    · No tools enabled — run exuno enable <slug>\n\n  User overrides\n    · No customizations — all tools inherit fully from base\n\n  Source directories\n    ✓ .ai/src/AGENTS.md\n    ✓ .ai/src/rules\n    ✓ .ai/src/skills\n    · .ai/src/commands not present (optional)\n    · .ai/src/agents not present (optional)\n\n  Drift\n    ! CLAUDE.md — missing (deleted manually)\n\n    Re-run exuno sync to overwrite, or move edits into .ai/src/ first.\n\n  Security\n    · No overrides to scan, or all clean.\n\n  Skills\n    ! skills/empty/ — missing SKILL.md (empty skill — populate or remove)\n\n  Rules\n    ✓ No always-on rules (every rule is paths:-scoped)\n\n  Tool outputs\n    ! .claude/ — orphan (tool 'claude' not enabled; output left from prior run)\n\n  Cross-project\n    · No parent .ai/src/ found within git boundary.\n\n  Memory\n    · No agent memory for this project\n\n  OK with 3 warning(s), 2 advisory(ies)\n\n"
         );
         assert_eq!(out, expected);
     }
