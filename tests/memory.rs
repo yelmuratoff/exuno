@@ -12,11 +12,13 @@ fn project() -> Project {
     project
 }
 
-/// The directory name Claude Code gives the project's auto memory.
+/// The directory name Claude Code gives the project's auto memory, built from
+/// the path with symlinks resolved.
 fn key(project: &Project) -> String {
-    project
-        .path()
-        .to_string_lossy()
+    let path = std::fs::canonicalize(project.path()).unwrap();
+    let path = path.to_string_lossy();
+    path.strip_prefix(r"\\?\")
+        .unwrap_or(&path)
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect()
@@ -56,6 +58,23 @@ fn list_reads_the_current_projects_memory_only() {
             key = key(&project)
         ))
         .stderr("");
+}
+
+#[test]
+fn a_git_worktree_reads_its_main_repositorys_memory() {
+    let project = project();
+    project.git(&["commit", "--allow-empty", "-q", "-m", "init"]);
+    project.git(&["worktree", "add", "-q", "wt"]);
+    let key = key(&project);
+    project.write(&format!("{}/feedback.md", claude_memory(&key)), NOTE);
+    memory(&project, &["list"])
+        .current_dir(project.join("wt"))
+        .env("PWD", project.join("wt"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "claude\t{key}\tno-attribution\t"
+        )));
 }
 
 #[test]

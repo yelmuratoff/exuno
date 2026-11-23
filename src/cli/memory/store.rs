@@ -146,7 +146,7 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
             }
             continue;
         }
-        match project_key(&spec.project_key, &git_root(root)) {
+        match project_key(&spec.project_key, &canonical(&git_root(root))) {
             Some(project) => push_dir(&mut stores, parent.join(&project).join(suffix), &project),
             None => warnings.push(format!(
                 "{}: memory.project_key '{}' is not one of: path-dashed",
@@ -166,12 +166,25 @@ fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str) {
     }
 }
 
-/// The nearest ancestor holding `.git`, else `root` itself.
+/// The repository `root` is in, else `root` itself. Claude Code shares one
+/// memory store across a repository's worktrees and subdirectories
+/// (https://code.claude.com/docs/en/memory).
 fn git_root(root: &Path) -> PathBuf {
-    root.ancestors()
-        .find(|dir| dir.join(".git").exists())
-        .unwrap_or(root)
-        .to_path_buf()
+    let Some(top) = root.ancestors().find(|dir| dir.join(".git").exists()) else {
+        return root.to_path_buf();
+    };
+    main_worktree(top).unwrap_or_else(|| top.to_path_buf())
+}
+
+/// A linked worktree's main repository, which its memory shares: `.git` is a
+/// file reading `gitdir: <dir>`, and `<dir>/commondir` names the main `.git`
+/// relative to `<dir>`. `None` for a main worktree.
+fn main_worktree(top: &Path) -> Option<PathBuf> {
+    let link = std::fs::read_to_string(top.join(".git")).ok()?;
+    let gitdir = top.join(link.strip_prefix("gitdir:")?.trim());
+    let common = std::fs::read_to_string(gitdir.join("commondir")).ok()?;
+    let main_git = crate::paths::normalize(&gitdir.join(common.trim()).disk_text());
+    Some(Path::new(&main_git).parent()?.to_path_buf())
 }
 
 /// `path-dashed`: every character outside ASCII letters and digits becomes `-`,
