@@ -158,6 +158,11 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
     (stores, warnings)
 }
 
+/// The project key `spec` gives the project at `root`, when it has one.
+pub fn current_project(spec: &Spec, root: &Path) -> Option<String> {
+    project_key(&spec.project_key, &canonical(&git_root(root)))
+}
+
 fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str) {
     if dir.is_dir() {
         stores.push(Store {

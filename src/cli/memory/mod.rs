@@ -43,7 +43,7 @@ pub const HELP: Help = Help {
             ("--all", "Read every project's store, not only this one"),
             (
                 "--stale-days <n>",
-                "check: report notes older than <n> days",
+                "check, review: report notes older than <n> days",
             ),
             ("--json", "list, check: print one JSON value on stdout"),
             ("--rule <name>", "promote: the rule file to create"),
@@ -183,20 +183,32 @@ fn promote(
             ),
         );
     };
-    let rel = format!(".ai/src/rules/{}.md", request.rule);
-    let dest = context.root.join(&rel);
-    if dest.exists() {
+    let body = note.body().trim();
+    if body.is_empty() {
+        return refuse(err, format!("{} has no text to promote", request.note));
+    }
+    if let Some(line) = content::credential_lines(&note.text).first() {
         return refuse(
             err,
-            format!("Already exists: {rel}; pick a different name or edit that rule"),
+            format!(
+                "{} line {line} looks like a credential; remove it from the note before promoting",
+                request.note
+            ),
         );
     }
-    let content = format!(
-        "# {}\n\n{}\n",
-        super::add::title(request.rule),
-        note.body().trim()
-    );
+    let rel = format!(".ai/src/rules/{}.md", request.rule);
+    let dest = context.root.join(&rel);
+    let already = |err: &mut dyn Write| {
+        refuse(
+            err,
+            format!("Already exists: {rel}; pick a different name or edit that rule"),
+        )
+    };
+    let content = format!("# {}\n\n{body}\n", super::add::title(request.rule));
     if request.dry_run {
+        if dest.exists() {
+            return already(err);
+        }
         let text = format!("Would create rule: {rel}\n\n{content}");
         put(out, text.as_bytes())?;
         return Ok(0);
@@ -209,7 +221,17 @@ fn promote(
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
-    std::fs::write(&dest, content).map_err(|e| Error::io(&dest, e))?;
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&dest);
+    let mut file = match file {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return already(err),
+        Err(e) => return Err(Error::io(&dest, e)),
+    };
+    file.write_all(content.as_bytes())
+        .map_err(|e| Error::io(&dest, e))?;
     let text = format!(
         "\n{} {rel}\n\nEdit the rule, then run {} to propagate.\nThe note at {} is unchanged: replace it with one line that points at the rule,\nand keep its line in the store's index in step.\n\n",
         style.green("Created rule:"),
@@ -311,7 +333,7 @@ fn list(
             &note.name,
             &note.kind,
             &note.modified,
-            &note.description,
+            printable_description(note),
             &shown(&note.path),
         ];
         let cells: Vec<String> = cells.iter().map(|value| cell(value)).collect();
@@ -358,12 +380,22 @@ fn notes_json(found: &Found, shown: &dyn Fn(&Path) -> String) -> serde_json::Val
                 "name": note.name,
                 "type": note.kind,
                 "modified": note.modified,
-                "description": note.description,
+                "description": printable_description(note),
                 "path": shown(&note.path),
             })
         })
     });
     serde_json::Value::Array(values.collect())
+}
+
+/// A note's description, withheld when it holds something shaped like a
+/// credential: `list` and `review` output can be piped to a model.
+fn printable_description(note: &Note) -> &str {
+    if content::credential_lines(&note.description).is_empty() {
+        &note.description
+    } else {
+        "[withheld: looks like a credential]"
+    }
 }
 
 /// `check --json`: the count of notes read and every finding.
@@ -479,16 +511,21 @@ const DUPLICATE: f64 = 0.5;
 const COVERED: f64 = 0.5;
 
 /// Notes that repeat another note, or repeat what `.ai/src/` already says.
+/// Only this project's store and the shared stores load these rules, so a
+/// note from another project is never called covered by them.
 fn overlaps(
     found: &Found,
     root: &Path,
     shown: &dyn Fn(&Path) -> String,
 ) -> Vec<(std::path::PathBuf, String)> {
-    let notes: Vec<&Note> = found
-        .stores
-        .iter()
-        .flat_map(|(_, _, notes)| notes)
-        .collect();
+    let mut notes: Vec<&Note> = Vec::new();
+    let mut loads_these_rules: Vec<bool> = Vec::new();
+    for (spec, store, store_notes) in &found.stores {
+        let current = store::current_project(&found.specs[*spec], root);
+        let here = store.project.is_empty() || current.as_deref() == Some(store.project.as_str());
+        notes.extend(store_notes.iter());
+        loads_these_rules.extend(store_notes.iter().map(|_| here));
+    }
     let texts: Vec<_> = notes
         .iter()
         .map(|note| similar::shingles(note.body()))
@@ -509,7 +546,10 @@ fn overlaps(
         .iter()
         .map(|(_, text)| similar::shingles(text))
         .collect();
-    for (note, text) in notes.iter().zip(&texts) {
+    for ((note, text), here) in notes.iter().zip(&texts).zip(&loads_these_rules) {
+        if !here {
+            continue;
+        }
         if let Some((index, score)) = similar::best_container(text, &source_texts, COVERED) {
             issues.push((
                 note.path.clone(),

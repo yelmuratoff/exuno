@@ -447,6 +447,11 @@ fn check_reports_notes_that_repeat_each_other_or_a_rule() {
         ".ai/src/rules/release.md",
         &format!("# Release\n\n{LESSON}\n"),
     );
+    let here = claude_memory(&key(&project));
+    project.write(
+        &format!("{here}/release.md"),
+        &format!("{}{LESSON}\n", typed("release-here")),
+    );
     let output = memory(&project, &["check", "--all"]).output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
@@ -456,9 +461,67 @@ fn check_reports_notes_that_repeat_each_other_or_a_rule() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("-one/memory/release.md: already said in .ai/src/rules/release.md (100%)"),
+        stdout.contains(&format!(
+            "{here_shown}/release.md: already said in .ai/src/rules/release.md (100%)",
+            here_shown = here.replace("home/", "~/")
+        )),
         "{stdout}"
     );
+    assert!(
+        !stdout.contains("-one/memory/release.md: already said"),
+        "another project's note does not load these rules:\n{stdout}"
+    );
+}
+
+#[test]
+fn review_and_list_withhold_a_credential_in_a_description() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(
+        &format!("{dir}/token.md"),
+        "---\nname: token\ndescription: bot token ghp_abcdefghijklmnopqrstuvwxyz0123456789\ntype: project\n---\nBody.\n",
+    );
+    for args in [&["review"][..], &["list"], &["list", "--json"]] {
+        let output = memory(&project, args).output().unwrap();
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(!stdout.contains("ghp_"), "{args:?} printed it:\n{stdout}");
+        assert!(
+            stdout.contains("[withheld: looks like a credential]"),
+            "{stdout}"
+        );
+    }
+}
+
+#[test]
+fn promote_refuses_a_credential_or_an_empty_note() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(
+        &format!("{dir}/token.md"),
+        &format!(
+            "{}Use ghp_abcdefghijklmnopqrstuvwxyz0123456789 for the bot.\n",
+            typed("token")
+        ),
+    );
+    project.write(&format!("{dir}/empty.md"), &typed("empty"));
+    let note = |name: &str| format!("~/.claude/projects/{}/memory/{name}.md", key(&project));
+    memory(
+        &project,
+        &["promote", &note("token"), "--rule", "token", "--dry-run"],
+    )
+    .assert()
+    .code(1)
+    .stdout("")
+    .stderr(predicate::str::contains(
+        "line 6 looks like a credential; remove it from the note before promoting",
+    ))
+    .stderr(predicate::str::contains("ghp_").not());
+    memory(&project, &["promote", &note("empty"), "--rule", "empty"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("has no text to promote"));
+    assert!(!project.exists(".ai/src/rules/token.md"));
+    assert!(!project.exists(".ai/src/rules/empty.md"));
 }
 
 #[test]

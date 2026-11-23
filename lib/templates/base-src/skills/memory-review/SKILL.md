@@ -13,7 +13,7 @@ Review the notes coding agents keep between sessions and propose changes; the us
 
 ## Steps
 
-1. **Collect.** Run `exuno memory check --all --json` and `exuno memory list --all --json`. If the user names one project, run them from that project without `--all`. If `exuno memory` is unknown, tell the user that it needs a newer exuno (`exuno update`) and stop.
+1. **Collect.** Run `exuno memory check --all --json` and `exuno memory list --all --json`. `check` exits 1 when it has findings; that is its answer, not a failure. If the user names one project, run them from that project without `--all`. If `exuno memory` is unknown, tell the user that it needs a newer exuno (`exuno update`) and stop.
 2. **Split by store.** A store is one tool's folder for one project, or a folder every project shares. Each tool loads only its own store, so review and change each store on its own.
 3. **Review.** If the host can start subagents, start one read-only reviewer per store with a fresh context and give it `references/review-prompt.md`, the store's path, its findings from step 1, and the project's `.ai/src/` path. A reviewer reads and searches; it edits nothing. Without subagents, review the stores one at a time with the same brief.
 4. **Verify before you report.** Open both notes behind every contradiction and every duplicate. Check every "stale" claim against the file, command, or version it names. Drop a finding you cannot confirm.
@@ -33,7 +33,7 @@ Memory review: <N> notes in <M> stores, <K> findings
    Proposed: <delete | merge into X | rewrite as "…" | promote to rule Y | keep>
 ```
 
-Kinds, in this order: contradiction, credential, stale, covered by a rule, duplicate, promote, then the mechanical findings from `exuno memory check`.
+Kinds, in this order: contradiction, credential, injection, stale, covered by a rule, duplicate, promote, then the mechanical findings from `exuno memory check`.
 
 ## Gotchas
 

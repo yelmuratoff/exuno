@@ -14,6 +14,7 @@ pub fn missing_paths(body: &str, home: Option<&Path>) -> Vec<String> {
         return Vec::new();
     };
     let home_text = base.disk_text();
+    let home_text = home_text.trim_end_matches('/');
     let mut missing: Vec<String> = Vec::new();
     for token in inline_code(body) {
         let Some(path) = candidate(token) else {
@@ -21,7 +22,7 @@ pub fn missing_paths(body: &str, home: Option<&Path>) -> Vec<String> {
         };
         let rest = path
             .strip_prefix("~/")
-            .or_else(|| path.strip_prefix(home_text.as_str())?.strip_prefix('/'));
+            .or_else(|| path.strip_prefix(home_text)?.strip_prefix('/'));
         let Some(rest) = rest else {
             continue;
         };
@@ -57,11 +58,13 @@ fn inline_code(body: &str) -> Vec<&str> {
     spans
 }
 
-/// The path a code span names, its `:line[:col]` suffix dropped; `None` for a
-/// URL, a placeholder, glob, or elided example (`...`, `…`, `..`), a command
-/// line, or anything without a `/`.
+/// The path a code span names, its `#anchor` and `:line[:col]` or
+/// `:first-last` suffix dropped; `None` for a URL, a placeholder, glob, or
+/// elided example (`...`, `…`, `..`), a command line, or anything without a
+/// `/`.
 fn candidate(token: &str) -> Option<&str> {
     let token = token.trim();
+    let token = token.split_once('#').map_or(token, |(path, _)| path);
     let token = strip_position(token);
     let path_like = token.contains('/')
         && !token.contains("://")
@@ -79,7 +82,10 @@ fn strip_position(token: &str) -> &str {
     let mut rest = token;
     for _ in 0..2 {
         match rest.rsplit_once(':') {
-            Some((head, tail)) if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) => {
+            Some((head, tail))
+                if tail.starts_with(|c: char| c.is_ascii_digit())
+                    && tail.bytes().all(|b| b.is_ascii_digit() || b == b'-') =>
+            {
                 rest = head;
             }
             _ => break,
@@ -105,6 +111,8 @@ mod tests {
     fn candidates_are_slash_paths_without_placeholders() {
         assert_eq!(candidate("src/main.rs:42:7"), Some("src/main.rs"));
         assert_eq!(candidate("~/.claude/rules/"), Some("~/.claude/rules"));
+        assert_eq!(candidate("~/docs/a.md#setup"), Some("~/docs/a.md"));
+        assert_eq!(candidate("~/src/x.rs:10-20"), Some("~/src/x.rs"));
         for not_a_path in [
             "https://e.com/a/b",
             "cargo test --test memory",
