@@ -34,3 +34,17 @@ targets:
   guard:
     dest: ".claude/hooks/agentsync-guard.sh"
     profile_scoped: false
+
+# Auto memory, read by `exuno memory`. Each project's notes live under
+# projects/<path with every non-alphanumeric character as "-">/memory, and
+# Claude Code loads the first 200 lines or 25 KB of MEMORY.md
+# (https://code.claude.com/docs/en/memory).
+memory:
+  home: "~/.claude"
+  home_env: "CLAUDE_CONFIG_DIR"
+  dirs: ["projects/{project}/memory"]
+  project_key: "path-dashed"
+  index: "MEMORY.md"
+  index_max_lines: 200
+  index_max_bytes: 25600
+  types: [user, feedback, project, reference]

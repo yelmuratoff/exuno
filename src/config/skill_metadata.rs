@@ -12,7 +12,7 @@ pub struct SkillMetadata {
 }
 
 /// The lines between a leading `---` and the closing one.
-fn frontmatter(text: &str) -> Result<Vec<&str>, String> {
+pub(crate) fn frontmatter(text: &str) -> Result<Vec<&str>, String> {
     let mut lines = text.lines();
     if lines.next().map(str::trim) != Some("---") {
         return Err("missing YAML frontmatter".to_string());

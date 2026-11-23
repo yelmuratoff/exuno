@@ -12,6 +12,7 @@ pub mod init;
 pub mod list;
 pub mod mcp;
 mod mcp_merge;
+pub mod memory;
 pub mod migrate;
 pub mod notice;
 pub mod profile;
@@ -169,6 +170,7 @@ pub enum Command {
     Version,
     List,
     Skills,
+    Memory,
     Mcp,
     Check,
     Sync,
@@ -208,6 +210,7 @@ impl Command {
             "version" | "--version" | "-v" => Self::Version,
             "list" | "ls" => Self::List,
             "skills" => Self::Skills,
+            "memory" => Self::Memory,
             "mcp" => Self::Mcp,
             "check" => Self::Check,
             "sync" => Self::Sync,

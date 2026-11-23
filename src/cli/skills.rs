@@ -323,7 +323,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
     Ok(parsed)
 }
 
-fn cell(value: &str) -> String {
+pub(crate) fn cell(value: &str) -> String {
     value
         .chars()
         .map(|c| {

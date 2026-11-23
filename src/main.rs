@@ -89,6 +89,23 @@ fn dispatch(command: Command, rest: &[String], style: &Style) -> Result<u8, Erro
             let env = sync_env();
             cli::skills::run(rest, &repo_root()?, &env.render, style, stdout, stderr)
         }
+        Command::Memory => {
+            let today = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| (d.as_secs() / 86_400) as i64);
+            let root = repo_root()?;
+            let msystem = var("MSYSTEM");
+            let path_var =
+                |name: &str| var(name).map(|value| paths::from_msys(&value, msystem.as_deref()));
+            let env = cli::memory::Env {
+                home: paths::Paths::for_disk_root(&root)
+                    .home()
+                    .map(str::to_string),
+                var: &path_var,
+                today,
+            };
+            cli::memory::run(rest, &root, &env, style, stdout, stderr)
+        }
         Command::Mcp => cli::mcp::run(rest, style, stdout, stderr),
         Command::Catalog => write_stdout(&cli::update::catalog_dump()),
         Command::UpdateCache => Ok(0),

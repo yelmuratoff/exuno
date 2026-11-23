@@ -8,7 +8,7 @@ use super::put;
 use crate::output::style::Style;
 use crate::{Error, engine_version};
 
-const COMMANDS: [(&str, &str); 31] = [
+const COMMANDS: [(&str, &str); 32] = [
     ("init", "Create .ai/ structure in current project"),
     ("sync", "Sync instructions to all enabled tools"),
     ("rollback", "Restore targets from the latest backup"),
@@ -17,6 +17,10 @@ const COMMANDS: [(&str, &str); 31] = [
     (
         "skills",
         "Inspect project skills and explicit external catalogs",
+    ),
+    (
+        "memory",
+        "Inspect the memory coding agents keep for themselves",
     ),
     ("mcp", "Inspect an MCP catalog and prepare per-tool sources"),
     ("enable", "Opt in to one or more tools"),
@@ -194,7 +198,7 @@ mod tests {
         assert!(text.ends_with(
             "    exuno refresh --dry-run\n\n  DOCS\n    https://github.com/yelmuratoff/agent\n\n"
         ));
-        assert_eq!(text.lines().count(), 92);
+        assert_eq!(text.lines().count(), 93);
     }
 
     #[test]
