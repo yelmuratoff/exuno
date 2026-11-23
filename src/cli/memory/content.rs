@@ -4,37 +4,25 @@ use std::path::Path;
 
 use crate::paths::DiskText;
 
-/// Where a named path is looked up. `root` is set only for a store of the
-/// project being checked; a relative path in another project's note means
-/// nothing here.
-pub struct Bases<'a> {
-    pub root: Option<&'a Path>,
-    pub home: Option<&'a Path>,
-}
-
-/// Paths in inline code that point at nothing. Only paths under the home
-/// directory or, for the project's own store, the project root are checked:
-/// a system path in a note often describes another machine. A path counts
-/// only when its first segment exists, so a branch name (`origin/main`) or a
-/// slash command (`/memory`) is not mistaken for one.
-pub fn missing_paths(body: &str, bases: &Bases) -> Vec<String> {
-    let home_text = bases.home.map(DiskText::disk_text);
+/// Paths in inline code under the home directory that point at nothing,
+/// written `~/…` or in full. A system path in a note often describes another
+/// machine, and a relative one names no root it is relative to, so neither is
+/// checked. A path counts only when its first segment exists, so a slash
+/// command (`/memory`) or an example home is not mistaken for one.
+pub fn missing_paths(body: &str, home: Option<&Path>) -> Vec<String> {
+    let Some(base) = home else {
+        return Vec::new();
+    };
+    let home_text = base.disk_text();
     let mut missing: Vec<String> = Vec::new();
     for token in inline_code(body) {
         let Some(path) = candidate(token) else {
             continue;
         };
-        let located = if let Some(rest) = path.strip_prefix("~/") {
-            bases.home.map(|base| (base, rest))
-        } else if path.starts_with('/') {
-            bases
-                .home
-                .zip(home_text.as_deref())
-                .and_then(|(base, home)| Some((base, path.strip_prefix(home)?.strip_prefix('/')?)))
-        } else {
-            bases.root.map(|base| (base, path))
-        };
-        let Some((base, rest)) = located else {
+        let rest = path
+            .strip_prefix("~/")
+            .or_else(|| path.strip_prefix(home_text.as_str())?.strip_prefix('/'));
+        let Some(rest) = rest else {
             continue;
         };
         let mut segments = rest.split('/').filter(|segment| !segment.is_empty());
@@ -141,32 +129,19 @@ mod tests {
     }
 
     #[test]
-    fn a_path_is_missing_only_below_an_existing_first_segment() {
+    fn only_home_paths_below_an_existing_first_segment_count() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("src/cli")).unwrap();
         std::fs::write(dir.path().join("src/cli/mod.rs"), "").unwrap();
-        let bases = Bases {
-            root: Some(dir.path()),
-            home: Some(dir.path()),
-        };
         let home = dir.path().disk_text();
         let body = format!(
-            "`src/cli/mod.rs` `src/gone.rs` `origin/main` `/memory` `~/src/gone.rs` `src/gone.rs:3` `{home}/src/old.rs` `/etc/nowhere/x`"
+            "`~/src/cli/mod.rs` `src/gone.rs` `origin/main` `/memory` `~/src/gone.rs:3` `{home}/src/old.rs` `/etc/nowhere/x` `~/nowhere/x`"
         );
         assert_eq!(
-            missing_paths(&body, &bases),
-            [
-                "src/gone.rs".to_string(),
-                "~/src/gone.rs".to_string(),
-                format!("{home}/src/old.rs")
-            ]
+            missing_paths(&body, Some(dir.path())),
+            ["~/src/gone.rs".to_string(), format!("{home}/src/old.rs")]
         );
-        let body = body.as_str();
-        let no_root = Bases {
-            root: None,
-            home: None,
-        };
-        assert!(missing_paths(body, &no_root).is_empty());
+        assert!(missing_paths(&body, None).is_empty());
     }
 
     #[test]

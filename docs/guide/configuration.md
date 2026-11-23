@@ -28,7 +28,7 @@ tools:
 | `shared` | Inherit content from a parent project | [Workspaces](workspaces-and-profiles.md#workspaces-nested-projects) |
 | `profiles` | Extra config homes, such as work and personal | [Profiles](workspaces-and-profiles.md#profiles-separate-config-homes) |
 | `skills.hide` | Personal skills this project replaces | [Skills](skills.md#hiding-a-personal-skill) |
-| `base_skills` | `false` drops the built-in `exuno` skill | [Skills](skills.md#the-built-in-exuno-skill) |
+| `base_skills` | `false` drops the built-in `exuno` and `memory-review` skills | [Skills](skills.md#the-built-in-exuno-skill) |
 | `backup.retention` | `bounded` (default) or `preserve` | [Backups](backups-and-rollback.md#how-long-backups-are-kept) |
 | `post_sync.skip` | Turn off a tool's `post_sync` command | [`post_sync`](#post_sync) below |
 | `gitignore.update` | `false` stops Exuno from editing `.gitignore` | [Team setup](team-and-automation.md#committed-or-local-outputs) |

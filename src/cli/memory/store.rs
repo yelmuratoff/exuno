@@ -122,12 +122,10 @@ pub fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// One directory of notes; `project` is empty for a store every project
-/// shares, and `current` marks the store of the project being checked.
+/// One directory of notes; `project` is empty for a store every project shares.
 pub struct Store {
     pub dir: PathBuf,
     pub project: String,
-    pub current: bool,
 }
 
 /// The stores of `spec` for the current project, or for every project when
@@ -135,10 +133,9 @@ pub struct Store {
 pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) {
     let mut stores = Vec::new();
     let mut warnings = Vec::new();
-    let key = project_key(&spec.project_key, &canonical(&git_root(root)));
     for template in &spec.dirs {
         let Some((prefix, suffix)) = template.split_once(PROJECT) else {
-            push_dir(&mut stores, spec.home.join(template), "", false);
+            push_dir(&mut stores, spec.home.join(template), "");
             continue;
         };
         let suffix = suffix.trim_start_matches('/');
@@ -146,18 +143,12 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
         if all {
             for dir in crate::cli::sorted_entries(&parent) {
                 let project = dir.file_name().map(|n| n.disk_text()).unwrap_or_default();
-                let current = key.as_deref() == Some(project.as_str());
-                push_dir(&mut stores, dir.join(suffix), &project, current);
+                push_dir(&mut stores, dir.join(suffix), &project);
             }
             continue;
         }
-        match &key {
-            Some(project) => push_dir(
-                &mut stores,
-                parent.join(project).join(suffix),
-                project,
-                true,
-            ),
+        match project_key(&spec.project_key, &canonical(&git_root(root))) {
+            Some(project) => push_dir(&mut stores, parent.join(&project).join(suffix), &project),
             None => warnings.push(format!(
                 "{}: memory.project_key '{}' is not one of: path-dashed",
                 spec.tool, spec.project_key
@@ -167,12 +158,11 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
     (stores, warnings)
 }
 
-fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str, current: bool) {
+fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str) {
     if dir.is_dir() {
         stores.push(Store {
             dir,
             project: project.to_string(),
-            current,
         });
     }
 }
@@ -298,11 +288,6 @@ pub fn findings(
     context: &Context,
 ) -> Vec<(PathBuf, String)> {
     let stale = context.stale;
-    let project_root = store.current.then(|| git_root(context.root));
-    let bases = content::Bases {
-        root: project_root.as_deref(),
-        home: context.home,
-    };
     let mut found = Vec::new();
     let index_path = store.dir.join(&spec.index);
     let index = (!spec.index.is_empty())
@@ -356,7 +341,7 @@ pub fn findings(
                 ),
             ));
         }
-        for path in content::missing_paths(note.body(), &bases) {
+        for path in content::missing_paths(note.body(), context.home) {
             found.push((
                 note.path.clone(),
                 format!("mentions {path}, which does not exist"),

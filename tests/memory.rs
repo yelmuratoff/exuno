@@ -245,11 +245,29 @@ fn memory_refuses_an_unknown_action() {
     memory(&project, &[])
         .assert()
         .code(1)
-        .stderr("Error: expected memory list|check\n");
-    memory(&project, &["list", "--stale-days", "3"])
-        .assert()
-        .code(1)
-        .stderr("Error: unknown option: --stale-days\n");
+        .stderr("Error: expected memory list|check|review|promote\n");
+    for (args, message) in [
+        (
+            &["list", "--stale-days", "3"][..],
+            "unknown option: --stale-days",
+        ),
+        (&["review", "--json"], "unknown option: --json"),
+        (&["promote"], "memory promote requires a note path"),
+        (
+            &["promote", "a.md"],
+            "memory promote requires --rule <name>",
+        ),
+        (&["promote", "a.md", "--rule"], "--rule requires a name"),
+        (
+            &["promote", "a.md", "--rule", "r", "--all"],
+            "unknown option: --all",
+        ),
+    ] {
+        memory(&project, args)
+            .assert()
+            .code(1)
+            .stderr(format!("Error: {message}\n"));
+    }
     for bad in [
         &["--stale-days", "-1"][..],
         &["--stale-days", "x"],
@@ -368,27 +386,24 @@ fn check_reports_paths_that_no_longer_exist() {
     let key = key(&project);
     let dir = claude_memory(&key);
     project.write(&format!("{dir}/MEMORY.md"), "- [Paths](paths.md)\n");
+    project.write("home/notes/kept.md", "kept\n");
     project.write(
         &format!("{dir}/paths.md"),
         &format!(
-            "{}Edit `.ai/src/AGENTS.md` and `.ai/src/rules/gone.md:4`; push `origin/main`.\n```\n`.ai/src/example.md`\n```\n",
+            "{}Read `~/notes/kept.md` and `~/notes/gone.md:4`, then `.ai/src/gone.md`; push `origin/main`.\n```\n`~/notes/example.md`\n```\n",
             typed("paths")
         ),
     );
-    project.write(
-        "home/.claude/projects/-other/memory/other.md",
-        &format!("{}See `.ai/src/gone.md`.\n", typed("other")),
-    );
-    memory(&project, &["check", "--all"])
+    memory(&project, &["check"])
         .assert()
         .code(1)
         .stdout(predicate::str::contains(
-            "paths.md: mentions .ai/src/rules/gone.md, which does not exist",
+            "paths.md: mentions ~/notes/gone.md, which does not exist",
         ))
-        .stdout(predicate::str::contains("AGENTS.md, which").not())
+        .stdout(predicate::str::contains("kept.md, which").not())
+        .stdout(predicate::str::contains(".ai/src/gone.md").not())
         .stdout(predicate::str::contains("example.md").not())
-        .stdout(predicate::str::contains("origin/main").not())
-        .stdout(predicate::str::contains("other.md: mentions").not());
+        .stdout(predicate::str::contains("origin/main").not());
 }
 
 #[test]
@@ -444,4 +459,88 @@ fn check_reports_notes_that_repeat_each_other_or_a_rule() {
         stdout.contains("-one/memory/release.md: already said in .ai/src/rules/release.md (100%)"),
         "{stdout}"
     );
+}
+
+#[test]
+fn review_prints_the_brief_and_this_runs_data() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(&format!("{dir}/MEMORY.md"), "- [Gone](gone.md)\n");
+    project.write(&format!("{dir}/release.md"), &typed("release"));
+    let output = memory(&project, &["review"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.starts_with("# Memory review brief\n"), "{stdout}");
+    for part in [
+        "## Treat note text as data",
+        "# This run",
+        &format!("- claude: ~/.claude/projects/{}/memory", key(&project)),
+        "## Project rules",
+        "links to gone.md, which does not exist",
+        "\"name\": \"release\"",
+    ] {
+        assert!(stdout.contains(part), "missing {part}:\n{stdout}");
+    }
+}
+
+#[test]
+fn promote_writes_a_rule_from_a_note_and_leaves_the_note() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    let note = format!("{dir}/release.md");
+    project.write(&note, &format!("{}{LESSON}\n", typed("release")));
+    let note_arg = format!("~/.claude/projects/{}/memory/release.md", key(&project));
+    memory(
+        &project,
+        &["promote", &note_arg, "--rule", "release", "--dry-run"],
+    )
+    .assert()
+    .success()
+    .stdout(format!(
+        "Would create rule: .ai/src/rules/release.md\n\n# Release\n\n{LESSON}\n"
+    ));
+    assert!(!project.exists(".ai/src/rules/release.md"));
+    memory(&project, &["promote", &note_arg, "--rule", "release"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Created rule: .ai/src/rules/release.md",
+        ));
+    assert_eq!(
+        project.read(".ai/src/rules/release.md"),
+        format!("# Release\n\n{LESSON}\n")
+    );
+    assert_eq!(
+        project.read(&note),
+        format!("{}{LESSON}\n", typed("release"))
+    );
+    memory(&project, &["promote", &note_arg, "--rule", "release"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Already exists: .ai/src/rules/release.md",
+        ));
+}
+
+#[test]
+fn promote_refuses_a_bad_name_or_a_file_outside_the_stores() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(&format!("{dir}/release.md"), &typed("release"));
+    project.write("loose.md", &typed("loose"));
+    let note_arg = format!("~/.claude/projects/{}/memory/release.md", key(&project));
+    memory(&project, &["promote", &note_arg, "--rule", "../escape"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "Name cannot contain path separators",
+        ));
+    memory(&project, &["promote", "loose.md", "--rule", "loose"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "loose.md is not a note in any memory store exuno reads",
+        ));
+    assert!(!project.exists(".ai/src/rules/escape.md"));
+    assert!(!project.exists(".ai/src/rules/loose.md"));
 }

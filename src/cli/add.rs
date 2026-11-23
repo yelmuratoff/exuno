@@ -78,7 +78,7 @@ fn usage(message: &str, style: &Style, err: &mut dyn Write) -> Result<(), Error>
 }
 
 /// `_add_validate_name`: the refusal, or nothing.
-fn validate_name(name: &str) -> Option<String> {
+pub(crate) fn validate_name(name: &str) -> Option<String> {
     if name.is_empty() {
         return Some("Name is empty.".into());
     }
@@ -184,7 +184,7 @@ fn dest_rel(kind: &str, category: &str, name: &str) -> String {
 
 /// `{{TITLE}}`: hyphens become spaces and each part starts upper-case, as the
 /// awk program splits it, so `my_tool-x2--y` reads `My_tool X2  Y`.
-fn title(name: &str) -> String {
+pub(crate) fn title(name: &str) -> String {
     name.split('-')
         .map(|part| {
             let mut chars = part.chars();
