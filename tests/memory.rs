@@ -361,3 +361,87 @@ fn check_json_prints_the_count_and_the_issues() {
         "links to gone.md, which does not exist"
     );
 }
+
+#[test]
+fn check_reports_paths_that_no_longer_exist() {
+    let project = project();
+    let key = key(&project);
+    let dir = claude_memory(&key);
+    project.write(&format!("{dir}/MEMORY.md"), "- [Paths](paths.md)\n");
+    project.write(
+        &format!("{dir}/paths.md"),
+        &format!(
+            "{}Edit `.ai/src/AGENTS.md` and `.ai/src/rules/gone.md:4`; push `origin/main`.\n```\n`.ai/src/example.md`\n```\n",
+            typed("paths")
+        ),
+    );
+    project.write(
+        "home/.claude/projects/-other/memory/other.md",
+        &format!("{}See `.ai/src/gone.md`.\n", typed("other")),
+    );
+    memory(&project, &["check", "--all"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "paths.md: mentions .ai/src/rules/gone.md, which does not exist",
+        ))
+        .stdout(predicate::str::contains("AGENTS.md, which").not())
+        .stdout(predicate::str::contains("example.md").not())
+        .stdout(predicate::str::contains("origin/main").not())
+        .stdout(predicate::str::contains("other.md: mentions").not());
+}
+
+#[test]
+fn check_reports_a_credential_without_printing_it() {
+    let project = project();
+    let dir = claude_memory(&key(&project));
+    project.write(&format!("{dir}/MEMORY.md"), "- [Token](token.md)\n");
+    project.write(
+        &format!("{dir}/token.md"),
+        &format!(
+            "{}The bot token is ghp_abcdefghijklmnopqrstuvwxyz0123456789.\n",
+            typed("token")
+        ),
+    );
+    memory(&project, &["check"])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains(
+            "token.md: line 6 looks like a credential; move it out of memory",
+        ))
+        .stdout(predicate::str::contains("ghp_").not());
+}
+
+const LESSON: &str = "Run the release from a clean tree, tag only after the full suite passes on every platform, and never push a tag that CI has not built, because the installers download the tagged binaries the moment the tag appears on the remote.";
+
+#[test]
+fn check_reports_notes_that_repeat_each_other_or_a_rule() {
+    let project = project();
+    for (slug, extra) in [
+        ("-one", ""),
+        ("-two", " Keep the changelog in the same commit."),
+    ] {
+        let dir = format!("home/.claude/projects/{slug}/memory");
+        project.write(&format!("{dir}/MEMORY.md"), "- [Release](release.md)\n");
+        project.write(
+            &format!("{dir}/release.md"),
+            &format!("{}{LESSON}{extra}\n", typed(&format!("release{slug}"))),
+        );
+    }
+    project.write(
+        ".ai/src/rules/release.md",
+        &format!("# Release\n\n{LESSON}\n"),
+    );
+    let output = memory(&project, &["check", "--all"]).output().unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains(
+            "-two/memory/release.md: reads like ~/.claude/projects/-one/memory/release.md ("
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("-one/memory/release.md: already said in .ai/src/rules/release.md (100%)"),
+        "{stdout}"
+    );
+}

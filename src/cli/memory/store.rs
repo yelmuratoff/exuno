@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use super::content;
 use crate::config::tool::Tool;
 use crate::config::{skill_metadata, yaml_subset};
 use crate::paths::DiskText;
@@ -121,10 +122,12 @@ pub fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// One directory of notes; `project` is empty for a store every project shares.
+/// One directory of notes; `project` is empty for a store every project
+/// shares, and `current` marks the store of the project being checked.
 pub struct Store {
     pub dir: PathBuf,
     pub project: String,
+    pub current: bool,
 }
 
 /// The stores of `spec` for the current project, or for every project when
@@ -132,9 +135,10 @@ pub struct Store {
 pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) {
     let mut stores = Vec::new();
     let mut warnings = Vec::new();
+    let key = project_key(&spec.project_key, &canonical(&git_root(root)));
     for template in &spec.dirs {
         let Some((prefix, suffix)) = template.split_once(PROJECT) else {
-            push_dir(&mut stores, spec.home.join(template), "");
+            push_dir(&mut stores, spec.home.join(template), "", false);
             continue;
         };
         let suffix = suffix.trim_start_matches('/');
@@ -142,12 +146,18 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
         if all {
             for dir in crate::cli::sorted_entries(&parent) {
                 let project = dir.file_name().map(|n| n.disk_text()).unwrap_or_default();
-                push_dir(&mut stores, dir.join(suffix), &project);
+                let current = key.as_deref() == Some(project.as_str());
+                push_dir(&mut stores, dir.join(suffix), &project, current);
             }
             continue;
         }
-        match project_key(&spec.project_key, &canonical(&git_root(root))) {
-            Some(project) => push_dir(&mut stores, parent.join(&project).join(suffix), &project),
+        match &key {
+            Some(project) => push_dir(
+                &mut stores,
+                parent.join(project).join(suffix),
+                project,
+                true,
+            ),
             None => warnings.push(format!(
                 "{}: memory.project_key '{}' is not one of: path-dashed",
                 spec.tool, spec.project_key
@@ -157,11 +167,12 @@ pub fn stores(spec: &Spec, root: &Path, all: bool) -> (Vec<Store>, Vec<String>) 
     (stores, warnings)
 }
 
-fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str) {
+fn push_dir(stores: &mut Vec<Store>, dir: PathBuf, project: &str, current: bool) {
     if dir.is_dir() {
         stores.push(Store {
             dir,
             project: project.to_string(),
+            current,
         });
     }
 }
@@ -209,6 +220,26 @@ pub struct Note {
     pub kind: String,
     pub modified: String,
     pub description: String,
+    /// The whole file, lossily decoded.
+    pub text: String,
+}
+
+impl Note {
+    /// The text after the frontmatter, or all of it when there is none.
+    pub fn body(&self) -> &str {
+        let mut lines = self.text.split_inclusive('\n');
+        if lines.next().map(str::trim) != Some("---") {
+            return &self.text;
+        }
+        let mut offset = self.text.find('\n').map_or(self.text.len(), |i| i + 1);
+        for line in lines {
+            offset += line.len();
+            if line.trim() == "---" {
+                return &self.text[offset..];
+            }
+        }
+        &self.text
+    }
 }
 
 /// The Markdown files of a store in byte order, its index left out.
@@ -245,9 +276,18 @@ fn note(path: PathBuf, rel: String) -> Note {
         description: skill_metadata::description(&bytes).unwrap_or_default(),
         kind: field("type"),
         modified: field("modified"),
+        text: text.into_owned(),
         rel,
         path,
     }
+}
+
+/// What a `check` run holds the same for every store.
+pub struct Context<'a> {
+    /// Today and the `--stale-days` limit, both in days.
+    pub stale: Option<(i64, i64)>,
+    pub root: &'a Path,
+    pub home: Option<&'a Path>,
 }
 
 /// What `check` finds in one store, as `(path, message)` pairs.
@@ -255,8 +295,14 @@ pub fn findings(
     spec: &Spec,
     store: &Store,
     notes: &[Note],
-    stale: Option<(i64, i64)>,
+    context: &Context,
 ) -> Vec<(PathBuf, String)> {
+    let stale = context.stale;
+    let project_root = store.current.then(|| git_root(context.root));
+    let bases = content::Bases {
+        root: project_root.as_deref(),
+        home: context.home,
+    };
     let mut found = Vec::new();
     let index_path = store.dir.join(&spec.index);
     let index = (!spec.index.is_empty())
@@ -308,6 +354,18 @@ pub fn findings(
                     "last modified {}, more than {days} days ago",
                     &note.modified[..10]
                 ),
+            ));
+        }
+        for path in content::missing_paths(note.body(), &bases) {
+            found.push((
+                note.path.clone(),
+                format!("mentions {path}, which does not exist"),
+            ));
+        }
+        for line in content::credential_lines(&note.text) {
+            found.push((
+                note.path.clone(),
+                format!("line {line} looks like a credential; move it out of memory"),
             ));
         }
     }

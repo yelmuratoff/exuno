@@ -16,6 +16,8 @@ use crate::project::Project;
 use super::put;
 use super::skills::cell;
 
+mod content;
+mod similar;
 mod store;
 
 use store::{Note, Place, Spec, Store};
@@ -29,7 +31,7 @@ pub const HELP: Help = Help {
     ],
     description: &[
         "Reads the memory stores each tool's memory: block declares: the\nshipped tools and any .ai/src/tools/<tool>.yaml, profile variants in\ntheir config homes included. Without --all, only this project's store\nand the stores every project shares. No file is changed.",
-        "check reports an index over the tool's size limit, notes the index\ndoes not list, index links to missing notes, and a type outside the\ntool's list. With --all it also reports a note name several projects\nshare. --stale-days adds notes last modified more than <n> days ago.\nIt exits 1 when it finds anything.",
+        "check reports an index over the tool's size limit, notes the index\ndoes not list, index links to missing notes, a type outside the\ntool's list, paths under your home or this project that no longer\nexist, lines shaped like a credential, a note that copies another,\nand a note that copies a file in .ai/src/. With --all it also reports\na note name several projects share. --stale-days adds notes last\nmodified more than <n> days ago. It exits 1 when it finds anything.",
     ],
     sections: &[Section {
         title: "OPTIONS",
@@ -104,8 +106,12 @@ pub fn run(
     match parsed.action {
         Action::List => list(&found, parsed.json, &shown, out),
         Action::Check => {
-            let stale = parsed.stale_days.map(|days| (env.today, days));
-            check(&found, stale, parsed.json, &shown, out)
+            let context = store::Context {
+                stale: parsed.stale_days.map(|days| (env.today, days)),
+                root: Path::new(root),
+                home: env.home.as_deref().map(Path::new),
+            };
+            check(&found, &context, parsed.json, &shown, out)
         }
     }
 }
@@ -206,16 +212,17 @@ fn list(
 
 fn check(
     found: &Found,
-    stale: Option<(i64, i64)>,
+    context: &store::Context,
     json: bool,
     shown: &dyn Fn(&Path) -> String,
     out: &mut dyn Write,
 ) -> Result<u8, Error> {
     let mut issues = Vec::new();
     for (spec, store, notes) in &found.stores {
-        issues.extend(store::findings(&found.specs[*spec], store, notes, stale));
+        issues.extend(store::findings(&found.specs[*spec], store, notes, context));
     }
     issues.extend(shared_names(found));
+    issues.extend(overlaps(found, context.root, shown));
     let checked: usize = found.stores.iter().map(|(_, _, notes)| notes.len()).sum();
     if json {
         let values: Vec<serde_json::Value> = issues
@@ -279,6 +286,75 @@ fn shared_names(found: &Found) -> Vec<(std::path::PathBuf, String)> {
         }
     }
     issues
+}
+
+/// Shingle overlap at which two notes read as one. Shingles catch copied
+/// text, not a lesson retold in other words; that is the review skill's job.
+const DUPLICATE: f64 = 0.5;
+/// Share of a note's shingles a source file must hold to have said it already.
+const COVERED: f64 = 0.5;
+
+/// Notes that repeat another note, or repeat what `.ai/src/` already says.
+fn overlaps(
+    found: &Found,
+    root: &Path,
+    shown: &dyn Fn(&Path) -> String,
+) -> Vec<(std::path::PathBuf, String)> {
+    let notes: Vec<&Note> = found
+        .stores
+        .iter()
+        .flat_map(|(_, _, notes)| notes)
+        .collect();
+    let texts: Vec<_> = notes
+        .iter()
+        .map(|note| similar::shingles(note.body()))
+        .collect();
+    let mut issues = Vec::new();
+    for (earlier, later, score) in similar::similar_pairs(&texts, DUPLICATE) {
+        issues.push((
+            notes[later].path.clone(),
+            format!(
+                "reads like {} ({}% shared)",
+                shown(&notes[earlier].path),
+                (score * 100.0).round()
+            ),
+        ));
+    }
+    let sources = rule_sources(root);
+    let source_texts: Vec<_> = sources
+        .iter()
+        .map(|(_, text)| similar::shingles(text))
+        .collect();
+    for (note, text) in notes.iter().zip(&texts) {
+        if let Some((index, score)) = similar::best_container(text, &source_texts, COVERED) {
+            issues.push((
+                note.path.clone(),
+                format!(
+                    "already said in {} ({}%)",
+                    sources[index].0,
+                    (score * 100.0).round()
+                ),
+            ));
+        }
+    }
+    issues
+}
+
+/// The Markdown under `.ai/src/` of the project, as `(shown path, text)`.
+fn rule_sources(root: &Path) -> Vec<(String, String)> {
+    let src = root.join(".ai").join("src");
+    let mut files = Vec::new();
+    super::files_below(&src, &mut files);
+    files.sort();
+    files
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
+        .filter_map(|path| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let shown = path.strip_prefix(root).ok()?.disk_text();
+            Some((shown, text))
+        })
+        .collect()
 }
 
 fn count(n: usize, one: &str, many: &str) -> String {

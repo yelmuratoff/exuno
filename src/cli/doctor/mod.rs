@@ -4,7 +4,7 @@
 
 mod json;
 mod project_checks;
-mod secrets;
+pub(crate) mod secrets;
 mod tool_checks;
 
 use std::collections::BTreeSet;

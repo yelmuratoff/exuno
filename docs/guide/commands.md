@@ -159,6 +159,6 @@ Coding agents keep notes for themselves between sessions, and each tool hides th
 
 By default you get this project's store plus the stores every project shares. `--all` reads every project's store.
 
-`exuno memory check` reports problems that make a tool skip or misread a note: an index longer than the tool loads, a note the index doesn't list, an index link to a missing note, and a `type` outside the tool's list. With `--all` it also points out a note name found in several projects, which may belong in one shared rule in `.ai/src/`. `--stale-days <n>` adds notes last modified more than `n` days ago. It exits 1 when it reports anything.
+`exuno memory check` reports problems that make a tool skip or misread a note: an index longer than the tool loads, a note the index doesn't list, an index link to a missing note, and a `type` outside the tool's list. It also flags what a note says that has stopped being true or safe: a path in inline code under your home or this project that no longer exists, and a line shaped like a credential (reported by line number, never printed). A note that copies another note, or copies a file in `.ai/src/`, is reported too; this compares text, so a lesson retold in other words is left to the review skill. With `--all` it also points out a note name found in several projects, which may belong in one shared rule in `.ai/src/`. `--stale-days <n>` adds notes last modified more than `n` days ago. It exits 1 when it reports anything.
 
 Both commands only read. `--json` prints one JSON value on stdout for scripts.
