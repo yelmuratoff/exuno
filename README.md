@@ -198,6 +198,7 @@ Turn tools on with `exuno enable <tool>` and see their status with `exuno list`.
 | `refresh` | Bring new shipped templates into `.ai/src/` |
 | `dedupe` | Remove source files that duplicate a parent project's |
 | `skills list\|show\|check` | Inspect the project's skills |
+| `memory list\|check\|review\|promote` | Read and check the notes coding agents keep for themselves, or turn one into a rule |
 | `mcp list\|show\|validate\|render\|use` | Work with a local catalog of MCP servers |
 | `profile add\|list\|remove` | Manage separate config homes, such as work and personal |
 | `generate [context]` (`gen`) | Print a prompt that drafts `.ai/src/` for your stack |
@@ -231,7 +232,7 @@ exuno check                      # in CI: fail when generated files don't match 
 | [Configuration](docs/guide/configuration.md) | Every `exuno.yaml` option, tool YAML fields, overrides, sources outside the project, adding a tool |
 | [Supported tools](docs/guide/tools.md) | What each tool receives, format conversions, models and providers |
 | [Publishing](docs/guide/publishing.md) | Getting your skills onto claude.ai, ChatGPT, and Codex through a plugin in your repository |
-| [Skills](docs/guide/skills.md) | Skill categories, inspecting skills, the built-in `exuno` skill, hiding personal skills |
+| [Skills](docs/guide/skills.md) | Skill categories, inspecting skills, the built-in `exuno` and `memory-review` skills, hiding personal skills |
 | [Team setup and automation](docs/guide/team-and-automation.md) | Committed or local outputs, version pinning, shell and git hooks, editing generated files |
 | [Backups and rollback](docs/guide/backups-and-rollback.md) | What gets backed up, how rollback decides it is safe, retention |
 | [Migrating](docs/guide/migrating.md) | Moving existing tool configs in, renaming from AgentSync, upgrading old layouts |

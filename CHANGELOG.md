@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.49.0
+
+### Added
+
+- **Agent memory:** `exuno memory list` prints the notes coding agents keep for themselves (Claude Code auto memory, Codex memories) as one table, across every config home, profile variants included. Without `--all` it reads this project's store and the stores every project shares. A tool declares where its memory lives in a new `memory:` block of its YAML, so any other tool is added from `.ai/src/tools/<tool>.yaml` without code.
+- **`exuno memory check`:** reports what makes a tool skip or misread a note: an index past the tool's load limit, notes the index doesn't list, broken index links, and unknown types. It also flags paths under your home that a note names and that no longer exist, lines shaped like a credential (by line number, never printed), notes that copy another note or a file in `.ai/src/`, and with `--all` a note name several projects share. `--stale-days <n>` adds old notes. It exits 1 when it finds anything.
+- **`memory-review` skill:** a second built-in skill, shipped like the `exuno` skill, walks an agent through judging what notes mean (contradictions, stale facts, retold duplicates, lessons to promote) with a read-only reviewer per store, and changes a note only after you approve it. `exuno memory review` prints its reviewer brief with this run's data for agents without skills or scheduled runs.
+- **`exuno memory promote <note> --rule <name>`:** writes `.ai/src/rules/<name>.md` from a note's body, refusing a credential, an empty note, an existing rule, and the names `exuno add` refuses. The note itself is left for you to replace with a pointer.
+- **Doctor:** a `Memory` section counts this project's `memory check` findings as an advisory; the exit code doesn't change.
+
+### Changed
+
+- **`base_skills: false`:** drops both built-in skills, `exuno` and `memory-review`.
+
 ## 0.48.1
 
 ### Fixed
