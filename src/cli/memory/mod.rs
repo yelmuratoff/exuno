@@ -112,6 +112,28 @@ pub fn run(
         }
     };
     let promoting = matches!(parsed.action, Action::Promote { .. });
+    let project = Project::configured(root)?;
+    if project.config_path.is_none() && !project.root.join(".ai").is_dir() {
+        let hint = match crate::paths::ai_dir_enclosing_root(root) {
+            Some(parent) => format!(
+                "run it from {}, the folder that holds .ai/",
+                shown(Path::new(&parent), env.home.as_deref())
+            ),
+            None => "run it from the folder that holds .ai/".to_string(),
+        };
+        if promoting {
+            let text = format!(
+                "{}: no exuno project here to write a rule into\n  • {hint}\n",
+                style.red("Error")
+            );
+            put(err, text.as_bytes())?;
+            return Ok(1);
+        }
+        let text = format!(
+            "Warning: no exuno project here, so only the shipped tools are read\n  • {hint} to include its tools and profile homes\n"
+        );
+        put(err, text.as_bytes())?;
+    }
     let found = find(root, env, parsed.all || promoting, err)?;
     let shown = |path: &Path| shown(path, env.home.as_deref());
     let context = store::Context {
