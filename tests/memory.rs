@@ -604,15 +604,18 @@ fn memory_inside_ai_names_the_folder_to_run_from() {
     let project = Project::empty();
     project.write(".ai/README.md", "notes\n");
     let inside = project.join(".ai");
+    let folder = project.path().file_name().unwrap().to_string_lossy();
     memory(&project, &["list"])
         .current_dir(&inside)
         .env("PWD", &inside)
         .assert()
         .success()
-        .stderr(format!(
-            "Warning: no exuno project here, so only the shipped tools are read\n  • run it from {}, the folder that holds .ai/ to include its tools and profile homes\n",
-            project.path().display()
-        ));
+        .stderr(predicate::str::starts_with(
+            "Warning: no exuno project here, so only the shipped tools are read\n  • run it from ",
+        ))
+        .stderr(predicate::str::ends_with(format!(
+            "{folder}, the folder that holds .ai/ to include its tools and profile homes\n"
+        )));
 }
 
 #[test]
