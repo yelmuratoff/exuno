@@ -112,6 +112,21 @@ pub fn run(
         }
     };
     let promoting = matches!(parsed.action, Action::Promote { .. });
+    if !Path::new(root).join(".ai").is_dir() {
+        if promoting {
+            let text = format!(
+                "{}: no .ai/ in this folder to write a rule into\n  • run exuno memory promote from the folder that holds .ai/\n",
+                style.red("Error")
+            );
+            put(err, text.as_bytes())?;
+            return Ok(1);
+        }
+        put(
+            err,
+            "Warning: no .ai/ in this folder, so only the shipped tools are read\n  • run exuno memory from the folder that holds .ai/ to include its tools and profile homes\n"
+                .as_bytes(),
+        )?;
+    }
     let found = find(root, env, parsed.all || promoting, err)?;
     let shown = |path: &Path| shown(path, env.home.as_deref());
     let context = store::Context {

@@ -586,6 +586,45 @@ fn promote_writes_a_rule_from_a_note_and_leaves_the_note() {
 }
 
 #[test]
+fn memory_outside_a_project_says_it_read_the_shipped_tools_only() {
+    let project = Project::empty();
+    let dir = claude_memory(&key(&project));
+    project.write(&format!("{dir}/feedback.md"), NOTE);
+    memory(&project, &["list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no-attribution"))
+        .stderr(
+            "Warning: no .ai/ in this folder, so only the shipped tools are read\n  • run exuno memory from the folder that holds .ai/ to include its tools and profile homes\n",
+        );
+}
+
+#[test]
+fn promote_outside_a_project_writes_nothing() {
+    let project = Project::empty();
+    let dir = claude_memory(&key(&project));
+    project.write(
+        &format!("{dir}/release.md"),
+        &format!("{}{LESSON}\n", typed("release")),
+    );
+    let note_arg = format!("~/.claude/projects/{}/memory/release.md", key(&project));
+    for dry_run in [false, true] {
+        let mut args = vec!["promote", note_arg.as_str(), "--rule", "release"];
+        if dry_run {
+            args.push("--dry-run");
+        }
+        memory(&project, &args)
+            .assert()
+            .code(1)
+            .stdout("")
+            .stderr(
+                "Error: no .ai/ in this folder to write a rule into\n  • run exuno memory promote from the folder that holds .ai/\n",
+            );
+    }
+    assert!(!project.exists(".ai"));
+}
+
+#[test]
 fn promote_refuses_a_bad_name_or_a_file_outside_the_stores() {
     let project = project();
     let dir = claude_memory(&key(&project));
