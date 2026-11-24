@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **`exuno memory` outside a project:** run from a folder with no `.ai/`, including from inside `.ai/` itself, `list`, `check`, and `review` read only the shipped tools and missed your profile homes without a word. They now say so on stderr and name the folder to run from. `memory promote` refuses there instead of creating a stray `.ai/src/rules/` in the wrong folder.
+- **`exuno memory` outside a project:** run from a folder that isn't an exuno project, including from inside `.ai/` itself, `list`, `check`, and `review` read only the shipped tools and missed your profile homes without a word. They now say so on stderr and name the folder to run from. `memory promote` refuses there instead of creating a stray `.ai/src/rules/` in the wrong folder. A project with only the legacy root-level `agent_sync.yaml` still counts as one.
 
 ## 0.49.0
 
